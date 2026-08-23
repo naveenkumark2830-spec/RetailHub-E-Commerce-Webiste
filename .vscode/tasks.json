@@ -1,0 +1,42 @@
+{
+  "version": "2.0.0",
+  "tasks": [
+    {
+      "type": "shell",
+      "label": "Run NexDay Fullstack (Backend + Frontend)",
+      "command": "npm run dev",
+      "isBackground": true,
+      "problemMatcher": [],
+      "group": {
+        "kind": "build",
+        "isDefault": true
+      }
+    },
+    {
+      "type": "shell",
+      "label": "Run Backend Only",
+      "command": "npm run dev:backend",
+      "isBackground": true,
+      "problemMatcher": []
+    },
+    {
+      "type": "shell",
+      "label": "Run Frontend Only",
+      "command": "npm run dev:frontend",
+      "isBackground": true,
+      "problemMatcher": []
+    },
+    {
+      "type": "shell",
+      "label": "Build Production Docker Image",
+      "command": "docker build -t nexday-platform:latest .",
+      "problemMatcher": []
+    },
+    {
+      "type": "shell",
+      "label": "Run Docker Compose (With MySQL)",
+      "command": "docker-compose up --build",
+      "problemMatcher": []
+    }
+  ]
+}

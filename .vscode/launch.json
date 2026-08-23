@@ -1,0 +1,44 @@
+{
+  "version": "0.2.0",
+  "configurations": [
+    {
+      "name": "RetailHub - Run Backend & Frontend (Dev Mode)",
+      "type": "node",
+      "request": "launch",
+      "runtimeExecutable": "npm",
+      "runtimeArgs": ["run", "dev"],
+      "cwd": "${workspaceFolder}",
+      "console": "integratedTerminal",
+      "presentation": {
+        "group": "retailhub",
+        "order": 1
+      }
+    },
+    {
+      "name": "RetailHub - Run Backend API Only",
+      "type": "node",
+      "request": "launch",
+      "runtimeExecutable": "npm",
+      "runtimeArgs": ["run", "dev"],
+      "cwd": "${workspaceFolder}/backend",
+      "console": "integratedTerminal",
+      "presentation": {
+        "group": "retailhub",
+        "order": 2
+      }
+    },
+    {
+      "name": "RetailHub - Run Frontend Only (Vite)",
+      "type": "node",
+      "request": "launch",
+      "runtimeExecutable": "npm",
+      "runtimeArgs": ["run", "dev"],
+      "cwd": "${workspaceFolder}/frontend",
+      "console": "integratedTerminal",
+      "presentation": {
+        "group": "retailhub",
+        "order": 3
+      }
+    }
+  ]
+}
