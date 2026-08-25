@@ -43,6 +43,7 @@ interface SessionState {
 }
 
 const STORAGE_KEY = 'retailhub_session';
+const CUSTOMER_STORAGE_KEY = 'retailhub_customer';
 
 const getInitialSession = (): SessionData | null => {
   try {
@@ -54,10 +55,18 @@ const getInitialSession = (): SessionData | null => {
   return null;
 };
 
+const getInitialCustomer = (): CustomerData | null => {
+  try {
+    const raw = localStorage.getItem(CUSTOMER_STORAGE_KEY);
+    if (raw) return JSON.parse(raw);
+  } catch (e) {}
+  return null;
+};
+
 export const useSessionStore = create<SessionState>((set, get) => ({
   session: getInitialSession(),
-  customer: null,
-  isAuthenticated: false,
+  customer: getInitialCustomer(),
+  isAuthenticated: !!getInitialCustomer(),
   isLoading: false,
   error: null,
 
@@ -123,6 +132,7 @@ export const useSessionStore = create<SessionState>((set, get) => ({
 
   clearSession: () => {
     localStorage.removeItem(STORAGE_KEY);
+    localStorage.removeItem(CUSTOMER_STORAGE_KEY);
     set({ session: null, customer: null, isAuthenticated: false, error: null });
   },
 
@@ -151,6 +161,7 @@ export const useSessionStore = create<SessionState>((set, get) => ({
         };
 
         localStorage.setItem(STORAGE_KEY, JSON.stringify(updatedSession));
+        localStorage.setItem(CUSTOMER_STORAGE_KEY, JSON.stringify(data.customer));
         set({ 
           customer: data.customer, 
           session: updatedSession, 
@@ -193,6 +204,7 @@ export const useSessionStore = create<SessionState>((set, get) => ({
         };
 
         localStorage.setItem(STORAGE_KEY, JSON.stringify(updatedSession));
+        localStorage.setItem(CUSTOMER_STORAGE_KEY, JSON.stringify(data.customer));
         set({ 
           customer: data.customer, 
           session: updatedSession, 
@@ -231,11 +243,18 @@ export const useSessionStore = create<SessionState>((set, get) => ({
       if (response.ok) {
         const data = await response.json();
         if (data.success && data.customer) {
+          localStorage.setItem(CUSTOMER_STORAGE_KEY, JSON.stringify(data.customer));
           set({ customer: data.customer, isAuthenticated: true });
+          return;
         }
       }
     } catch (e) {
       // Not authenticated or server down
+    }
+
+    const saved = getInitialCustomer();
+    if (saved) {
+      set({ customer: saved, isAuthenticated: true });
     }
   },
   setCustomer: (customer) => set({ customer }),
