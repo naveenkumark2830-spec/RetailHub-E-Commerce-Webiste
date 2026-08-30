@@ -105,7 +105,49 @@ export default function AdminProductsPage() {
   const [country, setCountry] = useState<string>('India');
   const [deliveryDays, setDeliveryDays] = useState<string>('3');
   const [imageUrl, setImageUrl] = useState<string>('');
+  const [galleryImages, setGalleryImages] = useState<string[]>([]);
+  const [newGalleryUrl, setNewGalleryUrl] = useState<string>('');
+  const [uploadingImage, setUploadingImage] = useState<boolean>(false);
   const [status, setStatus] = useState<string>('ACTIVE');
+
+  const handleImageFileUpload = async (e: React.ChangeEvent<HTMLInputElement>, isPrimary: boolean) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    const reader = new FileReader();
+    reader.onload = async () => {
+      const base64Data = reader.result as string;
+      const token = localStorage.getItem('adminToken');
+      try {
+        setUploadingImage(true);
+        const res = await fetch('/api/admin/products/upload-image', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'Authorization': token || ''
+          },
+          body: JSON.stringify({ filename: file.name, base64Data })
+        });
+        const data = await res.json();
+        if (res.ok && data.image_url) {
+          if (isPrimary) {
+            setImageUrl(data.image_url);
+          } else {
+            setGalleryImages(prev => [...prev, data.image_url]);
+          }
+        } else {
+          if (isPrimary) setImageUrl(base64Data);
+          else setGalleryImages(prev => [...prev, base64Data]);
+        }
+      } catch (err) {
+        if (isPrimary) setImageUrl(base64Data);
+        else setGalleryImages(prev => [...prev, base64Data]);
+      } finally {
+        setUploadingImage(false);
+      }
+    };
+    reader.readAsDataURL(file);
+  };
 
   const fetchProducts = async () => {
     const token = localStorage.getItem('adminToken');
@@ -197,6 +239,8 @@ export default function AdminProductsPage() {
     setCountry('India');
     setDeliveryDays('3');
     setImageUrl('');
+    setGalleryImages([]);
+    setNewGalleryUrl('');
     setStatus('ACTIVE');
     setError('');
     setSuccess('');
@@ -222,6 +266,8 @@ export default function AdminProductsPage() {
     setCountry(product.country || 'India');
     setDeliveryDays(product.delivery_days?.toString() || '3');
     setImageUrl(product.image_url || '');
+    setGalleryImages((product as any).gallery_images || [product.image_url].filter(Boolean));
+    setNewGalleryUrl('');
     setStatus(product.status);
     setError('');
     setSuccess('');
@@ -811,16 +857,97 @@ export default function AdminProductsPage() {
                   />
                 </div>
 
-                {/* Primary Image URL */}
-                <div className="space-y-1">
-                  <label className="block text-[9px] font-bold text-gray-500 uppercase tracking-wider pl-1">Primary Image URL</label>
-                  <input
-                    type="text"
-                    placeholder="https://images.unsplash.com/photo-..."
-                    value={imageUrl}
-                    onChange={(e) => setImageUrl(e.target.value)}
-                    className="w-full bg-gray-50 text-[#041E42] pl-3 pr-3 py-2 rounded-xl border border-gray-250 focus:border-[#0071DC] focus:bg-white focus:outline-none transition-all font-medium text-xs shadow-sm"
-                  />
+                {/* Multi-Image Gallery Manager (Online & Offline Support) */}
+                <div className="space-y-3 pt-2 border-t border-gray-150">
+                  <div className="flex items-center justify-between">
+                    <label className="block text-[10px] font-black text-[#041E42] uppercase tracking-wider">
+                      Product Images Gallery (Online & Offline Local File Support)
+                    </label>
+                    {uploadingImage && <span className="text-[10px] text-[#0071DC] font-bold animate-pulse">Uploading file...</span>}
+                  </div>
+
+                  {/* Primary Cover Image */}
+                  <div className="space-y-1.5 bg-gray-50/80 p-3 rounded-2xl border border-gray-200">
+                    <span className="text-[9px] font-bold text-[#0071DC] uppercase tracking-wider block">Primary Cover Image</span>
+                    <div className="flex items-center space-x-2">
+                      <input
+                        type="text"
+                        placeholder="https://images.unsplash.com/... or /uploads/products/sample.png"
+                        value={imageUrl}
+                        onChange={(e) => setImageUrl(e.target.value)}
+                        className="flex-grow bg-white text-[#041E42] pl-3 pr-3 py-2 rounded-xl border border-gray-250 focus:border-[#0071DC] focus:outline-none font-medium text-xs shadow-sm"
+                      />
+                      <label className="cursor-pointer bg-[#FFC220] hover:bg-[#E5AC12] text-[#041E42] text-[10px] font-bold px-3 py-2 rounded-xl flex items-center space-x-1 flex-shrink-0 transition-all shadow-sm">
+                        <ImageIcon className="w-3.5 h-3.5" />
+                        <span>Upload Local File</span>
+                        <input
+                          type="file"
+                          accept="image/*"
+                          onChange={(e) => handleImageFileUpload(e, true)}
+                          className="hidden"
+                        />
+                      </label>
+                    </div>
+                    {imageUrl && (
+                      <div className="mt-2 relative w-16 h-16 rounded-xl border border-gray-200 overflow-hidden bg-white shadow-inner">
+                        <img src={imageUrl} alt="Primary Preview" className="w-full h-full object-cover" />
+                      </div>
+                    )}
+                  </div>
+
+                  {/* Secondary Gallery Images */}
+                  <div className="space-y-2 bg-gray-50/80 p-3 rounded-2xl border border-gray-200">
+                    <span className="text-[9px] font-bold text-gray-500 uppercase tracking-wider block">Secondary Gallery Images</span>
+                    <div className="flex items-center space-x-2">
+                      <input
+                        type="text"
+                        placeholder="Paste secondary image URL..."
+                        value={newGalleryUrl}
+                        onChange={(e) => setNewGalleryUrl(e.target.value)}
+                        className="flex-grow bg-white text-[#041E42] pl-3 pr-3 py-2 rounded-xl border border-gray-250 focus:border-[#0071DC] focus:outline-none font-medium text-xs shadow-sm"
+                      />
+                      <button
+                        type="button"
+                        onClick={() => {
+                          if (newGalleryUrl.trim()) {
+                            setGalleryImages(prev => [...prev, newGalleryUrl.trim()]);
+                            setNewGalleryUrl('');
+                          }
+                        }}
+                        className="bg-[#0071DC] hover:bg-[#005bb5] text-white text-[10px] font-bold px-3 py-2 rounded-xl flex-shrink-0 transition-all shadow-sm"
+                      >
+                        + Add URL
+                      </button>
+                      <label className="cursor-pointer bg-[#041E42] hover:bg-black text-white text-[10px] font-bold px-3 py-2 rounded-xl flex items-center space-x-1 flex-shrink-0 transition-all shadow-sm">
+                        <ImageIcon className="w-3.5 h-3.5" />
+                        <span>Upload Local</span>
+                        <input
+                          type="file"
+                          accept="image/*"
+                          onChange={(e) => handleImageFileUpload(e, false)}
+                          className="hidden"
+                        />
+                      </label>
+                    </div>
+
+                    {/* Gallery Thumbnails Grid */}
+                    {galleryImages.length > 0 && (
+                      <div className="flex flex-wrap gap-2 pt-2">
+                        {galleryImages.map((img, idx) => (
+                          <div key={idx} className="relative w-16 h-16 rounded-xl border border-gray-250 overflow-hidden group bg-white shadow-sm">
+                            <img src={img} alt={`Gallery ${idx}`} className="w-full h-full object-cover" />
+                            <button
+                              type="button"
+                              onClick={() => setGalleryImages(prev => prev.filter((_, i) => i !== idx))}
+                              className="absolute top-1 right-1 bg-red-600 text-white p-0.5 rounded-full opacity-0 group-hover:opacity-100 transition-opacity"
+                            >
+                              <X className="w-3 h-3" />
+                            </button>
+                          </div>
+                        ))}
+                      </div>
+                    )}
+                  </div>
                 </div>
 
                 {/* Return Checkbox */}

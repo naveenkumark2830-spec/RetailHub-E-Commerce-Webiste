@@ -44,6 +44,26 @@ interface SessionState {
 
 const STORAGE_KEY = 'retailhub_session';
 const CUSTOMER_STORAGE_KEY = 'retailhub_customer';
+const DEVICE_FP_KEY = 'retailhub_device_id';
+
+export const getOrCreateDeviceId = (): string => {
+  try {
+    let fp = localStorage.getItem(DEVICE_FP_KEY);
+    if (!fp) {
+      const raw = `${navigator.userAgent}_${screen.width}x${screen.height}_${navigator.language}_${Math.random()}`;
+      let hash = 0;
+      for (let i = 0; i < raw.length; i++) {
+        hash = (hash << 5) - hash + raw.charCodeAt(i);
+        hash |= 0;
+      }
+      fp = `DEV-FP-${Math.abs(hash).toString(16).toUpperCase()}-${Math.floor(1000 + Math.random() * 9000)}`;
+      localStorage.setItem(DEVICE_FP_KEY, fp);
+    }
+    return fp;
+  } catch (e) {
+    return `DEV-FP-FALLBACK-${Math.floor(100000 + Math.random() * 900000)}`;
+  }
+};
 
 const getInitialSession = (): SessionData | null => {
   try {
