@@ -9,7 +9,10 @@ import bcrypt from 'bcryptjs';
 
 dotenv.config();
 
-const MYSQL_HOST = process.env.MYSQL_HOST || 'localhost';
+let MYSQL_HOST = process.env.MYSQL_HOST || 'localhost';
+if (MYSQL_HOST === 'host.docker.internal' && !process.env.IS_DOCKER) {
+  MYSQL_HOST = 'localhost';
+}
 const MYSQL_PORT = parseInt(process.env.MYSQL_PORT || '3306', 10);
 const MYSQL_USER = process.env.MYSQL_USER || 'root';
 const MYSQL_PASSWORD = process.env.MYSQL_PASSWORD || '';
@@ -1937,6 +1940,9 @@ function seedInMemoryData() {
     }
   });
 
+  // Load any previously persisted customers from JSON file
+  loadPersistedInMemoryCustomers();
+
   // Seed default admin in-memory
   const adminPassHash = bcrypt.hashSync('adminpassword123', 10);
   inMemoryAdminUsers.set('ADM001', {
@@ -1950,27 +1956,58 @@ function seedInMemoryData() {
     status: 'ACTIVE'
   });
 
-  // Seed default customers in-memory
-  const custPassHash = bcrypt.hashSync('password123', 10);
-  inMemoryCustomers.set('CUST1802', {
-    customer_id: 'CUST1802',
-    first_name: 'Walslat',
-    last_name: 'User',
-    email: 'walslat1802@gmail.com',
-    phone: '9876543210',
-    password_hash: custPassHash,
-    date_of_birth: null,
-    gender: null,
-    country: 'India',
-    state: 'Karnataka',
-    city: 'Bengaluru',
-    language: 'English',
-    membership: 'Standard',
-    preferred_payment: 'UPI',
-    account_status: 'ACTIVE',
-    created_at: new Date(),
-    updated_at: new Date()
-  });
+  // Seed default customers in-memory if not already loaded
+  if (!inMemoryCustomers.has('CUST1802')) {
+    const custPassHash = bcrypt.hashSync('password123', 10);
+    inMemoryCustomers.set('CUST1802', {
+      customer_id: 'CUST1802',
+      first_name: 'Walslat',
+      last_name: 'User',
+      email: 'walslat1802@gmail.com',
+      phone: '9876543210',
+      password_hash: custPassHash,
+      date_of_birth: null,
+      gender: null,
+      country: 'India',
+      state: 'Karnataka',
+      city: 'Bengaluru',
+      language: 'English',
+      membership: 'Standard',
+      preferred_payment: 'UPI',
+      account_status: 'ACTIVE',
+      created_at: new Date(),
+      updated_at: new Date()
+    });
+  }
+
+  persistInMemoryCustomers();
+}
+
+const DATA_DIR = path.resolve(__dirname, '../../data');
+const CUSTOMERS_FILE = path.join(DATA_DIR, 'customers.json');
+
+function persistInMemoryCustomers() {
+  try {
+    if (!fs.existsSync(DATA_DIR)) {
+      fs.mkdirSync(DATA_DIR, { recursive: true });
+    }
+    const arr = Array.from(inMemoryCustomers.values());
+    fs.writeFileSync(CUSTOMERS_FILE, JSON.stringify(arr, null, 2), 'utf-8');
+  } catch (e) {}
+}
+
+function loadPersistedInMemoryCustomers() {
+  try {
+    if (fs.existsSync(CUSTOMERS_FILE)) {
+      const raw = fs.readFileSync(CUSTOMERS_FILE, 'utf-8');
+      const list = JSON.parse(raw);
+      if (Array.isArray(list)) {
+        for (const cust of list) {
+          inMemoryCustomers.set(cust.customer_id, cust);
+        }
+      }
+    }
+  } catch (e) {}
 }
 
 // ----------------------------------------------------
@@ -2122,6 +2159,7 @@ export async function saveCustomer(customer: Omit<CustomerRecord, 'created_at' |
     ]);
   } else {
     inMemoryCustomers.set(record.customer_id, record);
+    persistInMemoryCustomers();
   }
 
   return record;
@@ -5257,28 +5295,24 @@ export async function createAdminSession(
   ipAddress: string | null = null,
   userAgent: string | null = null
 ): Promise<any> {
-  if (!dbPool || isInMemoryFallback) return null;
-
   const sessionId = `ASESS-${Math.random().toString(36).substr(2, 9).toUpperCase()}`;
 
-  await dbPool!.query(
-    `INSERT INTO admin_sessions (session_id, admin_id, login_at, status, ip_address, user_agent)
-     VALUES (?, ?, NOW(), 'ACTIVE', ?, ?)`,
-    [sessionId, adminId, ipAddress, userAgent]
-  );
-
-  // Update last login timestamp on admin user
-  await dbPool!.query('UPDATE admin_users SET last_login_at = NOW() WHERE admin_id = ?', [adminId]);
-
-  // Fetch admin role
-  const [adminRows]: any = await dbPool!.query('SELECT role_id FROM admin_users WHERE admin_id = ?', [adminId]);
-  const roleId = adminRows[0]?.role_id || 'ANALYST';
+  if (dbPool && !isInMemoryFallback) {
+    try {
+      await dbPool!.query(
+        `INSERT INTO admin_sessions (session_id, admin_id, login_at, status, ip_address, user_agent)
+         VALUES (?, ?, NOW(), 'ACTIVE', ?, ?)`,
+        [sessionId, adminId, ipAddress, userAgent]
+      );
+      await dbPool!.query('UPDATE admin_users SET last_login_at = NOW() WHERE admin_id = ?', [adminId]);
+    } catch (e) {}
+  }
 
   // Log admin_login telemetry event
   EventLogger.logEvent({
     event_type: 'admin_login',
     session_id: sessionId,
-    customer_id: '', // Admin events don't have customer_id
+    customer_id: '',
     user_type: 'registered',
     page: 'admin_login',
     context: {
@@ -5289,13 +5323,11 @@ export async function createAdminSession(
       browser: 'Chrome'
     },
     metadata: {
-      admin_id: adminId,
-      role: roleId,
-      login_status: 'SUCCESS'
+      admin_id: adminId
     }
-  });
+  }).catch(() => {});
 
-  return { session_id: sessionId, admin_id: adminId, role_id: roleId };
+  return { session_id: sessionId, admin_id: adminId, status: 'ACTIVE' };
 }
 
 export async function invalidateAdminSession(sessionId: string): Promise<boolean> {

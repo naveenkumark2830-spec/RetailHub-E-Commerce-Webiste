@@ -1,6 +1,7 @@
 import fs from 'fs';
 import path from 'path';
 import crypto from 'crypto';
+import { publishEvent } from "./kafkaProducer";
 
 export interface CanonicalClickstreamEvent {
   event_id: string;
@@ -22,6 +23,8 @@ export interface CanonicalClickstreamEvent {
     city: string;
     device: string | null;
     browser: string | null;
+    device_id: string;
+    ip_address: string;
   };
   entity: {
     product_id: string | null;
@@ -46,6 +49,22 @@ const LOGS_BASE_DIR = path.resolve(__dirname, '../../event_logs');
 const generatedEventIds = new Set<string>();
 const lastSessionEventTimeMap = new Map<string, number>();
 
+// 10s Sliding Window Event Rate Tracking for DDoS / Scraper Fraud Detection
+const eventTimestampHistory: Array<{ timestamp: number; key: string }> = [];
+
+function trackBurstRate(key: string, nowMs: number): { count: number; isDdosSuspect: boolean } {
+  const cutoff = nowMs - 10000;
+  while (eventTimestampHistory.length > 0 && eventTimestampHistory[0].timestamp < cutoff) {
+    eventTimestampHistory.shift();
+  }
+  eventTimestampHistory.push({ timestamp: nowMs, key });
+  const burstCount = eventTimestampHistory.filter(e => e.key === key).length;
+  return {
+    count: burstCount,
+    isDdosSuspect: burstCount > 30
+  };
+}
+
 export class EventLogger {
   public static logRawCorruptedLine(rawLine: string) {
     try {
@@ -68,10 +87,10 @@ export class EventLogger {
     }
   }
 
-  public static logEvent(
+  public static async logEvent(
     event: any,
     allowDuplicateEventId: boolean = false
-  ): CanonicalClickstreamEvent {
+  ): Promise<CanonicalClickstreamEvent> {
     const now = new Date();
     const year = now.getUTCFullYear().toString();
     const month = String(now.getUTCMonth() + 1).padStart(2, '0');
@@ -179,6 +198,12 @@ export class EventLogger {
       console.log(`[EventLogger] Event '${formattedEvent.event_type}' logged -> ${filePath}`);
     } catch (err: any) {
       console.error('[EventLogger Critical Error] Exception while logging canonical event:', err);
+    }
+
+    try {
+      await publishEvent(formattedEvent);
+    } catch (err) {
+      console.error("[Kafka] Failed to publish event:", err);
     }
 
     return formattedEvent;
