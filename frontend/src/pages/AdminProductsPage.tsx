@@ -106,11 +106,10 @@ export default function AdminProductsPage() {
   const [deliveryDays, setDeliveryDays] = useState<string>('3');
   const [imageUrl, setImageUrl] = useState<string>('');
   const [galleryImages, setGalleryImages] = useState<string[]>([]);
-  const [newGalleryUrl, setNewGalleryUrl] = useState<string>('');
   const [uploadingImage, setUploadingImage] = useState<boolean>(false);
   const [status, setStatus] = useState<string>('ACTIVE');
 
-  const handleImageFileUpload = async (e: React.ChangeEvent<HTMLInputElement>, isPrimary: boolean) => {
+  const handleSlotImageFileUpload = async (e: React.ChangeEvent<HTMLInputElement>, slotIndex: number) => {
     const file = e.target.files?.[0];
     if (!file) return;
 
@@ -118,6 +117,8 @@ export default function AdminProductsPage() {
     reader.onload = async () => {
       const base64Data = reader.result as string;
       const token = localStorage.getItem('adminToken');
+      let uploadedUrl = base64Data;
+
       try {
         setUploadingImage(true);
         const res = await fetch('/api/admin/products/upload-image', {
@@ -130,23 +131,64 @@ export default function AdminProductsPage() {
         });
         const data = await res.json();
         if (res.ok && data.image_url) {
-          if (isPrimary) {
-            setImageUrl(data.image_url);
-          } else {
-            setGalleryImages(prev => [...prev, data.image_url]);
-          }
-        } else {
-          if (isPrimary) setImageUrl(base64Data);
-          else setGalleryImages(prev => [...prev, base64Data]);
+          uploadedUrl = data.image_url;
         }
       } catch (err) {
-        if (isPrimary) setImageUrl(base64Data);
-        else setGalleryImages(prev => [...prev, base64Data]);
+        uploadedUrl = base64Data;
       } finally {
         setUploadingImage(false);
       }
+
+      setGalleryImages(prev => {
+        const updated = [...prev];
+        while (updated.length <= slotIndex) updated.push('');
+        updated[slotIndex] = uploadedUrl;
+        return updated;
+      });
+
+      if (slotIndex === 0) {
+        setImageUrl(uploadedUrl);
+      }
     };
     reader.readAsDataURL(file);
+  };
+
+  const handleSlotUrlChange = (url: string, slotIndex: number) => {
+    setGalleryImages(prev => {
+      const updated = [...prev];
+      while (updated.length <= slotIndex) updated.push('');
+      updated[slotIndex] = url;
+      return updated;
+    });
+    if (slotIndex === 0) setImageUrl(url);
+  };
+
+  const addPhotoSlot = () => {
+    setGalleryImages(prev => [...prev, '']);
+  };
+
+  const removePhotoSlot = (slotIndex: number) => {
+    setGalleryImages(prev => {
+      const updated = prev.filter((_, i) => i !== slotIndex);
+      if (slotIndex === 0 && updated.length > 0) {
+        setImageUrl(updated[0]);
+      } else if (updated.length === 0) {
+        setImageUrl('');
+      }
+      return updated;
+    });
+  };
+
+  const setTotalPhotoCount = (count: number) => {
+    setGalleryImages(prev => {
+      const updated = [...prev];
+      if (updated.length < count) {
+        while (updated.length < count) updated.push('');
+      } else if (updated.length > count) {
+        return updated.slice(0, count);
+      }
+      return updated;
+    });
   };
 
   const fetchProducts = async () => {
@@ -240,7 +282,6 @@ export default function AdminProductsPage() {
     setDeliveryDays('3');
     setImageUrl('');
     setGalleryImages([]);
-    setNewGalleryUrl('');
     setStatus('ACTIVE');
     setError('');
     setSuccess('');
@@ -267,7 +308,6 @@ export default function AdminProductsPage() {
     setDeliveryDays(product.delivery_days?.toString() || '3');
     setImageUrl(product.image_url || '');
     setGalleryImages((product as any).gallery_images || [product.image_url].filter(Boolean));
-    setNewGalleryUrl('');
     setStatus(product.status);
     setError('');
     setSuccess('');
@@ -287,6 +327,9 @@ export default function AdminProductsPage() {
       return;
     }
 
+    const cleanGalleryImages = galleryImages.filter(img => img && img.trim().length > 0);
+    const primaryCover = cleanGalleryImages[0] || imageUrl || 'https://images.unsplash.com/photo-1523275335684-37898b6baf30?w=800&auto=format&fit=crop';
+
     const productPayload = {
       name,
       sku,
@@ -304,7 +347,8 @@ export default function AdminProductsPage() {
       return_eligible: returnEligible,
       country,
       delivery_days: parseInt(deliveryDays),
-      image_url: imageUrl,
+      image_url: primaryCover,
+      gallery_images: cleanGalleryImages.length > 0 ? cleanGalleryImages : [primaryCover],
       status
     };
 
@@ -857,97 +901,98 @@ export default function AdminProductsPage() {
                   />
                 </div>
 
-                {/* Multi-Image Gallery Manager (Online & Offline Support) */}
-                <div className="space-y-3 pt-2 border-t border-gray-150">
+                {/* Dynamic Multi-Photo Slots Manager */}
+                <div className="space-y-4 pt-2 border-t border-gray-150">
                   <div className="flex items-center justify-between">
-                    <label className="block text-[10px] font-black text-[#041E42] uppercase tracking-wider">
-                      Product Images Gallery (Online & Offline Local File Support)
-                    </label>
+                    <div>
+                      <label className="block text-[10px] font-black text-[#041E42] uppercase tracking-wider">
+                        Product Photo Gallery Manager
+                      </label>
+                      <span className="text-[9px] text-gray-400 font-medium">Configure exact photo slots to display on product detail page</span>
+                    </div>
                     {uploadingImage && <span className="text-[10px] text-[#0071DC] font-bold animate-pulse">Uploading file...</span>}
                   </div>
 
-                  {/* Primary Cover Image */}
-                  <div className="space-y-1.5 bg-gray-50/80 p-3 rounded-2xl border border-gray-200">
-                    <span className="text-[9px] font-bold text-[#0071DC] uppercase tracking-wider block">Primary Cover Image</span>
-                    <div className="flex items-center space-x-2">
-                      <input
-                        type="text"
-                        placeholder="https://images.unsplash.com/... or /uploads/products/sample.png"
-                        value={imageUrl}
-                        onChange={(e) => setImageUrl(e.target.value)}
-                        className="flex-grow bg-white text-[#041E42] pl-3 pr-3 py-2 rounded-xl border border-gray-250 focus:border-[#0071DC] focus:outline-none font-medium text-xs shadow-sm"
-                      />
-                      <label className="cursor-pointer bg-[#FFC220] hover:bg-[#E5AC12] text-[#041E42] text-[10px] font-bold px-3 py-2 rounded-xl flex items-center space-x-1 flex-shrink-0 transition-all shadow-sm">
-                        <ImageIcon className="w-3.5 h-3.5" />
-                        <span>Upload Local File</span>
-                        <input
-                          type="file"
-                          accept="image/*"
-                          onChange={(e) => handleImageFileUpload(e, true)}
-                          className="hidden"
-                        />
-                      </label>
+                  {/* Photo Count Quick Selector */}
+                  <div className="flex items-center space-x-2 bg-gray-50 p-2.5 rounded-2xl border border-gray-200">
+                    <span className="text-[10px] font-bold text-gray-600 uppercase tracking-wider">Photos Count:</span>
+                    <div className="flex space-x-1.5">
+                      {[1, 2, 3, 4, 5, 6].map((num) => (
+                        <button
+                          key={num}
+                          type="button"
+                          onClick={() => setTotalPhotoCount(num)}
+                          className={`px-3 py-1 rounded-xl text-[10px] font-black transition-all ${
+                            galleryImages.length === num
+                              ? 'bg-[#0071DC] text-white shadow-sm'
+                              : 'bg-white text-gray-600 border border-gray-250 hover:bg-gray-100'
+                          }`}
+                        >
+                          {num} {num === 1 ? 'Photo' : 'Photos'}
+                        </button>
+                      ))}
                     </div>
-                    {imageUrl && (
-                      <div className="mt-2 relative w-16 h-16 rounded-xl border border-gray-200 overflow-hidden bg-white shadow-inner">
-                        <img src={imageUrl} alt="Primary Preview" className="w-full h-full object-cover" />
-                      </div>
-                    )}
                   </div>
 
-                  {/* Secondary Gallery Images */}
-                  <div className="space-y-2 bg-gray-50/80 p-3 rounded-2xl border border-gray-200">
-                    <span className="text-[9px] font-bold text-gray-500 uppercase tracking-wider block">Secondary Gallery Images</span>
-                    <div className="flex items-center space-x-2">
-                      <input
-                        type="text"
-                        placeholder="Paste secondary image URL..."
-                        value={newGalleryUrl}
-                        onChange={(e) => setNewGalleryUrl(e.target.value)}
-                        className="flex-grow bg-white text-[#041E42] pl-3 pr-3 py-2 rounded-xl border border-gray-250 focus:border-[#0071DC] focus:outline-none font-medium text-xs shadow-sm"
-                      />
-                      <button
-                        type="button"
-                        onClick={() => {
-                          if (newGalleryUrl.trim()) {
-                            setGalleryImages(prev => [...prev, newGalleryUrl.trim()]);
-                            setNewGalleryUrl('');
-                          }
-                        }}
-                        className="bg-[#0071DC] hover:bg-[#005bb5] text-white text-[10px] font-bold px-3 py-2 rounded-xl flex-shrink-0 transition-all shadow-sm"
-                      >
-                        + Add URL
-                      </button>
-                      <label className="cursor-pointer bg-[#041E42] hover:bg-black text-white text-[10px] font-bold px-3 py-2 rounded-xl flex items-center space-x-1 flex-shrink-0 transition-all shadow-sm">
-                        <ImageIcon className="w-3.5 h-3.5" />
-                        <span>Upload Local</span>
-                        <input
-                          type="file"
-                          accept="image/*"
-                          onChange={(e) => handleImageFileUpload(e, false)}
-                          className="hidden"
-                        />
-                      </label>
-                    </div>
-
-                    {/* Gallery Thumbnails Grid */}
-                    {galleryImages.length > 0 && (
-                      <div className="flex flex-wrap gap-2 pt-2">
-                        {galleryImages.map((img, idx) => (
-                          <div key={idx} className="relative w-16 h-16 rounded-xl border border-gray-250 overflow-hidden group bg-white shadow-sm">
-                            <img src={img} alt={`Gallery ${idx}`} className="w-full h-full object-cover" />
+                  {/* Dynamic Photo Slot Cards List */}
+                  <div className="space-y-3">
+                    {(galleryImages.length > 0 ? galleryImages : ['']).map((url, slotIdx) => (
+                      <div key={slotIdx} className="bg-gray-50/90 p-3 rounded-2xl border border-gray-200 space-y-2">
+                        <div className="flex items-center justify-between">
+                          <span className="text-[10px] font-black text-[#0071DC] uppercase tracking-wider flex items-center gap-1.5">
+                            <span className="w-4 h-4 bg-[#0071DC] text-white rounded-full flex items-center justify-center text-[9px]">
+                              {slotIdx + 1}
+                            </span>
+                            {slotIdx === 0 ? 'Photo #1 (Primary Cover Image)' : `Photo #${slotIdx + 1}`}
+                          </span>
+                          {slotIdx > 0 && (
                             <button
                               type="button"
-                              onClick={() => setGalleryImages(prev => prev.filter((_, i) => i !== idx))}
-                              className="absolute top-1 right-1 bg-red-600 text-white p-0.5 rounded-full opacity-0 group-hover:opacity-100 transition-opacity"
+                              onClick={() => removePhotoSlot(slotIdx)}
+                              className="text-red-500 hover:text-red-700 text-[10px] font-bold flex items-center gap-0.5"
                             >
-                              <X className="w-3 h-3" />
+                              <X className="w-3.5 h-3.5" /> Remove Slot
                             </button>
+                          )}
+                        </div>
+
+                        <div className="flex items-center space-x-2">
+                          <input
+                            type="text"
+                            placeholder={slotIdx === 0 ? "https://... or /uploads/products/sample.png" : `Paste URL for photo #${slotIdx + 1}...`}
+                            value={url}
+                            onChange={(e) => handleSlotUrlChange(e.target.value, slotIdx)}
+                            className="flex-grow bg-white text-[#041E42] pl-3 pr-3 py-2 rounded-xl border border-gray-250 focus:border-[#0071DC] focus:outline-none font-medium text-xs shadow-sm"
+                          />
+                          <label className="cursor-pointer bg-[#FFC220] hover:bg-[#E5AC12] text-[#041E42] text-[10px] font-bold px-3 py-2 rounded-xl flex items-center space-x-1 flex-shrink-0 transition-all shadow-sm">
+                            <ImageIcon className="w-3.5 h-3.5" />
+                            <span>Upload Local</span>
+                            <input
+                              type="file"
+                              accept="image/*"
+                              onChange={(e) => handleSlotImageFileUpload(e, slotIdx)}
+                              className="hidden"
+                            />
+                          </label>
+                        </div>
+
+                        {url && (
+                          <div className="mt-1 relative w-16 h-16 rounded-xl border border-gray-250 overflow-hidden bg-white shadow-inner">
+                            <img src={url} alt={`Preview ${slotIdx + 1}`} className="w-full h-full object-cover" />
                           </div>
-                        ))}
+                        )}
                       </div>
-                    )}
+                    ))}
                   </div>
+
+                  {/* Add Slot Button */}
+                  <button
+                    type="button"
+                    onClick={addPhotoSlot}
+                    className="w-full bg-white hover:bg-gray-50 border border-dashed border-[#0071DC] text-[#0071DC] font-bold py-2 rounded-2xl text-xs flex items-center justify-center gap-1.5 transition-all shadow-sm"
+                  >
+                    <Plus className="w-4 h-4" /> Add Another Photo Slot
+                  </button>
                 </div>
 
                 {/* Return Checkbox */}

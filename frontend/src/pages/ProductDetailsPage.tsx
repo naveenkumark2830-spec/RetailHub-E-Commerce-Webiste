@@ -501,9 +501,12 @@ export const ProductDetailsPage: React.FC = () => {
           {/* LEFT: Dynamic Multi-Image Gallery */}
           <div className="lg:col-span-6 flex flex-col space-y-4">
             
-            {/* Main Interactive Zoom Box */}
-            <div 
-              className="border border-gray-100 rounded-3xl relative h-[450px] bg-gray-50 flex items-center justify-center overflow-hidden cursor-zoom-in"
+            {/* Main Interactive 3D Cinematic Zoom Box */}
+            <motion.div 
+              whileHover={{ scale: 1.01, rotateX: 2, rotateY: -2 }}
+              transition={{ type: "spring", stiffness: 300, damping: 20 }}
+              style={{ perspective: 1000 }}
+              className="border border-gray-100 rounded-3xl relative h-[450px] bg-gradient-to-b from-gray-50 to-white flex items-center justify-center overflow-hidden cursor-zoom-in shadow-xl hover:shadow-2xl transition-all duration-300"
               onMouseEnter={() => setIsZoomed(true)}
               onMouseLeave={() => setIsZoomed(false)}
               onMouseMove={handleMouseMove}
@@ -517,26 +520,32 @@ export const ProductDetailsPage: React.FC = () => {
                 } : undefined}
               />
               
-              <div className="absolute bottom-3 right-3 bg-white/80 backdrop-blur-sm px-2.5 py-1.5 rounded-xl border border-gray-100 text-[10px] font-bold text-gray-500 flex items-center space-x-1">
-                <Eye className="w-3.5 h-3.5 text-gray-400" />
-                <span>Hover to Zoom Image</span>
+              <div className="absolute bottom-3 right-3 bg-white/90 backdrop-blur-md px-3 py-1.5 rounded-2xl border border-gray-100 text-[10px] font-bold text-gray-600 flex items-center space-x-1.5 shadow-md">
+                <Eye className="w-3.5 h-3.5 text-[#0071DC]" />
+                <span>3D Interactive Zoom</span>
               </div>
-            </div>
+            </motion.div>
 
-            {/* Thumbnail Selection List */}
-            {images.length > 0 && (
-              <div className="flex space-x-3 overflow-x-auto py-1">
+            {/* Thumbnail Selection List (Only shown when product has 2+ images configured) */}
+            {images.length > 1 && (
+              <div className="flex space-x-3 overflow-x-auto py-2 px-1">
                 {images.map((img, i) => (
-                  <button
+                  <motion.button
                     key={i}
+                    whileHover={{ scale: 1.08, y: -4 }}
+                    whileTap={{ scale: 0.95 }}
                     onClick={() => {
                       setActiveImage(img.image_url);
                       logTelemetryEvent('product_image_change', { image_url: img.image_url, order: img.display_order });
                     }}
-                    className={`w-20 h-20 bg-gray-50 border rounded-2xl overflow-hidden p-1 transition-all ${activeImage === img.image_url ? 'border-[#0071DC] ring-2 ring-blue-100' : 'border-gray-200 hover:border-gray-300'}`}
+                    className={`w-20 h-20 bg-white border-2 rounded-2xl overflow-hidden p-1.5 transition-all shadow-sm ${
+                      activeImage === img.image_url 
+                        ? 'border-[#0071DC] ring-4 ring-blue-500/20 shadow-lg scale-105' 
+                        : 'border-gray-200 hover:border-gray-300'
+                    }`}
                   >
                     <img src={img.image_url} alt={img.alt_text} className="w-full h-full object-contain" />
-                  </button>
+                  </motion.button>
                 ))}
               </div>
             )}

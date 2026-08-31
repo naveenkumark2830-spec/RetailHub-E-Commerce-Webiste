@@ -14,7 +14,8 @@ import {
   Pause, 
   Square, 
   Activity, 
-  AlertCircle 
+  AlertCircle,
+  ShieldAlert 
 } from 'lucide-react';
 
 interface RunHistoryItem {
@@ -55,7 +56,10 @@ export default function AdminSimulatorPage() {
   const [duration, setDuration] = useState<string>('5 min');
   const [customDuration, setCustomDuration] = useState<string>('');
   const [trafficProfile, setTrafficProfile] = useState<string>('Mixed / Realistic');
-  const [mode, setMode] = useState<'CLEAN' | 'DIRTY'>('CLEAN');
+  const [mode, setMode] = useState<'CLEAN' | 'DIRTY' | 'FRAUD'>('CLEAN');
+  const [fraudIpsCount, setFraudIpsCount] = useState<string>('5');
+  const [fraudIngredients, setFraudIngredients] = useState<'DDOS' | 'SCRAPER' | 'BOTH'>('BOTH');
+  const [fraudRatio, setFraudRatio] = useState<string>('0.10');
 
   // Live Metrics & Status
   const [running, setRunning] = useState<boolean>(false);
@@ -119,7 +123,7 @@ export default function AdminSimulatorPage() {
         setLiveStats(data.liveStats);
         setCustomerJourney(data.customerJourney);
         setOrderJourney(data.orderJourney);
-        if (data.config?.mode) {
+        if (data.running && data.config?.mode) {
           setMode(data.config.mode);
         }
 
@@ -211,7 +215,10 @@ export default function AdminSimulatorPage() {
           rateUnit,
           duration: finalDuration,
           trafficProfile,
-          mode
+          mode,
+          fraudIpsCount: parseInt(fraudIpsCount) || 5,
+          fraudIngredients,
+          fraudRatio: parseFloat(fraudRatio) || 0.10
         })
       });
       const data = await res.json();
@@ -462,12 +469,13 @@ export default function AdminSimulatorPage() {
                 <label className="text-[10px] font-bold text-amber-600 uppercase tracking-wide">Simulation Mode</label>
                 <select
                   value={mode}
-                  onChange={(e) => setMode(e.target.value as 'CLEAN' | 'DIRTY')}
+                  onChange={(e) => setMode(e.target.value as 'CLEAN' | 'DIRTY' | 'FRAUD')}
                   disabled={running}
                   className="bg-gray-50 border border-gray-250 rounded-xl px-3 py-2.5 text-xs font-bold text-[#041E42] focus:outline-none focus:border-[#0071DC] disabled:opacity-50"
                 >
                   <option value="CLEAN">Clean (Production Mode)</option>
                   <option value="DIRTY">Data Quality (Chaos Mode)</option>
+                  <option value="FRAUD">Fraud Injection Mode (Spark Test)</option>
                 </select>
               </div>
 
@@ -591,6 +599,60 @@ export default function AdminSimulatorPage() {
                   <option value="Return Prone">Return Prone</option>
                 </select>
               </div>
+
+              {/* Inline Fraud Pattern Controls Panel */}
+              {mode === 'FRAUD' && (
+                <div className="col-span-full bg-amber-50/90 border border-amber-300/80 rounded-2xl p-4 space-y-3">
+                  <div className="flex items-center space-x-2 text-amber-900 font-black text-xs uppercase tracking-wider">
+                    <ShieldAlert className="w-4 h-4 text-amber-600" />
+                    <span>Spark Fraud Test Parameters (Layered on Clean Generator)</span>
+                  </div>
+
+                  <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                    <div className="flex flex-col space-y-1">
+                      <label className="text-[10px] font-bold text-gray-600 uppercase tracking-wide">Number of Fraud IPs</label>
+                      <input
+                        type="number"
+                        min="1"
+                        max="50"
+                        value={fraudIpsCount}
+                        onChange={(e) => setFraudIpsCount(e.target.value)}
+                        disabled={running}
+                        className="bg-white border border-gray-250 rounded-xl px-3 py-2 text-xs font-bold text-[#041E42] focus:outline-none focus:border-[#0071DC] disabled:opacity-50"
+                      />
+                    </div>
+
+                    <div className="flex flex-col space-y-1">
+                      <label className="text-[10px] font-bold text-gray-600 uppercase tracking-wide">Fraud Ingredients</label>
+                      <select
+                        value={fraudIngredients}
+                        onChange={(e) => setFraudIngredients(e.target.value as any)}
+                        disabled={running}
+                        className="bg-white border border-gray-250 rounded-xl px-3 py-2 text-xs font-bold text-[#041E42] focus:outline-none focus:border-[#0071DC] disabled:opacity-50"
+                      >
+                        <option value="BOTH">Both DDoS & Cookie-Clearing Scraper</option>
+                        <option value="DDOS">DDoS Attack (&gt;30 events / 10s)</option>
+                        <option value="SCRAPER">Cookie-Clearing Scraper (&gt;3 sessions / 10s)</option>
+                      </select>
+                    </div>
+
+                    <div className="flex flex-col space-y-1">
+                      <label className="text-[10px] font-bold text-gray-600 uppercase tracking-wide">Fraud Interleave Ratio</label>
+                      <select
+                        value={fraudRatio}
+                        onChange={(e) => setFraudRatio(e.target.value)}
+                        disabled={running}
+                        className="bg-white border border-gray-250 rounded-xl px-3 py-2 text-xs font-bold text-[#041E42] focus:outline-none focus:border-[#0071DC] disabled:opacity-50"
+                      >
+                        <option value="0.05">5% Fraud / 95% Clean Background</option>
+                        <option value="0.10">10% Fraud / 90% Clean Background</option>
+                        <option value="0.25">25% Fraud / 75% Clean Background</option>
+                        <option value="0.50">50% Fraud / 50% Clean Background</option>
+                      </select>
+                    </div>
+                  </div>
+                </div>
+              )}
 
             </div>
 
