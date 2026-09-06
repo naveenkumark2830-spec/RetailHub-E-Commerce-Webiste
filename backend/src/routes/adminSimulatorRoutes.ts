@@ -8,14 +8,32 @@ const router = Router();
 // POST /api/admin/simulator/start
 router.post('/start', adminAuth, async (req: any, res) => {
   try {
-    const { usersCount, targetRate, rateUnit, duration, trafficProfile, mode } = req.body;
+    const { 
+      usersCount, 
+      targetRate, 
+      rateUnit, 
+      duration, 
+      trafficProfile, 
+      mode,
+      fraudIpsCount,
+      fraudIngredients,
+      fraudRatio
+    } = req.body;
+
+    let parsedMode: 'CLEAN' | 'DIRTY' | 'FRAUD' = 'CLEAN';
+    if (mode === 'FRAUD') parsedMode = 'FRAUD';
+    else if (mode === 'DIRTY' || mode === 'CHAOS') parsedMode = 'DIRTY';
+
     await simulatorService.startSimulator({
       usersCount: usersCount ? parseInt(usersCount) : undefined,
       targetRate: targetRate ? parseInt(targetRate) : undefined,
       rateUnit,
       duration,
       trafficProfile,
-      mode: (mode === 'DIRTY' || mode === 'CHAOS') ? 'DIRTY' : 'CLEAN'
+      mode: parsedMode,
+      fraudIpsCount: fraudIpsCount ? parseInt(fraudIpsCount) : undefined,
+      fraudIngredients,
+      fraudRatio: fraudRatio ? parseFloat(fraudRatio) : undefined
     });
     res.json({ success: true, message: 'Simulator started successfully.', status: simulatorService.getStatus() });
   } catch (error: any) {

@@ -44,12 +44,17 @@ router.post('/', async (req: Request, res: Response) => {
       }
     }
 
+    const clientDeviceId = (req.headers['x-device-id'] as string) || req.body.device_id || `DEV-FP-${req.ip || '127.0.0.1'}`;
+    const clientIpAddress = (req.headers['x-forwarded-for'] as string) || req.socket.remoteAddress || '127.0.0.1';
+
     const context = {
       country,
       state,
       city,
       device: clientDevice,
-      browser: clientBrowser
+      browser: clientBrowser,
+      device_id: clientDeviceId,
+      ip_address: clientIpAddress
     };
 
     // Log the event directly to the JSONL clickstream file

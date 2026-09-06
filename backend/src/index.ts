@@ -39,6 +39,7 @@ const PORT = process.env.PORT || 5000;
 app.use(cors({ origin: '*' }));
 app.use(express.json());
 app.use(cookieParser());
+app.use('/uploads', express.static(path.join(__dirname, '../public/uploads')));
 
 // API Routes
 app.use('/api/sessions', sessionRoutes);

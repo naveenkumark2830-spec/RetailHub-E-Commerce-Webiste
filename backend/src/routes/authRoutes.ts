@@ -161,6 +161,8 @@ router.post('/login', async (req: Request, res: Response) => {
     const { email, password } = parseResult.data;
 
     const customer = await getCustomerByEmail(email);
+    console.log(`[Auth Login Attempt] email: "${email}" | customerFound: ${!!customer}`);
+    
     if (!customer) {
       // Failed login telemetry: User not found
       EventLogger.logEvent({
@@ -175,6 +177,8 @@ router.post('/login', async (req: Request, res: Response) => {
     }
 
     const isMatch = await bcrypt.compare(password, customer.password_hash);
+    console.log(`[Auth Login Attempt] email: "${email}" | bcryptMatch: ${isMatch}`);
+
     if (!isMatch) {
       // Failed login telemetry: Bad password
       EventLogger.logEvent({

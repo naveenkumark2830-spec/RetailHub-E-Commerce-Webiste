@@ -129,6 +129,9 @@ export interface VirtualCustomer {
   customerId: string | null;
   anonymousId: string;
   sessionId: string;
+  deviceId: string;
+  ipAddress: string;
+  isScraper?: boolean;
   userType: 'guest' | 'registered' | 'admin';
   profile: CustomerBehaviorProfile;
   sessionIntent: SessionIntent;
@@ -171,7 +174,13 @@ class SimulatorService {
   private rateUnit = '/sec';
   private duration = '5 min';
   private trafficProfile = 'Mixed / Realistic';
-  private mode: 'CLEAN' | 'DIRTY' = 'CLEAN';
+  private mode: 'CLEAN' | 'DIRTY' | 'FRAUD' = 'CLEAN';
+
+  // Fraud Generation Options
+  private fraudIpsCount = 5;
+  private fraudIngredients: 'DDOS' | 'SCRAPER' | 'BOTH' = 'BOTH';
+  private fraudRatio = 0.10;
+  private fraudIpPool: string[] = [];
 
   private currentRunId = '';
   private elapsedSeconds = 0;
@@ -197,7 +206,10 @@ class SimulatorService {
     missing_customer: 0,
     negative_price: 0,
     invalid_category: 0,
-    corrupted_json: 0
+    corrupted_json: 0,
+    fraud_events: 0,
+    ddos_fraud_count: 0,
+    scraper_fraud_count: 0
   };
 
   private eventTimestamps: number[] = [];
@@ -337,7 +349,10 @@ class SimulatorService {
         rateUnit: this.rateUnit,
         duration: this.duration,
         trafficProfile: this.trafficProfile,
-        mode: this.mode
+        mode: this.mode,
+        fraudIpsCount: this.fraudIpsCount,
+        fraudIngredients: this.fraudIngredients,
+        fraudRatio: this.fraudRatio
       },
       elapsedDuration: this.getFormattedDuration(),
       actualRate: this.getActualRate(),
@@ -376,7 +391,10 @@ class SimulatorService {
     rateUnit?: string; 
     duration?: string; 
     trafficProfile?: string;
-    mode?: 'CLEAN' | 'DIRTY';
+    mode?: 'CLEAN' | 'DIRTY' | 'FRAUD';
+    fraudIpsCount?: number;
+    fraudIngredients?: 'DDOS' | 'SCRAPER' | 'BOTH';
+    fraudRatio?: number;
   }) {
     if (this.isSimulating) {
       await this.stopSimulator();
@@ -390,7 +408,24 @@ class SimulatorService {
     this.rateUnit = config.rateUnit || '/sec';
     this.duration = config.duration || '5 min';
     this.trafficProfile = config.trafficProfile || 'Mixed / Realistic';
-    this.mode = (config.mode === 'DIRTY' || (config.mode as string) === 'CHAOS') ? 'DIRTY' : 'CLEAN';
+    
+    if (config.mode === 'FRAUD') {
+      this.mode = 'FRAUD';
+    } else if (config.mode === 'DIRTY' || (config.mode as string) === 'CHAOS') {
+      this.mode = 'DIRTY';
+    } else {
+      this.mode = 'CLEAN';
+    }
+
+    this.fraudIpsCount = config.fraudIpsCount || 5;
+    this.fraudIngredients = config.fraudIngredients || 'BOTH';
+    this.fraudRatio = config.fraudRatio !== undefined ? config.fraudRatio : 0.10;
+
+    // Generate pool of fraud IPs
+    this.fraudIpPool = [];
+    for (let i = 1; i <= this.fraudIpsCount; i++) {
+      this.fraudIpPool.push(`198.51.100.${10 + i}`);
+    }
 
     this.rateAccumulator = 0;
     this.speedMs = 100; // Fixed 100ms ticker interval for precision rate control
@@ -554,10 +589,17 @@ class SimulatorService {
     ];
     const sessionIntent = sessionIntents[Math.floor(Math.random() * sessionIntents.length)];
 
+    const deviceId = `DEV-SIM-${sessionHash}-${Math.floor(100 + Math.random() * 900)}`;
+    const ipAddress = `10.0.${Math.floor(Math.random() * 255)}.${Math.floor(1 + Math.random() * 254)}`;
+    const isScraper = this.mode === 'DIRTY' && Math.random() < 0.15; // 15% cookie-clearing scrapers in DIRTY mode
+
     return {
       customerId,
       anonymousId,
       sessionId,
+      deviceId,
+      ipAddress,
+      isScraper,
       userType: customerId ? 'registered' : 'guest',
       profile,
       sessionIntent,
@@ -632,6 +674,50 @@ class SimulatorService {
         await this.progressCustomer(customer);
       } catch (err) {
         console.error(`[Simulator Error] Transition failed for session ${customer.sessionId}:`, err);
+      }
+    }
+
+    // 3. Process Fraud Injection in FRAUD mode using clean generator logic
+    if (this.mode === 'FRAUD' && this.fraudIpPool.length > 0) {
+      const fraudBudget = Math.max(1, Math.floor((allowedEventsThisTick || 1) * this.fraudRatio));
+      for (let f = 0; f < fraudBudget; f++) {
+        const fraudIp = this.fraudIpPool[Math.floor(Math.random() * this.fraudIpPool.length)];
+        const applyDdos = this.fraudIngredients === 'DDOS' || (this.fraudIngredients === 'BOTH' && Math.random() < 0.5);
+
+        if (applyDdos) {
+          // DDoS Fraud Ingredient: Pick an IP, force >30 events from it in <10s using clean event emission logic
+          const ddosCust = this.spawnVirtualCustomer();
+          if (ddosCust) {
+            ddosCust.ipAddress = fraudIp;
+            this.triggerEvent(ddosCust, 'page_view', {
+              ground_truth_fraud: {
+                is_deliberate_fraud: true,
+                fraud_rule: 'DDOS',
+                fraud_ip: fraudIp
+              }
+            }, 'CUSTOMER', 'website');
+            this.liveStats.fraud_events++;
+            this.liveStats.ddos_fraud_count++;
+          }
+        } else {
+          // Cookie-Clearing Scraper Ingredient: Pick an IP, force it to rotate across >3 distinct session_ids in <10s using clean session creation logic
+          const scraperCust = this.spawnVirtualCustomer();
+          if (scraperCust) {
+            scraperCust.ipAddress = fraudIp;
+            const newHash = crypto.createHash('md5').update(Math.random().toString()).digest('hex').substring(0, 8).toUpperCase();
+            scraperCust.sessionId = `sess_sim_scr_${newHash}`;
+            scraperCust.anonymousId = `ANON-SCRAPER-${newHash}`;
+            this.triggerEvent(scraperCust, 'product_impression', {
+              ground_truth_fraud: {
+                is_deliberate_fraud: true,
+                fraud_rule: 'COOKIE_CLEARING_SCRAPER',
+                fraud_ip: fraudIp
+              }
+            }, 'CUSTOMER', 'website');
+            this.liveStats.fraud_events++;
+            this.liveStats.scraper_fraud_count++;
+          }
+        }
       }
     }
 
@@ -755,15 +841,25 @@ class SimulatorService {
         state: 'Tamil Nadu',
         city: 'Chennai',
         device: isSystemActor ? null : 'desktop',
-        browser: isSystemActor ? null : 'Chrome'
+        browser: isSystemActor ? null : 'Chrome',
+        device_id: customer.deviceId,
+        ip_address: customer.ipAddress
       },
       entity: entityPayload,
       metadata: {
         ...metadata,
         simulated: true,
-        simulation_mode: this.mode
+        simulation_mode: this.mode,
+        ...(customer.isScraper ? { is_scraper: true, cookie_cleared: true } : {})
       }
     };
+
+    // Cookie-clearing scraper behavior: Resets sessionId and anonymousId after burst click while retaining the exact same deviceId & ipAddress!
+    if (customer.isScraper && Math.random() < 0.4) {
+      const newHash = crypto.createHash('md5').update(Math.random().toString()).digest('hex').substring(0, 8).toUpperCase();
+      customer.sessionId = `sess_sim_scr_${newHash}`;
+      customer.anonymousId = `ANON-SCRAPER-${newHash}`;
+    }
 
     // CLEAN MODE: Emit valid payload cleanly with 0 chaos mutations
     if (!isDirtyRun) {

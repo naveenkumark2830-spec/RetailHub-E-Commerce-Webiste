@@ -23,6 +23,33 @@ router.get('/', adminAuth, async (req, res) => {
   }
 });
 
+// POST /api/admin/products/upload-image (Upload local offline image)
+router.post('/upload-image', adminAuth, async (req: any, res) => {
+  try {
+    const { filename, base64Data } = req.body;
+    if (!base64Data) {
+      return res.status(400).json({ error: 'base64Data is required' });
+    }
+
+    const uploadsDir = path.resolve(__dirname, '../../public/uploads/products');
+    if (!fs.existsSync(uploadsDir)) {
+      fs.mkdirSync(uploadsDir, { recursive: true });
+    }
+
+    const cleanFilename = (filename || `prod_${Date.now()}.png`).replace(/[^a-zA-Z0-9_.-]/g, '_');
+    const targetPath = path.join(uploadsDir, cleanFilename);
+
+    const base64Clean = base64Data.replace(/^data:image\/\w+;base64,/, '');
+    const buffer = Buffer.from(base64Clean, 'base64');
+    fs.writeFileSync(targetPath, buffer);
+
+    const relativeUrl = `/uploads/products/${cleanFilename}`;
+    res.json({ success: true, image_url: relativeUrl });
+  } catch (error: any) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
 // POST /api/admin/products/create (Create new product - requires PRODUCT_CREATE)
 router.post('/create', adminAuth, hasPermission('PRODUCT_CREATE'), async (req: any, res) => {
   try {

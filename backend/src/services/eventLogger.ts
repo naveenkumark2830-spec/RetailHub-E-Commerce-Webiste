@@ -160,6 +160,23 @@ export class EventLogger {
       finalEventTimeIso = new Date(eventTimeMs).toISOString();
     }
 
+    const deviceId = event.context?.device_id || event.device_id || (event as any).deviceId || `DEV-FP-${crypto.createHash('md5').update(sessionKey).digest('hex').substring(0, 10)}`;
+    const ipAddress = event.context?.ip_address || event.ip_address || (event as any).ipAddress || '127.0.0.1';
+
+    // DDoS & Scraper Fraud Burst Rate Detection (> 30 events in 10s window)
+    const ipBurst = trackBurstRate(`IP:${ipAddress}`, parsedTime || now.getTime());
+    const devBurst = trackBurstRate(`DEV:${deviceId}`, parsedTime || now.getTime());
+
+    if (ipBurst.isDdosSuspect || devBurst.isDdosSuspect || md.is_scraper === true) {
+      md.fraud_analytics = {
+        is_ddos_suspect: ipBurst.isDdosSuspect || devBurst.isDdosSuspect,
+        ip_event_count_10s: ipBurst.count,
+        device_event_count_10s: devBurst.count,
+        threshold_10s: 30,
+        pattern: md.is_scraper ? 'COOKIE_CLEARING_SCRAPER' : 'HIGH_FREQUENCY_BURST_DDOS'
+      };
+    }
+
     const formattedEvent: CanonicalClickstreamEvent = {
       event_id: eventId,
       simulation_run_id: (event as any).simulation_run_id || (event as any).simulation_id || 'SIM-MANUAL-0001',
@@ -179,7 +196,9 @@ export class EventLogger {
         state: event.context?.state || 'Tamil Nadu',
         city: event.context?.city || 'Chennai',
         device: isSystem ? null : (event.context?.device || event.device || (event as any).device || 'desktop'),
-        browser: isSystem ? null : (event.context?.browser || event.browser || (event as any).browser || 'Chrome')
+        browser: isSystem ? null : (event.context?.browser || event.browser || (event as any).browser || 'Chrome'),
+        device_id: deviceId,
+        ip_address: ipAddress
       },
       entity: entityObj,
       metadata: md

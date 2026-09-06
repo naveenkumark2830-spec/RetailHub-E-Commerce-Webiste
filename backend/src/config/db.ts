@@ -2130,36 +2130,41 @@ export async function saveCustomer(customer: Omit<CustomerRecord, 'created_at' |
     updated_at: now,
   };
 
+  inMemoryCustomers.set(record.customer_id, record);
+  persistInMemoryCustomers();
+
   if (dbPool && !isInMemoryFallback) {
-    const query = `
-      INSERT INTO customers (
-        customer_id, first_name, last_name, email, phone, password_hash,
-        date_of_birth, gender, country, state, city, language, membership,
-        preferred_payment, account_status, created_at, updated_at
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-    `;
-    await dbPool.query(query, [
-      record.customer_id,
-      record.first_name,
-      record.last_name,
-      record.email,
-      record.phone,
-      record.password_hash,
-      record.date_of_birth,
-      record.gender,
-      record.country,
-      record.state,
-      record.city,
-      record.language,
-      record.membership,
-      record.preferred_payment,
-      record.account_status,
-      record.created_at,
-      record.updated_at,
-    ]);
-  } else {
-    inMemoryCustomers.set(record.customer_id, record);
-    persistInMemoryCustomers();
+    try {
+      const query = `
+        INSERT INTO customers (
+          customer_id, first_name, last_name, email, phone, password_hash,
+          date_of_birth, gender, country, state, city, language, membership,
+          preferred_payment, account_status, created_at, updated_at
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        ON DUPLICATE KEY UPDATE password_hash = VALUES(password_hash)
+      `;
+      await dbPool.query(query, [
+        record.customer_id,
+        record.first_name,
+        record.last_name,
+        record.email,
+        record.phone,
+        record.password_hash,
+        record.date_of_birth,
+        record.gender,
+        record.country,
+        record.state,
+        record.city,
+        record.language,
+        record.membership,
+        record.preferred_payment,
+        record.account_status,
+        record.created_at,
+        record.updated_at,
+      ]);
+    } catch (e) {
+      console.error('[DB] Failed to insert customer into MySQL, saved to disk persistence:', e);
+    }
   }
 
   return record;
@@ -2167,31 +2172,36 @@ export async function saveCustomer(customer: Omit<CustomerRecord, 'created_at' |
 
 export async function getCustomerByEmail(email: string): Promise<CustomerRecord | null> {
   if (dbPool && !isInMemoryFallback) {
-    const [rows] = await dbPool.query<any[]>('SELECT * FROM customers WHERE email = ?', [email]);
-    if (rows.length > 0) {
-      return rows[0] as CustomerRecord;
-    }
-    return null;
-  } else {
-    for (const customer of inMemoryCustomers.values()) {
-      if (customer.email.toLowerCase() === email.toLowerCase()) {
-        return customer;
+    try {
+      const [rows] = await dbPool.query<any[]>('SELECT * FROM customers WHERE email = ?', [email]);
+      if (rows.length > 0) {
+        return rows[0] as CustomerRecord;
       }
+    } catch (e) {
+      console.error('[DB] MySQL query for getCustomerByEmail failed:', e);
     }
-    return null;
   }
+
+  for (const customer of inMemoryCustomers.values()) {
+    if (customer.email.toLowerCase() === email.toLowerCase()) {
+      return customer;
+    }
+  }
+  return null;
 }
 
 export async function getCustomerById(customer_id: string): Promise<CustomerRecord | null> {
   if (dbPool && !isInMemoryFallback) {
-    const [rows] = await dbPool.query<any[]>('SELECT * FROM customers WHERE customer_id = ?', [customer_id]);
-    if (rows.length > 0) {
-      return rows[0] as CustomerRecord;
+    try {
+      const [rows] = await dbPool.query<any[]>('SELECT * FROM customers WHERE customer_id = ?', [customer_id]);
+      if (rows.length > 0) {
+        return rows[0] as CustomerRecord;
+      }
+    } catch (e) {
+      console.error('[DB] MySQL query for getCustomerById failed:', e);
     }
-    return null;
-  } else {
-    return inMemoryCustomers.get(customer_id) || null;
   }
+  return inMemoryCustomers.get(customer_id) || null;
 }
 
 // Banner campaigns accessor
@@ -2849,12 +2859,18 @@ export async function getProductDetails(productId: string): Promise<any | null> 
     const product = inMemoryProducts.get(productId);
     if (!product) return null;
 
-    const defaultImages = [
-      { image_url: 'https://images.unsplash.com/photo-1523275335684-37898b6baf30?w=800&auto=format&fit=crop', image_type: 'primary' },
-      { image_url: 'https://images.unsplash.com/photo-1572635196237-14b3f281503f?w=800&auto=format&fit=crop', image_type: 'alternate' },
-      { image_url: 'https://images.unsplash.com/photo-1505740420928-5e560c06d30e?w=800&auto=format&fit=crop', image_type: 'alternate' },
-      { image_url: 'https://images.unsplash.com/photo-1542291026-7eec264c27ff?w=800&auto=format&fit=crop', image_type: 'alternate' }
-    ];
+    let productImages: any[] = [];
+    if (product.gallery_images && Array.isArray(product.gallery_images) && product.gallery_images.length > 0) {
+      productImages = product.gallery_images.map((url: string, idx: number) => ({
+        image_url: url,
+        image_type: idx === 0 ? 'primary' : 'alternate',
+        display_order: idx + 1
+      }));
+    } else if (product.image_url) {
+      productImages = [{ image_url: product.image_url, image_type: 'primary', display_order: 1 }];
+    } else {
+      productImages = [{ image_url: 'https://images.unsplash.com/photo-1523275335684-37898b6baf30?w=800&auto=format&fit=crop', image_type: 'primary', display_order: 1 }];
+    }
 
     const defaultSpecs = [
       { spec_name: 'Material', spec_value: 'Premium Materials' },
@@ -2870,7 +2886,7 @@ export async function getProductDetails(productId: string): Promise<any | null> 
 
     return {
       product,
-      images: defaultImages,
+      images: productImages,
       specifications: defaultSpecs,
       reviews: defaultReviews,
       seller: { name: 'NexDay Enterprise', rating: 4.5 },
