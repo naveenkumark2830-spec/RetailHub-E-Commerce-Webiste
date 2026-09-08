@@ -82,6 +82,8 @@ export interface ProductRecord {
   country: string;
   delivery_days: number;
   status: string;
+  image_url?: string;
+  gallery_images?: string[];
   created_at: Date;
   updated_at: Date;
 }

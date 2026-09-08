@@ -74,36 +74,54 @@ export interface ProductInventoryState {
   fulfilledQuantity: number;
 }
 
+export interface CatalogCategory {
+  category_id: string;
+  name: string;
+  slug: string;
+}
+
+export interface CatalogProduct {
+  product_id: string;
+  name: string;
+  brand: string;
+  category_id: string;
+  subcategory_id: string;
+  price: number;
+  sale_price: number;
+  rating: number;
+  popularityWeight: number;
+}
+
 export const SEARCH_CATEGORY_MAP: Record<string, { categoryId: string; categoryName: string; searchTerms: string[]; productPool: string[] }> = {
   'CAT001': {
     categoryId: 'CAT001',
     categoryName: 'Electronics',
     searchTerms: ['gaming laptop', 'laptop under 50000', 'best headphones', 'wireless mouse', 'iphone', 'cheap laptop', 'best laptop for coding', 'laptop for students', 'wireless headphones under 5000', 'lapotp', 'iphnoe', 'headphnes'],
-    productPool: ['PROD-CAT001-01', 'PROD-CAT001-02', 'PROD-CAT001-03', 'PROD-CAT001-04']
+    productPool: ['PROD-CAT001-001', 'PROD-CAT001-002', 'PROD-CAT001-003', 'PROD-CAT001-004']
   },
   'CAT002': {
     categoryId: 'CAT002',
     categoryName: 'Fashion',
     searchTerms: ['running shoes', 'sneakers', 'leather jacket', 'cotton t-shirt', 'jeans'],
-    productPool: ['PROD-CAT002-01', 'PROD-CAT002-02', 'PROD-CAT002-03']
+    productPool: ['PROD-CAT002-001', 'PROD-CAT002-002', 'PROD-CAT002-003']
   },
   'CAT003': {
     categoryId: 'CAT003',
-    categoryName: 'Home & Kitchen',
+    categoryName: 'Home & Furniture',
     searchTerms: ['office chair', 'study table', 'coffee maker', 'blender'],
-    productPool: ['PROD-CAT003-01', 'PROD-CAT003-02']
+    productPool: ['PROD-CAT003-001', 'PROD-CAT003-002']
   },
   'CAT004': {
     categoryId: 'CAT004',
-    categoryName: 'Sports',
-    searchTerms: ['cricket bat', 'football', 'yoga mat', 'dumbbells'],
-    productPool: ['PROD-CAT004-01', 'PROD-CAT004-02']
+    categoryName: 'Grocery',
+    searchTerms: ['rice 5kg', 'shampoo', 'sunscreen', 'green tea'],
+    productPool: ['PROD-CAT004-001', 'PROD-CAT004-002']
   },
   'CAT005': {
     categoryId: 'CAT005',
-    categoryName: 'Grocery & Beauty',
-    searchTerms: ['rice 5kg', 'shampoo', 'sunscreen', 'green tea'],
-    productPool: ['PROD-CAT005-01', 'PROD-CAT005-02']
+    categoryName: 'Beauty',
+    searchTerms: ['skin care', 'face wash', 'lipstick', 'hair serum'],
+    productPool: ['PROD-CAT005-001', 'PROD-CAT005-002']
   }
 };
 
@@ -127,6 +145,7 @@ export interface CartItemState {
 
 export interface VirtualCustomer {
   customerId: string | null;
+  pendingCustomerId: string;
   anonymousId: string;
   sessionId: string;
   deviceId: string;
@@ -153,6 +172,7 @@ export interface VirtualCustomer {
   addressId?: string;
   couponCode?: string;
   paymentAttempts?: number;
+  paymentMethod?: string;
   lastPaymentSuccess?: boolean;
   forcedSteps?: string[];
   currentStepIndex?: number;
@@ -186,6 +206,7 @@ class SimulatorService {
   private elapsedSeconds = 0;
   private rateAccumulator = 0;
   private currentTickEmittedCount = 0;
+  private customerCounter = 0;
 
   // Distinct KPI Sets
   private distinctOrdersSet = new Set<string>();
@@ -198,7 +219,7 @@ class SimulatorService {
     orders: 0,
     payments: 0,
     returns: 0,
-    invalid: 0, // Total dirty count
+    invalid: 0,
     duplicates: 0,
     late: 0,
     out_of_order: 0,
@@ -219,53 +240,293 @@ class SimulatorService {
   private skippedReasons: Record<string, string> = {};
 
   private cachedCustomerIds: string[] = [];
-  private cachedProducts: Array<{ product_id: string; category_id: string; price?: number }> = [];
   private cachedCoupons: string[] = [];
   private inventoryState: Record<string, ProductInventoryState> = {};
+
+  // Master Data In-Memory Catalog Caches & Indexing
+  private categoryCatalog: CatalogCategory[] = [];
+  private productCatalog: CatalogProduct[] = [];
+  private categoriesById = new Map<string, CatalogCategory>();
+  private productsById = new Map<string, CatalogProduct>();
+  private productsByCategory = new Map<string, CatalogProduct[]>();
+
+  private categoryWeightList: Array<{ category: CatalogCategory; weight: number }> = [];
+  private totalCategoryWeight = 0;
+
+  // Runtime Traffic Distribution Stats Tracking
+  private runtimeProductCounts = new Map<string, number>();
+  private runtimeCategoryCounts = new Map<string, number>();
 
   constructor() {
     this.resetStats();
   }
 
   private async loadSimulationCaches() {
-    if (!dbPool) return;
-    try {
-      const [custRows]: any = await dbPool.query('SELECT customer_id FROM customers LIMIT 1000');
-      this.cachedCustomerIds = custRows.map((r: any) => r.customer_id);
+    this.categoryCatalog = [];
+    this.productCatalog = [];
+    this.categoriesById.clear();
+    this.productsById.clear();
+    this.productsByCategory.clear();
 
-      const [prodRows]: any = await dbPool.query('SELECT product_id, category_id, price FROM products LIMIT 1000');
-      this.cachedProducts = prodRows.map((r: any) => ({
-        product_id: r.product_id,
-        category_id: r.category_id.startsWith('CAT') ? r.category_id : 'CAT001',
-        price: r.price ? parseFloat(r.price) : 1500
-      }));
+    let loadedCategories: CatalogCategory[] = [];
+    let loadedProducts: CatalogProduct[] = [];
 
-      if (this.cachedProducts.length === 0) {
-        this.cachedProducts = [
-          { product_id: 'PROD-CAT001-01', category_id: 'CAT001', price: 45000 },
-          { product_id: 'PROD-CAT001-02', category_id: 'CAT001', price: 3500 },
-          { product_id: 'PROD-CAT002-01', category_id: 'CAT002', price: 2200 },
-          { product_id: 'PROD-CAT003-01', category_id: 'CAT003', price: 8500 },
-          { product_id: 'PROD-CAT004-01', category_id: 'CAT004', price: 1800 },
-          { product_id: 'PROD-CAT005-01', category_id: 'CAT005', price: 450 }
-        ];
+    if (dbPool) {
+      try {
+        const [custRows]: any = await dbPool.query('SELECT customer_id FROM customers LIMIT 1000');
+        this.cachedCustomerIds = custRows.map((r: any) => r.customer_id);
+
+        const [catRows]: any = await dbPool.query('SELECT category_id, name, slug FROM categories');
+        if (Array.isArray(catRows) && catRows.length > 0) {
+          loadedCategories = catRows.map((r: any) => ({
+            category_id: r.category_id,
+            name: r.name,
+            slug: r.slug || r.name.toLowerCase().replace(/\s+/g, '-')
+          }));
+        }
+
+        const [prodRows]: any = await dbPool.query(
+          'SELECT product_id, name, brand, category_id, subcategory_id, price, sale_price, rating FROM products'
+        );
+        if (Array.isArray(prodRows) && prodRows.length > 0) {
+          loadedProducts = prodRows.map((r: any) => ({
+            product_id: r.product_id,
+            name: r.name || r.product_id,
+            brand: r.brand || 'RetailHub',
+            category_id: r.category_id,
+            subcategory_id: r.subcategory_id || '',
+            price: r.price ? parseFloat(r.price) : 2500,
+            sale_price: r.sale_price ? parseFloat(r.sale_price) : (r.price ? parseFloat(r.price) : 2500),
+            rating: r.rating ? parseFloat(r.rating) : 4.5,
+            popularityWeight: 1
+          }));
+        }
+
+        const [coupRows]: any = await dbPool.query('SELECT code FROM coupons WHERE status = "ACTIVE" LIMIT 100');
+        this.cachedCoupons = coupRows.map((r: any) => r.code);
+      } catch (err) {
+        console.error('[Simulator Error] Failed to load MySQL simulation caches:', err);
       }
+    }
 
-      this.cachedProducts.forEach(p => {
-        this.inventoryState[p.product_id] = {
-          productId: p.product_id,
-          stockQuantity: 100,
-          availableQuantity: 100,
-          reservedQuantity: 0,
-          fulfilledQuantity: 0
+    if (loadedCategories.length === 0) {
+      const defaultCatNames = [
+        'Electronics', 'Fashion', 'Home & Furniture', 'Grocery', 'Beauty',
+        'Sports', 'Books', 'Toys', 'Automotive', 'Jewelry',
+        'Footwear', 'Appliances', 'Stationery', 'Pet Supplies', 'Garden',
+        'Health', 'Baby Products', 'Watches', 'Bags', 'Music'
+      ];
+      loadedCategories = defaultCatNames.map((name, idx) => {
+        const cId = `CAT${String(idx + 1).padStart(3, '0')}`;
+        return {
+          category_id: cId,
+          name,
+          slug: name.toLowerCase().replace(/[^a-z0-9]+/g, '-')
         };
       });
-
-      const [coupRows]: any = await dbPool.query('SELECT code FROM coupons WHERE status = "ACTIVE" LIMIT 100');
-      this.cachedCoupons = coupRows.map((r: any) => r.code);
-    } catch (err) {
-      console.error('[Simulator Error] Failed to load simulation caches:', err);
     }
+
+    if (loadedProducts.length === 0) {
+      loadedCategories.forEach((cat) => {
+        for (let i = 1; i <= 50; i++) {
+          const pNum = String(i).padStart(3, '0');
+          const pId = `PROD-${cat.category_id}-${pNum}`;
+          const basePrice = 500 + Math.floor(Math.random() * 45000);
+          loadedProducts.push({
+            product_id: pId,
+            name: `${cat.name} Item ${i}`,
+            brand: `Brand-${cat.category_id}`,
+            category_id: cat.category_id,
+            subcategory_id: `SUB-${cat.category_id}-1`,
+            price: basePrice,
+            sale_price: Math.round(basePrice * 0.9),
+            rating: Number((3.5 + Math.random() * 1.5).toFixed(1)),
+            popularityWeight: 1
+          });
+        }
+      });
+    }
+
+    this.categoryCatalog = loadedCategories;
+    this.productCatalog = loadedProducts;
+
+    this.categoryCatalog.forEach(c => {
+      this.categoriesById.set(c.category_id, c);
+      this.productsByCategory.set(c.category_id, []);
+    });
+
+    let invalidRelationships = 0;
+    this.productCatalog.forEach(p => {
+      this.productsById.set(p.product_id, p);
+      if (!this.categoriesById.has(p.category_id)) {
+        invalidRelationships++;
+        if (this.categoryCatalog.length > 0) {
+          p.category_id = this.categoryCatalog[0].category_id;
+        }
+      }
+      const catList = this.productsByCategory.get(p.category_id) || [];
+      catList.push(p);
+      this.productsByCategory.set(p.category_id, catList);
+    });
+
+    // Assign Popularity Weights to Products (10% High, 30% Medium, 60% Long-tail) per Category
+    this.productsByCategory.forEach((prods) => {
+      const N = prods.length;
+      prods.forEach((p, index) => {
+        const percentile = index / N;
+        if (percentile <= 0.10) {
+          p.popularityWeight = 10;
+        } else if (percentile <= 0.40) {
+          p.popularityWeight = 4;
+        } else {
+          p.popularityWeight = 1;
+        }
+      });
+    });
+
+    const categoryWeightMap: Record<string, number> = {
+      'CAT001': 22,
+      'CAT002': 16,
+      'CAT003': 12,
+      'CAT004': 10,
+      'CAT005': 8,
+      'CAT006': 6,
+      'CAT007': 5,
+      'CAT008': 4,
+      'CAT009': 3,
+      'CAT010': 3,
+      'CAT011': 2,
+      'CAT012': 2,
+      'CAT013': 2,
+      'CAT014': 1,
+      'CAT015': 1,
+      'CAT016': 1,
+      'CAT017': 1,
+      'CAT018': 1,
+      'CAT019': 1,
+      'CAT020': 1
+    };
+
+    this.categoryWeightList = this.categoryCatalog.map(c => ({
+      category: c,
+      weight: categoryWeightMap[c.category_id] || 1
+    }));
+    this.totalCategoryWeight = this.categoryWeightList.reduce((sum, item) => sum + item.weight, 0);
+
+    this.productCatalog.forEach(p => {
+      this.inventoryState[p.product_id] = {
+        productId: p.product_id,
+        stockQuantity: 100,
+        availableQuantity: 100,
+        reservedQuantity: 0,
+        fulfilledQuantity: 0
+      };
+    });
+
+    console.log(`
+============================================================
+MYSQL CATALOG LOADED
+============================================================
+
+Categories loaded : ${this.categoryCatalog.length}
+Products loaded   : ${this.productCatalog.length}
+
+Sample products:
+${this.productCatalog.slice(0, 3).map(p => `  ${p.product_id} → ${p.category_id}`).join('\n')}
+
+Product-category validation:
+  Invalid relationships : ${invalidRelationships}
+
+============================================================
+`);
+  }
+
+  // Master Data Selection Helper Methods
+  public selectCategory(): CatalogCategory {
+    if (this.categoryCatalog.length === 0) {
+      return { category_id: 'CAT001', name: 'Electronics', slug: 'electronics' };
+    }
+    const rand = Math.random() * this.totalCategoryWeight;
+    let sum = 0;
+    for (const item of this.categoryWeightList) {
+      sum += item.weight;
+      if (rand <= sum) {
+        return item.category;
+      }
+    }
+    return this.categoryCatalog[0];
+  }
+
+  public selectProductForCategory(categoryId: string): CatalogProduct {
+    const prods = this.productsByCategory.get(categoryId) || [];
+    if (prods.length === 0) {
+      return this.selectProductFromCatalog();
+    }
+    const totalWeight = prods.reduce((sum, p) => sum + p.popularityWeight, 0);
+    const rand = Math.random() * totalWeight;
+    let accum = 0;
+    for (const p of prods) {
+      accum += p.popularityWeight;
+      if (rand <= accum) return p;
+    }
+    return prods[0];
+  }
+
+  public selectProductFromCatalog(): CatalogProduct {
+    const cat = this.selectCategory();
+    return this.selectProductForCategory(cat.category_id);
+  }
+
+  public getProductDetails(productId: string): CatalogProduct | null {
+    return this.productsById.get(productId) || null;
+  }
+
+  public getProductDistributionStats() {
+    const totalProductEvents = Array.from(this.runtimeProductCounts.values()).reduce((a, b) => a + b, 0);
+    const totalCategoryEvents = Array.from(this.runtimeCategoryCounts.values()).reduce((a, b) => a + b, 0);
+
+    const sortedProducts = Array.from(this.runtimeProductCounts.entries())
+      .sort((a, b) => b[1] - a[1])
+      .slice(0, 10)
+      .map(([pId, count]) => ({
+        product_id: pId,
+        count,
+        percentage: totalProductEvents > 0 ? parseFloat(((count / totalProductEvents) * 100).toFixed(2)) : 0
+      }));
+
+    const sortedCategories = Array.from(this.runtimeCategoryCounts.entries())
+      .sort((a, b) => b[1] - a[1])
+      .map(([cId, count]) => ({
+        category_id: cId,
+        category_name: this.categoriesById.get(cId)?.name || cId,
+        count,
+        percentage: totalCategoryEvents > 0 ? parseFloat(((count / totalCategoryEvents) * 100).toFixed(2)) : 0
+      }));
+
+    return {
+      totalProductEvents,
+      totalCategoryEvents,
+      topProducts: sortedProducts,
+      categoryDistribution: sortedCategories
+    };
+  }
+
+  public printDistributionStats() {
+    const stats = this.getProductDistributionStats();
+    console.log('\n============================================================');
+    console.log('PRODUCT & CATEGORY DISTRIBUTION STATS');
+    console.log('============================================================');
+    console.log(`Total Product Events  : ${stats.totalProductEvents}`);
+    console.log(`Total Category Events : ${stats.totalCategoryEvents}\n`);
+    console.log('Top 10 Products:');
+    stats.topProducts.forEach(p => {
+      console.log(`  ${p.product_id.padEnd(20)} : ${p.count} events (${p.percentage}%)`);
+    });
+    console.log('\nCategory Distribution:');
+    stats.categoryDistribution.forEach(c => {
+      console.log(`  ${c.category_id.padEnd(10)} (${c.category_name.padEnd(25)}) : ${c.count} events (${c.percentage}%)`);
+    });
+    console.log('============================================================\n');
   }
 
   private resetStats() {
@@ -292,7 +553,10 @@ class SimulatorService {
       missing_customer: 0,
       negative_price: 0,
       invalid_category: 0,
-      corrupted_json: 0
+      corrupted_json: 0,
+      fraud_events: 0,
+      ddos_fraud_count: 0,
+      scraper_fraud_count: 0
     };
     this.eventTimestamps = [];
     this.customerJourneys = {};
@@ -301,6 +565,7 @@ class SimulatorService {
     this.elapsedSeconds = 0;
     this.rateAccumulator = 0;
     this.currentTickEmittedCount = 0;
+    this.customerCounter = 0;
   }
 
   private getFormattedDuration(): string {
@@ -544,19 +809,16 @@ class SimulatorService {
   }
 
   private spawnVirtualCustomer(registeredProbability = 0.7): VirtualCustomer {
+    this.customerCounter++;
+    const uniqueCustId = `CUST-SIM-${String(this.customerCounter).padStart(5, '0')}`;
+
     const sessionId = `sess_sim_${Math.random().toString(36).substr(2, 9)}`;
     const sessionHash = crypto.createHash('md5').update(sessionId).digest('hex').substring(0, 8).toUpperCase();
     const anonymousId = `ANON-SIM-${sessionHash}`;
     const isRegistered = Math.random() < registeredProbability;
     
-    let customerId: string | null = null;
-    if (isRegistered) {
-      if (this.cachedCustomerIds.length > 0) {
-        customerId = this.cachedCustomerIds[Math.floor(Math.random() * this.cachedCustomerIds.length)];
-      } else {
-        customerId = `CUST${Math.floor(10000 + Math.random() * 90000)}`;
-      }
-    }
+    const customerId: string | null = isRegistered ? uniqueCustId : null;
+    const pendingCustomerId = uniqueCustId;
 
     let profileName: BehaviorProfile = 'REGULAR_BUYER';
     if (this.trafficProfile === 'Deal Hunter') profileName = 'DEAL_HUNTER';
@@ -595,6 +857,7 @@ class SimulatorService {
 
     return {
       customerId,
+      pendingCustomerId,
       anonymousId,
       sessionId,
       deviceId,
@@ -690,11 +953,9 @@ class SimulatorService {
           if (ddosCust) {
             ddosCust.ipAddress = fraudIp;
             this.triggerEvent(ddosCust, 'page_view', {
-              ground_truth_fraud: {
-                is_deliberate_fraud: true,
-                fraud_rule: 'DDOS',
-                fraud_ip: fraudIp
-              }
+              ground_truth_fraud: true,
+              fraud_rule: 'DDOS',
+              fraud_ip: fraudIp
             }, 'CUSTOMER', 'website');
             this.liveStats.fraud_events++;
             this.liveStats.ddos_fraud_count++;
@@ -708,11 +969,9 @@ class SimulatorService {
             scraperCust.sessionId = `sess_sim_scr_${newHash}`;
             scraperCust.anonymousId = `ANON-SCRAPER-${newHash}`;
             this.triggerEvent(scraperCust, 'product_impression', {
-              ground_truth_fraud: {
-                is_deliberate_fraud: true,
-                fraud_rule: 'COOKIE_CLEARING_SCRAPER',
-                fraud_ip: fraudIp
-              }
+              ground_truth_fraud: true,
+              fraud_rule: 'COOKIE_CLEARING_SCRAPER',
+              fraud_ip: fraudIp
             }, 'CUSTOMER', 'website');
             this.liveStats.fraud_events++;
             this.liveStats.scraper_fraud_count++;
@@ -804,7 +1063,28 @@ class SimulatorService {
 
     const isAdminType = eventType.startsWith('admin_') || actorType === 'ADMIN';
     const finalActorType: 'CUSTOMER' | 'ADMIN' | 'SYSTEM' = isAdminType ? 'ADMIN' : actorType;
-    const finalUserType: 'guest' | 'registered' | 'admin' = isAdminType ? 'admin' : customer.userType;
+
+    // Business Identity Resolution Rule: Anonymous events allow null customer_id, downstream checkout/financial/fulfillment MUST resolve customer_id
+    const requiredCustomerEvents = [
+      'login', 'logout',
+      'checkout_started', 'address_selected', 'delivery_option_selected', 'payment_method_selected',
+      'payment_initiated', 'payment_success', 'payment_failed', 'payment_retry',
+      'order_created', 'order_confirmed', 'order_cancelled', 'order_status_updated',
+      'inventory_reserved', 'inventory_released',
+      'shipment_created', 'order_packed', 'order_shipped', 'in_transit', 'out_for_delivery', 'delivered', 'delivery_failed',
+      'return_requested', 'return_approved', 'return_rejected', 'return_picked_up', 'return_received',
+      'refund_initiated', 'refund_success', 'refund_failed',
+      'review_added', 'rating_given',
+      'invoice_generated', 'notification_created',
+      'profile_viewed', 'profile_updated', 'address_added', 'address_updated', 'address_deleted',
+      'wishlist_add', 'wishlist_remove'
+    ];
+
+    if (!isAdminType && !customer.customerId && requiredCustomerEvents.includes(eventType)) {
+      customer.customerId = customer.pendingCustomerId || `CUST-SIM-${String(++this.customerCounter).padStart(5, '0')}`;
+    }
+
+    const finalUserType: 'guest' | 'registered' | 'admin' = isAdminType ? 'admin' : (customer.customerId ? 'registered' : 'guest');
 
     const entityPayload = {
       product_id: metadata.selected_product_id || metadata.product_id || customer.activeProductId || null,
@@ -848,6 +1128,9 @@ class SimulatorService {
       entity: entityPayload,
       metadata: {
         ...metadata,
+        ground_truth_fraud: metadata.ground_truth_fraud === true,
+        fraud_rule: metadata.fraud_rule || null,
+        fraud_ip: metadata.fraud_ip || null,
         simulated: true,
         simulation_mode: this.mode,
         ...(customer.isScraper ? { is_scraper: true, cookie_cleared: true } : {})
@@ -1024,35 +1307,42 @@ class SimulatorService {
 
       case 'BROWSING':
         if (rand < 0.20) {
-          const defaultProd = { product_id: 'PROD-CAT001-01', category_id: 'CAT001', price: 1500 };
-          const impProd = (this.cachedProducts.length > 0) ? this.cachedProducts[Math.floor(Math.random() * this.cachedProducts.length)] : defaultProd;
+          const impProd = this.selectProductFromCatalog();
           this.triggerEvent(customer, 'product_impression', { product_id: impProd.product_id }, 'CUSTOMER', 'website');
         } else if (rand < 0.45) {
           customer.currentState = 'SEARCHING';
           const query = SEARCH_LIBRARY[Math.floor(Math.random() * SEARCH_LIBRARY.length)];
           const matchingCat = Object.values(SEARCH_CATEGORY_MAP).find(c => c.searchTerms.includes(query)) || SEARCH_CATEGORY_MAP['CAT001'];
           customer.activeCategory = matchingCat.categoryId;
-          customer.searchResults = matchingCat.productPool;
+
+          const catProds = this.productsByCategory.get(matchingCat.categoryId) || [];
+          if (catProds.length > 0) {
+            customer.searchResults = catProds.slice(0, 5).map(p => p.product_id);
+          } else {
+            customer.searchResults = [this.selectProductForCategory(matchingCat.categoryId).product_id];
+          }
 
           this.triggerEvent(customer, 'search', { query, result_count: customer.searchResults.length }, 'CUSTOMER', 'website');
           this.triggerEvent(customer, 'search_result_clicked', { query, selected_product_id: customer.searchResults[0] }, 'CUSTOMER', 'website');
         } else if (rand < 0.80) {
-          const defaultProd = { product_id: 'PROD-CAT001-01', category_id: 'CAT001', price: 1500 };
-          let selectedProd = (this.cachedProducts.length > 0) ? this.cachedProducts[0] : defaultProd;
+          let selectedProd: CatalogProduct;
 
           if (customer.searchResults.length > 0) {
             const pId = customer.searchResults[Math.floor(Math.random() * customer.searchResults.length)];
-            const match = this.cachedProducts.find(p => p.product_id === pId);
-            if (match) selectedProd = match;
+            const match = this.getProductDetails(pId);
+            selectedProd = match || this.selectProductFromCatalog();
           } else if (customer.activeCategory) {
-            const matchingProds = this.cachedProducts.filter(p => p.category_id === customer.activeCategory);
-            if (matchingProds.length > 0) {
-              selectedProd = matchingProds[Math.floor(Math.random() * matchingProds.length)];
-            }
+            selectedProd = this.selectProductForCategory(customer.activeCategory);
+          } else {
+            selectedProd = this.selectProductFromCatalog();
           }
 
           customer.activeProductId = selectedProd.product_id;
           customer.activeCategory = selectedProd.category_id;
+
+          this.runtimeProductCounts.set(selectedProd.product_id, (this.runtimeProductCounts.get(selectedProd.product_id) || 0) + 1);
+          this.runtimeCategoryCounts.set(selectedProd.category_id, (this.runtimeCategoryCounts.get(selectedProd.category_id) || 0) + 1);
+
           customer.currentState = 'PRODUCT_VIEW';
           this.triggerEvent(customer, 'product_view', { product_id: selectedProd.product_id }, 'CUSTOMER', 'website');
         } else {
@@ -1100,7 +1390,8 @@ class SimulatorService {
           }
         } else if (rand < 0.85) {
           if (customer.activeProductId) {
-            const price = 2500;
+            const prod = this.getProductDetails(customer.activeProductId);
+            const price = prod ? prod.price : 2500;
             customer.cart.push({ productId: customer.activeProductId, quantity: 1, unitPrice: price });
             customer.currentState = 'CART';
             this.triggerEvent(customer, 'cart_item_added', { 
@@ -1157,70 +1448,131 @@ class SimulatorService {
         }, 'CUSTOMER', 'website');
         
         this.triggerEvent(customer, 'delivery_option_selected', { option_id: 'EXPRESS', delivery_fee: 100.00 }, 'CUSTOMER', 'website');
-        this.triggerEvent(customer, 'payment_method_selected', { method: 'UPI' }, 'CUSTOMER', 'website');
+        
+        customer.paymentMethod = 'UPI';
+        this.triggerEvent(customer, 'payment_method_selected', {
+          method: customer.paymentMethod
+        }, 'CUSTOMER', 'website');
         
         customer.currentState = 'PAYMENT';
-        this.triggerEvent(customer, 'payment_initiated', { payment_id: customer.activePaymentId, cart_id: `CART-${customer.sessionId}`, order_id: customer.activeOrderId }, 'CUSTOMER', 'website');
+        this.triggerEvent(customer, 'payment_initiated', {
+          payment_id: customer.activePaymentId,
+          cart_id: `CART-${customer.sessionId}`,
+          order_id: customer.activeOrderId,
+          payment_method: customer.paymentMethod
+        }, 'CUSTOMER', 'website');
         break;
 
       case 'PAYMENT':
+        const sessionSuffixPay = customer.sessionId.replace(/[^a-zA-Z0-9]/g, '').slice(-6).toUpperCase();
         if (rand < 0.15 && customer.paymentAttempts === 0) {
           customer.paymentAttempts = 1;
           customer.lastPaymentSuccess = false;
+          const attemptId1 = `ATT-SIM-${sessionSuffixPay}-1`;
           this.triggerEvent(customer, 'payment_failed', { 
             payment_id: customer.activePaymentId,
             order_id: customer.activeOrderId,
+            payment_method: customer.paymentMethod,
+            attempt_id: attemptId1,
+            attempt_number: 1,
+            payment_status: 'failed',
             reason: 'INSUFFICIENT_FUNDS'
           }, 'SYSTEM', 'payment_service');
-          this.triggerEvent(customer, 'payment_retry', { payment_id: customer.activePaymentId, order_id: customer.activeOrderId }, 'CUSTOMER', 'website');
+          
+          const attemptId2 = `ATT-SIM-${sessionSuffixPay}-2`;
+          this.triggerEvent(customer, 'payment_retry', {
+            payment_id: customer.activePaymentId,
+            order_id: customer.activeOrderId,
+            payment_method: customer.paymentMethod,
+            attempt_id: attemptId2,
+            attempt_number: 2,
+            payment_status: 'retry'
+          }, 'CUSTOMER', 'website');
           customer.currentState = 'CHECKOUT';
         } else {
           customer.paymentAttempts = (customer.paymentAttempts || 0) + 1;
           customer.lastPaymentSuccess = true;
+          const attemptNum = customer.paymentAttempts;
+          const attemptId = `ATT-SIM-${sessionSuffixPay}-${attemptNum}`;
           
+          // 1. Generate/store order_created timestamp FIRST
+          const orderId = customer.activeOrderId || `ORD-SIM-${sessionSuffixPay}-${customer.journeyCounter}`;
+          customer.activeOrderId = orderId;
+          if (!customer.activeOrderItemId) {
+            customer.activeOrderItemId = `ITEM-SIM-${sessionSuffixPay}-${customer.journeyCounter}`;
+          }
+
+          const itemsToProcess = customer.cart && customer.cart.length > 0 ? customer.cart : (() => {
+            const fallbackProd = customer.activeProductId ? (this.getProductDetails(customer.activeProductId) || this.selectProductFromCatalog()) : this.selectProductFromCatalog();
+            return [{ productId: fallbackProd.product_id, quantity: 1, unitPrice: fallbackProd.price }];
+          })();
+
+          let orderSubtotal = 0;
+          itemsToProcess.forEach(item => {
+            orderSubtotal += item.quantity * item.unitPrice;
+          });
+
+          const discount_amount = 0.00;
+          const coupon_discount = 0.00;
+          const tax_amount = Math.round(orderSubtotal * 0.18 * 100) / 100;
+          const shipping_fee = 100.00;
+          const delivery_fee = 0.00;
+          const total_amount = orderSubtotal - discount_amount - coupon_discount + tax_amount + shipping_fee + delivery_fee;
+
+          itemsToProcess.forEach((item, index) => {
+            const itemId = itemsToProcess.length === 1 
+              ? customer.activeOrderItemId! 
+              : `${customer.activeOrderItemId}-${index + 1}`;
+            const itemSubtotal = item.quantity * item.unitPrice;
+
+            const orderMetadata = {
+              order_id: orderId,
+              order_item_id: itemId,
+              product_id: item.productId,
+              quantity: item.quantity,
+              unit_price: item.unitPrice,
+              subtotal: itemSubtotal,
+              payment_id: customer.activePaymentId,
+              payment_method: customer.paymentMethod,
+              cart_id: `CART-${customer.sessionId}`,
+              discount_amount,
+              coupon_discount,
+              tax_amount,
+              shipping_fee,
+              delivery_fee,
+              total_amount,
+              order_value: total_amount,
+              currency: 'INR',
+              shipping_address: {
+                address_id: 'ADDR-101',
+                city: 'Bengaluru',
+                state: 'Karnataka',
+                country: 'IN'
+              }
+            };
+
+            this.triggerEvent(customer, 'order_created', orderMetadata, 'SYSTEM', 'order_service');
+          });
+
+          // 2. Generate payment_success SECOND (so payment_success_at >= order_created_at)
           this.triggerEvent(customer, 'payment_success', { 
             payment_id: customer.activePaymentId, 
             order_id: customer.activeOrderId,
             cart_id: `CART-${customer.sessionId}`,
-            amount: 4710.00,
+            payment_method: customer.paymentMethod,
+            attempt_id: attemptId,
+            attempt_number: attemptNum,
+            payment_status: 'success',
+            amount: total_amount,
             currency: 'INR' 
           }, 'SYSTEM', 'payment_service');
-
-          // ATOMIC 1-TO-1 GUARANTEE: Emit order_created immediately in the exact same step
-          const orderId = customer.activeOrderId || `ORD-SIM-${Math.floor(100000 + Math.random() * 900000)}`;
-          customer.activeOrderId = orderId;
-          if (!customer.activeOrderItemId) {
-            customer.activeOrderItemId = `ITEM-SIM-${Math.floor(10000 + Math.random() * 90000)}`;
-          }
-
-          const orderMetadata = {
-            order_id: orderId,
-            order_item_id: customer.activeOrderItemId,
-            payment_id: customer.activePaymentId,
-            cart_id: `CART-${customer.sessionId}`,
-            subtotal: 4500.00,
-            discount_amount: 500.00,
-            coupon_discount: 200.00,
-            tax_amount: 810.00,
-            shipping_fee: 100.00,
-            total_amount: 4710.00,
-            currency: 'INR',
-            shipping_address: {
-              address_id: 'ADDR-101',
-              city: 'Chennai',
-              state: 'Tamil Nadu',
-              country: 'India'
-            }
-          };
-
-          this.triggerEvent(customer, 'order_created', orderMetadata, 'SYSTEM', 'order_service');
 
           const invoiceId = `INV-SIM-${Math.floor(10000 + Math.random() * 90000)}`;
           this.triggerEvent(customer, 'invoice_generated', { 
             order_id: orderId, 
             payment_id: customer.activePaymentId,
             invoice_id: invoiceId,
-            total_amount: 4710.00,
+            total_amount: total_amount,
             currency: 'INR' 
           }, 'SYSTEM', 'billing_service');
 
@@ -1331,7 +1683,7 @@ class SimulatorService {
                   { triggerTime: tRet + 4000, eventTimeIso: new Date(t + 360000000).toISOString(), customer, eventType: 'return_picked_up', metadata: { order_id: orderId, return_id: returnId }, actorType: 'SYSTEM', eventSource: 'fulfillment_service' },
                   { triggerTime: tRet + 6000, eventTimeIso: new Date(t + 370000000).toISOString(), customer, eventType: 'return_received', metadata: { order_id: orderId, return_id: returnId }, actorType: 'SYSTEM', eventSource: 'fulfillment_service' },
                   { triggerTime: tRet + 8000, eventTimeIso: new Date(t + 380000000).toISOString(), customer, eventType: 'refund_initiated', metadata: { order_id: orderId, return_id: returnId, refund_id: refundId }, actorType: 'SYSTEM', eventSource: 'payment_service' },
-                  { triggerTime: tRet + 10000, eventTimeIso: new Date(t + 390000000).toISOString(), customer, eventType: 'refund_success', metadata: { order_id: orderId, return_id: returnId, refund_id: refundId, amount: 4710.00 }, actorType: 'SYSTEM', eventSource: 'payment_service' }
+                  { triggerTime: tRet + 10000, eventTimeIso: new Date(t + 390000000).toISOString(), customer, eventType: 'refund_success', metadata: { order_id: orderId, return_id: returnId, refund_id: refundId, amount: total_amount }, actorType: 'SYSTEM', eventSource: 'payment_service' }
                 );
               } else if (Math.random() < 0.4) {
                 const tRev = tDeliv + randOffset(5000, 9000);
@@ -1395,7 +1747,17 @@ class SimulatorService {
       eventSource = 'payment_service';
     }
 
+    if (eventType === 'payment_method_selected') {
+      customer.paymentMethod = 'UPI';
+      metadata.method = customer.paymentMethod;
+    }
+    if (['payment_initiated', 'payment_failed', 'payment_retry', 'payment_success', 'order_created'].includes(eventType)) {
+      if (!customer.paymentMethod) customer.paymentMethod = 'UPI';
+      metadata.payment_method = customer.paymentMethod;
+    }
+
     if (ctx.orderId) metadata.order_id = ctx.orderId;
+    if (ctx.orderItemId || customer.activeOrderItemId) metadata.order_item_id = ctx.orderItemId || customer.activeOrderItemId;
     if (ctx.paymentId) metadata.payment_id = ctx.paymentId;
     if (ctx.shipmentId) metadata.shipment_id = ctx.shipmentId;
     if (ctx.returnId) metadata.return_id = ctx.returnId;
@@ -1403,6 +1765,20 @@ class SimulatorService {
     if (ctx.reviewId) metadata.review_id = ctx.reviewId;
     if (ctx.productId) metadata.product_id = ctx.productId;
     if (ctx.cartId) metadata.cart_id = ctx.cartId;
+
+    if (eventType === 'order_created') {
+      const prod = (customer.activeProductId ? this.getProductDetails(customer.activeProductId) : null) || (ctx.productId ? this.getProductDetails(ctx.productId) : null) || this.selectProductFromCatalog();
+      const quantity = 1;
+      const unit_price = prod.price;
+      const subtotal = quantity * unit_price;
+      metadata.order_item_id = customer.activeOrderItemId || `ITEM-SIM-${customer.sessionId}`;
+      metadata.product_id = prod.product_id;
+      metadata.quantity = quantity;
+      metadata.unit_price = unit_price;
+      metadata.subtotal = subtotal;
+      metadata.currency = 'INR';
+      metadata.total_amount = subtotal + 100.00;
+    }
 
     this.triggerEvent(customer, eventType, metadata, actorType, eventSource);
     customer.currentState = `FORCED_${eventType}`;
@@ -1419,7 +1795,7 @@ class SimulatorService {
           'session_started', 'login', 'page_view', 'category_view', 'search', 'search_result_clicked', 'filter_applied',
           'product_view', 'product_image_view', 'product_details_view', 'product_impression', 'cart_item_added',
           'checkout_started', 'address_selected', 'delivery_option_selected', 'payment_method_selected',
-          'payment_initiated', 'payment_success', 'order_created', 'invoice_generated', 'notification_created', 'order_confirmed', 'order_status_updated',
+          'payment_initiated', 'order_created', 'payment_success', 'invoice_generated', 'notification_created', 'order_confirmed', 'order_status_updated',
           'inventory_reserved', 'shipment_created', 'order_packed', 'order_shipped',
           'in_transit', 'out_for_delivery', 'delivered', 'logout'
         ]
@@ -1428,7 +1804,7 @@ class SimulatorService {
         userType: 'registered' as const,
         steps: [
           'session_started', 'login', 'cart_item_added', 'checkout_started',
-          'payment_initiated', 'payment_failed', 'payment_retry', 'payment_success', 'order_created', 'invoice_generated', 'notification_created'
+          'payment_initiated', 'payment_failed', 'payment_retry', 'order_created', 'payment_success', 'invoice_generated', 'notification_created'
         ]
       },
       {
@@ -1441,20 +1817,20 @@ class SimulatorService {
       {
         userType: 'registered' as const,
         steps: [
-          'session_started', 'login', 'cart_item_added', 'checkout_started', 'payment_initiated', 'payment_success', 'order_created', 'shipment_created', 'delivered', 'return_requested', 'return_approved',
+          'session_started', 'login', 'cart_item_added', 'checkout_started', 'payment_initiated', 'order_created', 'payment_success', 'shipment_created', 'delivered', 'return_requested', 'return_approved',
           'return_picked_up', 'return_received', 'refund_initiated', 'refund_success'
         ]
       },
       {
         userType: 'registered' as const,
         steps: [
-          'session_started', 'login', 'cart_item_added', 'checkout_started', 'payment_initiated', 'payment_success', 'order_created', 'shipment_created', 'delivered', 'return_requested', 'return_rejected',
+          'session_started', 'login', 'cart_item_added', 'checkout_started', 'payment_initiated', 'order_created', 'payment_success', 'shipment_created', 'delivered', 'return_requested', 'return_rejected',
           'return_received', 'refund_initiated', 'refund_failed'
         ]
       },
       {
         userType: 'registered' as const,
-        steps: ['session_started', 'login', 'cart_item_added', 'checkout_started', 'payment_initiated', 'payment_success', 'order_created', 'shipment_created', 'delivered', 'review_added', 'rating_given']
+        steps: ['session_started', 'login', 'cart_item_added', 'checkout_started', 'payment_initiated', 'order_created', 'payment_success', 'shipment_created', 'delivered', 'review_added', 'rating_given']
       },
       {
         userType: 'registered' as const,
@@ -1478,7 +1854,7 @@ class SimulatorService {
       {
         userType: 'registered' as const,
         steps: [
-          'session_started', 'login', 'cart_item_added', 'checkout_started', 'payment_initiated', 'payment_success', 'order_created', 'order_cancelled', 'inventory_released', 'delivery_failed'
+          'session_started', 'login', 'cart_item_added', 'checkout_started', 'payment_initiated', 'order_created', 'payment_success', 'order_cancelled', 'inventory_released', 'delivery_failed'
         ]
       }
     ];
@@ -1492,19 +1868,22 @@ class SimulatorService {
       }
 
       const sessionSuffix = customer.sessionId.replace(/[^a-zA-Z0-9]/g, '').slice(-6).toUpperCase();
+      const sampleProd = this.selectProductFromCatalog();
 
       customer.journeyContext = {
         orderId: `ORD-SIM-COV-${sessionSuffix}-${journeyCounter}`,
+        orderItemId: `ITEM-SIM-COV-${sessionSuffix}-${journeyCounter}`,
         paymentId: `PAY-SIM-COV-${sessionSuffix}-${journeyCounter}`,
         shipmentId: `SHIP-SIM-COV-${sessionSuffix}-${journeyCounter}`,
         returnId: `RET-SIM-COV-${sessionSuffix}-${journeyCounter}`,
         refundId: `REF-SIM-COV-${sessionSuffix}-${journeyCounter}`,
         reviewId: `REV-SIM-COV-${sessionSuffix}-${journeyCounter}`,
-        productId: 'PROD-CAT001-01',
+        productId: sampleProd.product_id,
         cartId: `CART-${customer.sessionId}`
       };
 
       customer.activeOrderId = customer.journeyContext.orderId;
+      customer.activeOrderItemId = customer.journeyContext.orderItemId;
       customer.activePaymentId = customer.journeyContext.paymentId;
       customer.activeShipmentId = customer.journeyContext.shipmentId;
       customer.activeReturnId = customer.journeyContext.returnId;

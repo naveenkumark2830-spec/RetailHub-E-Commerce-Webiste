@@ -248,10 +248,19 @@ router.post('/place-order', async (req: Request, res: Response) => {
         page: null,
         entity: {
           order_id: result.order_id,
+          order_item_id: (result as any).order_item_id || `OI-${result.order_id}-1`,
+          product_id: req.body?.items?.[0]?.product_id || 'PROD-CAT001-01',
           payment_id: result.payment_id,
           cart_id: result.cart_id || 'CART-UNKNOWN'
         },
         metadata: {
+          order_id: result.order_id,
+          order_item_id: (result as any).order_item_id || `OI-${result.order_id}-1`,
+          product_id: req.body?.items?.[0]?.product_id || 'PROD-CAT001-01',
+          quantity: req.body?.items?.[0]?.quantity || 1,
+          unit_price: req.body?.items?.[0]?.price || 2500.00,
+          subtotal: (req.body?.items?.[0]?.quantity || 1) * (req.body?.items?.[0]?.price || 2500.00),
+          currency: 'INR',
           total_amount: result.total_amount,
           payment_method,
           payment_status: payment_method === 'COD' ? 'PENDING' : 'SUCCESS',
@@ -408,9 +417,18 @@ router.post('/retry-payment', async (req: Request, res: Response) => {
         page: null,
         entity: {
           order_id,
+          order_item_id: `OI-${order_id}-1`,
+          product_id: 'PROD-CAT001-01',
           payment_id: result.payment_id
         },
         metadata: {
+          order_id,
+          order_item_id: `OI-${order_id}-1`,
+          product_id: 'PROD-CAT001-01',
+          quantity: 1,
+          unit_price: 2500.00,
+          subtotal: 2500.00,
+          currency: 'INR',
           total_amount: result.total_amount,
           payment_method,
           payment_status: 'SUCCESS'
