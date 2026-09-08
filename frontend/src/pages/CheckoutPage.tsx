@@ -43,6 +43,8 @@ export const CheckoutPage: React.FC = () => {
   const [paymentMethod, setPaymentMethod] = useState<string>('UPI');
   const [forceSimulatedFailure, setForceSimulatedFailure] = useState<boolean>(false);
   const [couponInput, setCouponInput] = useState('');
+  const [paidAmount, setPaidAmount] = useState<number>(0);
+  const [confirmedPaymentMethod, setConfirmedPaymentMethod] = useState<string>('UPI');
 
   // Modals / Overlays
   const [isAddAddressOpen, setIsAddAddressOpen] = useState(false);
@@ -250,6 +252,10 @@ export const CheckoutPage: React.FC = () => {
       return;
     }
 
+    const orderTotal = getGrandTotal();
+    setPaidAmount(orderTotal);
+    setConfirmedPaymentMethod(paymentMethod);
+
     setIsProcessing(true);
     setTransactionResult(null);
     setTransactionErrorMsg(null);
@@ -286,6 +292,8 @@ export const CheckoutPage: React.FC = () => {
       if (response.ok && data.success) {
         setTransactionResult('SUCCESS');
         setGeneratedOrderId(data.result.order_id);
+        setPaidAmount(data.result?.total_amount ? Number(data.result.total_amount) : orderTotal);
+        setConfirmedPaymentMethod(paymentMethod);
         fetchCart(); // clean active cart
       } else {
         setTransactionResult('FAILED');
@@ -333,6 +341,8 @@ export const CheckoutPage: React.FC = () => {
       const data = await response.json();
       if (response.ok && data.success) {
         setTransactionResult('SUCCESS');
+        setPaidAmount(data.result?.total_amount ? Number(data.result.total_amount) : (paidAmount || getGrandTotal()));
+        setConfirmedPaymentMethod(paymentMethod);
         fetchCart(); // clean active cart
       } else {
         setTransactionResult('FAILED');
@@ -954,7 +964,7 @@ export const CheckoutPage: React.FC = () => {
                     <h3 className="text-base font-black text-emerald-600">Order Placed Successfully!</h3>
                     <p className="text-[11px] text-gray-400 font-mono">Order ID: <span className="font-extrabold text-gray-700">{generatedOrderId}</span></p>
                     <p className="text-xs text-gray-500 leading-relaxed px-4">
-                      Your payment of <span className="font-black text-[#041E42]">₹{getGrandTotal().toLocaleString()}</span> was verified. The package will be shipped to your selected address immediately.
+                      Your payment of <span className="font-black text-[#041E42]">₹{(paidAmount || getGrandTotal()).toLocaleString()}</span> via <span className="font-bold text-emerald-600 uppercase tracking-wide bg-emerald-50 px-2 py-0.5 rounded border border-emerald-200">{confirmedPaymentMethod || paymentMethod}</span> was verified. The package will be shipped to your selected address immediately.
                     </p>
                   </div>
 
