@@ -5607,7 +5607,7 @@ export async function createAdminProduct(productData: any, adminId: string): Pro
     customer_id: '',
     user_type: 'registered',
     page: 'admin_products',
-    context: { country: 'India', state: 'Karnataka', city: 'Bengaluru', device: 'desktop', browser: 'Chrome' },
+    context: { country: 'IN', state: 'Karnataka', city: 'Bengaluru', device: 'desktop', browser: 'Chrome' },
     metadata: { product_id: productId, name: productData.name, price, stock }
   });
 
@@ -5683,7 +5683,7 @@ export async function updateAdminProduct(productId: string, productData: any, ad
       customer_id: '',
       user_type: 'registered',
       page: 'admin_products',
-      context: { country: 'India', state: 'Karnataka', city: 'Bengaluru', device: 'desktop', browser: 'Chrome' },
+      context: { country: 'IN', state: 'Karnataka', city: 'Bengaluru', device: 'desktop', browser: 'Chrome' },
       metadata: { product_id: productId, old_price: oldProd.price, new_price: price }
     });
   }
@@ -5694,7 +5694,7 @@ export async function updateAdminProduct(productId: string, productData: any, ad
     customer_id: '',
     user_type: 'registered',
     page: 'admin_products',
-    context: { country: 'India', state: 'Karnataka', city: 'Bengaluru', device: 'desktop', browser: 'Chrome' },
+    context: { country: 'IN', state: 'Karnataka', city: 'Bengaluru', device: 'desktop', browser: 'Chrome' },
     metadata: { product_id: productId }
   });
 
@@ -5714,7 +5714,7 @@ export async function deactivateAdminProduct(productId: string, adminId: string)
     customer_id: '',
     user_type: 'registered',
     page: 'admin_products',
-    context: { country: 'India', state: 'Karnataka', city: 'Bengaluru', device: 'desktop', browser: 'Chrome' },
+    context: { country: 'IN', state: 'Karnataka', city: 'Bengaluru', device: 'desktop', browser: 'Chrome' },
     metadata: { product_id: productId }
   });
 
@@ -5769,7 +5769,7 @@ export async function createAdminCategory(catData: any, adminId: string): Promis
     customer_id: '',
     user_type: 'registered',
     page: 'admin_categories',
-    context: { country: 'India', state: 'Karnataka', city: 'Bengaluru', device: 'desktop', browser: 'Chrome' },
+    context: { country: 'IN', state: 'Karnataka', city: 'Bengaluru', device: 'desktop', browser: 'Chrome' },
     metadata: { category_id: categoryId, name: catData.name }
   });
 
@@ -5821,7 +5821,7 @@ export async function updateAdminCategory(catId: string, catData: any, adminId: 
     customer_id: '',
     user_type: 'registered',
     page: 'admin_categories',
-    context: { country: 'India', state: 'Karnataka', city: 'Bengaluru', device: 'desktop', browser: 'Chrome' },
+    context: { country: 'IN', state: 'Karnataka', city: 'Bengaluru', device: 'desktop', browser: 'Chrome' },
     metadata: { category_id: catId, updated_fields: updatedFields }
   });
 
@@ -5841,7 +5841,7 @@ export async function deactivateAdminCategory(catId: string, adminId: string): P
     customer_id: '',
     user_type: 'registered',
     page: 'admin_categories',
-    context: { country: 'India', state: 'Karnataka', city: 'Bengaluru', device: 'desktop', browser: 'Chrome' },
+    context: { country: 'IN', state: 'Karnataka', city: 'Bengaluru', device: 'desktop', browser: 'Chrome' },
     metadata: { category_id: catId }
   });
 
@@ -5962,7 +5962,7 @@ export async function adjustAdminInventory(
     customer_id: '',
     user_type: 'registered',
     page: 'admin_inventory',
-    context: { country: 'India', state: 'Karnataka', city: 'Bengaluru', device: 'desktop', browser: 'Chrome' },
+    context: { country: 'IN', state: 'Karnataka', city: 'Bengaluru', device: 'desktop', browser: 'Chrome' },
     metadata: {
       product_id: productId,
       warehouse_id: warehouseId,
@@ -6130,7 +6130,7 @@ export async function updateAdminOrderStatus(
     customer_id: orderRows[0].customer_id,
     user_type: 'registered',
     page: 'admin_orders',
-    context: { country: 'India', state: 'Karnataka', city: 'Bengaluru', device: 'desktop', browser: 'Chrome' },
+    context: { country: 'IN', state: 'Karnataka', city: 'Bengaluru', device: 'desktop', browser: 'Chrome' },
     metadata: { order_id: orderId, old_status: oldStatus, new_status: newStatus, reason }
   });
 
@@ -6181,7 +6181,7 @@ export async function cancelAdminOrder(orderId: string, reason: string, adminId:
     customer_id: orderRows[0].customer_id,
     user_type: 'registered',
     page: 'admin_orders',
-    context: { country: 'India', state: 'Karnataka', city: 'Bengaluru', device: 'desktop', browser: 'Chrome' },
+    context: { country: 'IN', state: 'Karnataka', city: 'Bengaluru', device: 'desktop', browser: 'Chrome' },
     metadata: { order_id: orderId, cancelled_by: 'ADMIN', admin_id: adminId, reason }
   });
 
@@ -6316,7 +6316,7 @@ export async function updateAdminCustomerStatus(customerId: string, status: stri
     customer_id: customerId,
     user_type: 'registered',
     page: 'admin_customers',
-    context: { country: 'India', state: 'Karnataka', city: 'Bengaluru', device: 'desktop', browser: 'Chrome' },
+    context: { country: 'IN', state: 'Karnataka', city: 'Bengaluru', device: 'desktop', browser: 'Chrome' },
     metadata: { customer_id: customerId, old_status: oldStatus, new_status: status }
   });
 
@@ -6389,7 +6389,7 @@ export async function updateAdminReviewStatus(reviewId: string, status: string, 
     customer_id: reviewRows[0].customer_id,
     user_type: 'registered',
     page: 'admin_reviews',
-    context: { country: 'India', state: 'Karnataka', city: 'Bengaluru', device: 'desktop', browser: 'Chrome' },
+    context: { country: 'IN', state: 'Karnataka', city: 'Bengaluru', device: 'desktop', browser: 'Chrome' },
     metadata: {
       review_id: reviewId,
       product_id: reviewRows[0].product_id,
@@ -6493,7 +6493,7 @@ export async function createAdminCoupon(coupon: any, adminId: string): Promise<a
     customer_id: 'ADMIN',
     user_type: 'registered',
     page: 'admin_coupons',
-    context: { country: 'India', state: 'Karnataka', city: 'Bengaluru', device: 'desktop', browser: 'Chrome' },
+    context: { country: 'IN', state: 'Karnataka', city: 'Bengaluru', device: 'desktop', browser: 'Chrome' },
     metadata: { coupon_id: couponId, coupon_code: coupon.code, discount_type: coupon.discount_type, discount_value: coupon.discount_value }
   });
 
@@ -6511,7 +6511,7 @@ export async function deactivateAdminCoupon(couponId: string, adminId: string): 
     customer_id: 'ADMIN',
     user_type: 'registered',
     page: 'admin_coupons',
-    context: { country: 'India', state: 'Karnataka', city: 'Bengaluru', device: 'desktop', browser: 'Chrome' },
+    context: { country: 'IN', state: 'Karnataka', city: 'Bengaluru', device: 'desktop', browser: 'Chrome' },
     metadata: { coupon_id: couponId }
   });
 
@@ -6689,10 +6689,10 @@ export async function getWarehouseInventory(warehouseId: string): Promise<any[]>
   }
 
   return [
-    { inventory_id: 'INV-101', product_id: 'PROD-CAT001-01', product_name: 'Gaming Laptop Pro 15', sku: 'SKU-LAP-PRO15', stock: 120, reserved: 15, damaged: 2, reorder_level: 20 },
-    { inventory_id: 'INV-102', product_id: 'PROD-CAT001-02', product_name: 'Wireless Noise Cancelling Headphones', sku: 'SKU-AUD-WNC01', stock: 450, reserved: 32, damaged: 0, reorder_level: 50 },
-    { inventory_id: 'INV-103', product_id: 'PROD-CAT002-01', product_name: 'Ultra Lightweight Running Sneakers', sku: 'SKU-FAS-RUN01', stock: 18, reserved: 5, damaged: 1, reorder_level: 30 },
-    { inventory_id: 'INV-104', product_id: 'PROD-CAT003-01', product_name: 'Ergonomic Office Chair', sku: 'SKU-HOM-EOC01', stock: 85, reserved: 12, damaged: 0, reorder_level: 15 }
+    { inventory_id: 'INV-101', product_id: 'PROD-CAT001-001', product_name: 'Gaming Laptop Pro 15', sku: 'SKU-LAP-PRO15', stock: 120, reserved: 15, damaged: 2, reorder_level: 20 },
+    { inventory_id: 'INV-102', product_id: 'PROD-CAT001-002', product_name: 'Wireless Noise Cancelling Headphones', sku: 'SKU-AUD-WNC01', stock: 450, reserved: 32, damaged: 0, reorder_level: 50 },
+    { inventory_id: 'INV-103', product_id: 'PROD-CAT002-001', product_name: 'Ultra Lightweight Running Sneakers', sku: 'SKU-FAS-RUN01', stock: 18, reserved: 5, damaged: 1, reorder_level: 30 },
+    { inventory_id: 'INV-104', product_id: 'PROD-CAT003-001', product_name: 'Ergonomic Office Chair', sku: 'SKU-HOM-EOC01', stock: 85, reserved: 12, damaged: 0, reorder_level: 15 }
   ];
 }
 

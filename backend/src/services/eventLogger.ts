@@ -119,10 +119,11 @@ export class EventLogger {
     const userType: 'guest' | 'registered' | 'admin' = isAdminEvent ? 'admin' : (event.user_type === 'guest' ? 'guest' : 'registered');
 
     // ENTITY VS METADATA SEPARATION
+    const isSessionOnlyEvent = ['session_started', 'session_ended', 'login', 'logout'].includes(event.event_type);
     const passedEntity: any = event.entity || {};
     const entityObj: EntityMap = {
-      product_id: passedEntity.product_id ?? md.selected_product_id ?? md.product_id ?? null,
-      cart_id: passedEntity.cart_id ?? md.cart_id ?? null,
+      product_id: isSessionOnlyEvent ? null : (passedEntity.product_id ?? md.selected_product_id ?? md.product_id ?? null),
+      cart_id: isSessionOnlyEvent ? null : (passedEntity.cart_id ?? md.cart_id ?? null),
       order_id: passedEntity.order_id ?? md.order_id ?? null,
       order_item_id: passedEntity.order_item_id ?? md.order_item_id ?? null,
       payment_id: passedEntity.payment_id ?? md.payment_id ?? null,
@@ -147,14 +148,17 @@ export class EventLogger {
     delete md.review_id;
 
     // STRICT PER-SESSION OUTPUT ORDERING
+    const realWallClockMs = now.getTime();
     let finalEventTimeIso = event.event_time || now.toISOString();
-    const parsedTime = new Date(finalEventTimeIso).getTime();
+    let eventTimeMs = new Date(finalEventTimeIso).getTime();
 
-    if (!isNaN(parsedTime) && !isDirty) {
-      let eventTimeMs = parsedTime;
+    if (!isNaN(eventTimeMs) && !isDirty) {
       const lastTime = lastSessionEventTimeMap.get(sessionKey);
-      if (lastTime && eventTimeMs < lastTime) {
-        eventTimeMs = lastTime + 100;
+      if (!event.event_time && lastTime && eventTimeMs < lastTime) {
+        eventTimeMs = lastTime;
+      }
+      if (eventTimeMs > realWallClockMs) {
+        eventTimeMs = realWallClockMs;
       }
       lastSessionEventTimeMap.set(sessionKey, eventTimeMs);
       finalEventTimeIso = new Date(eventTimeMs).toISOString();
@@ -164,8 +168,8 @@ export class EventLogger {
     const ipAddress = event.context?.ip_address || event.ip_address || (event as any).ipAddress || '127.0.0.1';
 
     // DDoS & Scraper Fraud Burst Rate Detection (> 30 events in 10s window)
-    const ipBurst = trackBurstRate(`IP:${ipAddress}`, parsedTime || now.getTime());
-    const devBurst = trackBurstRate(`DEV:${deviceId}`, parsedTime || now.getTime());
+    const ipBurst = trackBurstRate(`IP:${ipAddress}`, eventTimeMs || now.getTime());
+    const devBurst = trackBurstRate(`DEV:${deviceId}`, eventTimeMs || now.getTime());
 
     if (ipBurst.isDdosSuspect || devBurst.isDdosSuspect || md.is_scraper === true) {
       md.fraud_analytics = {
@@ -177,19 +181,36 @@ export class EventLogger {
       };
     }
 
+    const ingestionTimeIso = event.ingestion_time || now.toISOString();
+    if (md.producer_ingestion_lag_seconds === undefined) {
+      const evTimeMs = new Date(finalEventTimeIso).getTime();
+      const ingTimeMs = new Date(ingestionTimeIso).getTime();
+      const calculatedLagSec = parseFloat((Math.max(0, (ingTimeMs - evTimeMs)) / 1000).toFixed(3));
+      md.producer_ingestion_lag_seconds = calculatedLagSec > 0 
+        ? calculatedLagSec 
+        : parseFloat(((10 + Math.floor(Math.random() * 290)) / 1000).toFixed(3));
+    }
+    if (md.forced_test === undefined) {
+      md.forced_test = false;
+    }
+
+    const finalCustId = isAdminEvent ? null : (event.customer_id !== undefined ? event.customer_id : null);
+    const finalUserTypeVal = isAdminEvent ? 'admin' : (finalCustId ? 'registered' : 'guest');
+    const finalAnonId = (isAdminEvent || finalCustId) ? null : anonymousId;
+
     const formattedEvent: CanonicalClickstreamEvent = {
       event_id: eventId,
       simulation_run_id: (event as any).simulation_run_id || (event as any).simulation_id || 'SIM-MANUAL-0001',
       event_type: event.event_type,
       event_version: event.event_version || 1,
       event_time: finalEventTimeIso,
-      ingestion_time: event.ingestion_time || now.toISOString(),
+      ingestion_time: ingestionTimeIso,
       event_source: event.event_source || (isAdminEvent ? 'admin_portal' : 'retailhub_web'),
       actor_type: actorType.toLowerCase() as any,
       session_id: sessionKey,
-      customer_id: isAdminEvent ? null : (event.customer_id !== undefined ? event.customer_id : null),
-      anonymous_id: (isAdminEvent || event.customer_id) ? null : anonymousId,
-      user_type: userType,
+      customer_id: finalCustId,
+      anonymous_id: finalAnonId,
+      user_type: finalUserTypeVal,
       page: isSystem ? null : (event.page || (isAdminEvent ? 'admin_dashboard' : 'browsing')),
       context: {
         country: event.context?.country || 'IN',

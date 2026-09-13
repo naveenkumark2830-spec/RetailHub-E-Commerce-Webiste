@@ -259,6 +259,72 @@ class SimulatorService {
 
   constructor() {
     this.resetStats();
+    this.ensureCatalogLoaded();
+  }
+
+  private ensureCatalogLoaded() {
+    if (this.categoryCatalog.length === 0 || this.productCatalog.length === 0) {
+      const defaultCatNames = [
+        'Electronics', 'Fashion', 'Home & Furniture', 'Grocery', 'Beauty',
+        'Sports', 'Books', 'Toys', 'Automotive', 'Jewelry',
+        'Footwear', 'Appliances', 'Stationery', 'Pet Supplies', 'Garden',
+        'Health', 'Baby Products', 'Watches', 'Bags', 'Music'
+      ];
+      this.categoryCatalog = defaultCatNames.map((name, idx) => {
+        const cId = `CAT${String(idx + 1).padStart(3, '0')}`;
+        return {
+          category_id: cId,
+          name,
+          slug: name.toLowerCase().replace(/[^a-z0-9]+/g, '-')
+        };
+      });
+
+      this.productCatalog = [];
+      this.categoryCatalog.forEach((cat) => {
+        for (let i = 1; i <= 50; i++) {
+          const pNum = String(i).padStart(3, '0');
+          const pId = `PROD-${cat.category_id}-${pNum}`;
+          const skuIndex = (parseInt(cat.category_id.replace(/\D/g, '')) || 1) * 100 + i;
+          const basePrice = Math.round((499 + ((skuIndex * 137) % 44500)) * 100) / 100;
+          this.productCatalog.push({
+            product_id: pId,
+            name: `${cat.name} Item ${i}`,
+            brand: `Brand-${cat.category_id}`,
+            category_id: cat.category_id,
+            subcategory_id: `SUB-${cat.category_id}-1`,
+            price: basePrice,
+            sale_price: Math.round(basePrice * 0.9 * 100) / 100,
+            rating: Number((3.5 + (skuIndex % 15) * 0.1).toFixed(1)),
+            popularityWeight: 1
+          });
+        }
+      });
+
+      this.categoryCatalog.forEach(c => {
+        this.categoriesById.set(c.category_id, c);
+        this.productsByCategory.set(c.category_id, []);
+      });
+
+      this.productCatalog.forEach(p => {
+        this.productsById.set(p.product_id, p);
+        const catList = this.productsByCategory.get(p.category_id) || [];
+        catList.push(p);
+        this.productsByCategory.set(p.category_id, catList);
+      });
+
+      const categoryWeightMap: Record<string, number> = {
+        'CAT001': 22, 'CAT002': 16, 'CAT003': 12, 'CAT004': 10, 'CAT005': 8,
+        'CAT006': 6, 'CAT007': 5, 'CAT008': 4, 'CAT009': 3, 'CAT010': 3,
+        'CAT011': 2, 'CAT012': 2, 'CAT013': 2, 'CAT014': 1, 'CAT015': 1,
+        'CAT016': 1, 'CAT017': 1, 'CAT018': 1, 'CAT019': 1, 'CAT020': 1
+      };
+
+      this.categoryWeightList = this.categoryCatalog.map(c => ({
+        category: c,
+        weight: categoryWeightMap[c.category_id] || 1
+      }));
+      this.totalCategoryWeight = this.categoryWeightList.reduce((sum, item) => sum + item.weight, 0);
+    }
   }
 
   private async loadSimulationCaches() {
@@ -331,7 +397,8 @@ class SimulatorService {
         for (let i = 1; i <= 50; i++) {
           const pNum = String(i).padStart(3, '0');
           const pId = `PROD-${cat.category_id}-${pNum}`;
-          const basePrice = 500 + Math.floor(Math.random() * 45000);
+          const skuIndex = (parseInt(cat.category_id.replace(/\D/g, '')) || 1) * 100 + i;
+          const basePrice = Math.round((499 + ((skuIndex * 137) % 44500)) * 100) / 100;
           loadedProducts.push({
             product_id: pId,
             name: `${cat.name} Item ${i}`,
@@ -339,8 +406,8 @@ class SimulatorService {
             category_id: cat.category_id,
             subcategory_id: `SUB-${cat.category_id}-1`,
             price: basePrice,
-            sale_price: Math.round(basePrice * 0.9),
-            rating: Number((3.5 + Math.random() * 1.5).toFixed(1)),
+            sale_price: Math.round(basePrice * 0.9 * 100) / 100,
+            rating: Number((3.5 + (skuIndex % 15) * 0.1).toFixed(1)),
             popularityWeight: 1
           });
         }
@@ -443,6 +510,7 @@ Product-category validation:
 
   // Master Data Selection Helper Methods
   public selectCategory(): CatalogCategory {
+    this.ensureCatalogLoaded();
     if (this.categoryCatalog.length === 0) {
       return { category_id: 'CAT001', name: 'Electronics', slug: 'electronics' };
     }
@@ -458,9 +526,20 @@ Product-category validation:
   }
 
   public selectProductForCategory(categoryId: string): CatalogProduct {
+    this.ensureCatalogLoaded();
     const prods = this.productsByCategory.get(categoryId) || [];
     if (prods.length === 0) {
-      return this.selectProductFromCatalog();
+      return this.productCatalog[0] || {
+        product_id: 'PROD-CAT001-001',
+        name: 'Electronics Item 1',
+        brand: 'Brand-CAT001',
+        category_id: 'CAT001',
+        subcategory_id: 'SUB-CAT001-1',
+        price: 2500,
+        sale_price: 2250,
+        rating: 4.5,
+        popularityWeight: 1
+      };
     }
     const totalWeight = prods.reduce((sum, p) => sum + p.popularityWeight, 0);
     const rand = Math.random() * totalWeight;
@@ -473,12 +552,27 @@ Product-category validation:
   }
 
   public selectProductFromCatalog(): CatalogProduct {
+    this.ensureCatalogLoaded();
     const cat = this.selectCategory();
     return this.selectProductForCategory(cat.category_id);
   }
 
   public getProductDetails(productId: string): CatalogProduct | null {
     return this.productsById.get(productId) || null;
+  }
+
+  public getSkuPrice(productId: string): number {
+    const prod = this.getProductDetails(productId);
+    if (prod && prod.price && prod.price > 0) {
+      return prod.price;
+    }
+    let hash = 0;
+    for (let i = 0; i < productId.length; i++) {
+      hash = (hash << 5) - hash + productId.charCodeAt(i);
+      hash |= 0;
+    }
+    const price = 499 + (Math.abs(hash) % 44500);
+    return Math.round(price * 100) / 100;
   }
 
   public getProductDistributionStats() {
@@ -814,11 +908,12 @@ Product-category validation:
 
     const sessionId = `sess_sim_${Math.random().toString(36).substr(2, 9)}`;
     const sessionHash = crypto.createHash('md5').update(sessionId).digest('hex').substring(0, 8).toUpperCase();
-    const anonymousId = `ANON-SIM-${sessionHash}`;
-    const isRegistered = Math.random() < registeredProbability;
+    const isScraper = this.mode === 'DIRTY' && Math.random() < 0.15; // 15% cookie-clearing scrapers in DIRTY mode
+    const isRegistered = Math.random() < registeredProbability && !isScraper;
     
     const customerId: string | null = isRegistered ? uniqueCustId : null;
     const pendingCustomerId = uniqueCustId;
+    const finalAnonId = isRegistered ? null : (isScraper ? `ANON-SCRAPER-${sessionHash}` : `ANON-SIM-${sessionHash}`);
 
     let profileName: BehaviorProfile = 'REGULAR_BUYER';
     if (this.trafficProfile === 'Deal Hunter') profileName = 'DEAL_HUNTER';
@@ -853,12 +948,14 @@ Product-category validation:
 
     const deviceId = `DEV-SIM-${sessionHash}-${Math.floor(100 + Math.random() * 900)}`;
     const ipAddress = `10.0.${Math.floor(Math.random() * 255)}.${Math.floor(1 + Math.random() * 254)}`;
-    const isScraper = this.mode === 'DIRTY' && Math.random() < 0.15; // 15% cookie-clearing scrapers in DIRTY mode
+
+    const isForcedTest = Math.random() < 0.08;
+    const forcedSteps = isForcedTest ? ['session_started', 'login', 'cart_item_added', 'checkout_started', 'payment_initiated', 'order_created', 'payment_success'] : undefined;
 
     return {
       customerId,
       pendingCustomerId,
-      anonymousId,
+      anonymousId: finalAnonId as any,
       sessionId,
       deviceId,
       ipAddress,
@@ -871,7 +968,8 @@ Product-category validation:
       wishlist: [],
       searchResults: [],
       journeyCounter: 1,
-      lastEventTime: Date.now()
+      lastEventTime: Date.now(),
+      ...(isForcedTest ? { forcedSteps, currentStepIndex: 0 } : {})
     };
   }
 
@@ -924,7 +1022,8 @@ Product-category validation:
     for (const ev of readyEvents) {
       if (this.currentTickEmittedCount >= allowedEventsThisTick) break;
       if (this.assertStateInvariants(ev.customer, ev.eventType)) {
-        this.triggerEvent(ev.customer, ev.eventType, ev.metadata, ev.actorType || 'SYSTEM', ev.eventSource || 'simulator');
+        const metaWithTime = { ...ev.metadata, ...(ev.eventTimeIso ? { event_time: ev.eventTimeIso } : {}) };
+        this.triggerEvent(ev.customer, ev.eventType, metaWithTime, ev.actorType || 'SYSTEM', ev.eventSource || 'simulator');
         this.pendingScheduledEvents = this.pendingScheduledEvents.filter(e => e !== ev);
       }
     }
@@ -1000,10 +1099,18 @@ Product-category validation:
       return;
     }
 
-    // Strict per-session non-decreasing event_time
-    const nowMs = Math.max(Date.now(), (customer.lastEventTime || 0) + 100);
-    customer.lastEventTime = nowMs;
-    const nowIso = new Date(nowMs).toISOString();
+    // Strict per-session non-decreasing event_time bounded by wall-clock now
+    const realNow = Date.now();
+    const eventTimeOverride = metadata.event_time || metadata.eventTimeIso;
+    const nowMs = eventTimeOverride 
+      ? new Date(eventTimeOverride).getTime() 
+      : Math.min(realNow, Math.max(realNow, customer.lastEventTime || 0));
+    if (!eventTimeOverride) {
+      customer.lastEventTime = nowMs;
+    } else {
+      customer.lastEventTime = Math.max(customer.lastEventTime || 0, nowMs);
+    }
+    const nowIso = eventTimeOverride || new Date(nowMs).toISOString();
 
     this.coverageStats[eventType] = (this.coverageStats[eventType] || 0) + 1;
     if (this.skippedReasons[eventType]) {
@@ -1053,7 +1160,9 @@ Product-category validation:
       }
     }
 
-    const cartId = (customer.cart.length > 0 || customer.sessionId) ? `CART-${customer.sessionId}` : null;
+    const isSessionOnlyEvent = ['session_started', 'session_ended', 'login', 'logout'].includes(eventType);
+    const isCartStep = ['cart_item_added', 'cart_update', 'cart_item_removed', 'checkout_started', 'checkout_abandoned', 'coupon_applied', 'address_selected', 'delivery_option_selected', 'payment_method_selected', 'payment_initiated', 'payment_success', 'payment_failed', 'payment_retry', 'order_created', 'order_confirmed'].includes(eventType);
+    const cartId = (customer.cart.length > 0 || isCartStep || metadata.cart_id) ? (metadata.cart_id || `CART-${customer.sessionId}`) : null;
     const isOrderStep = ['order_created', 'order_confirmed', 'order_status_updated', 'inventory_reserved', 'inventory_released', 'shipment_created', 'order_packed', 'order_shipped', 'in_transit', 'out_for_delivery', 'delivered', 'delivery_failed', 'return_requested', 'return_approved', 'return_rejected', 'return_picked_up', 'return_received', 'refund_initiated', 'refund_success', 'review_added', 'rating_given', 'invoice_generated', 'notification_created'].includes(eventType);
     const isPaymentStep = ['payment_initiated', 'payment_success', 'payment_failed', 'payment_retry'].includes(eventType) || isOrderStep;
     const isShipmentStep = ['shipment_created', 'order_packed', 'order_shipped', 'in_transit', 'out_for_delivery', 'delivered', 'delivery_failed'].includes(eventType);
@@ -1064,31 +1173,13 @@ Product-category validation:
     const isAdminType = eventType.startsWith('admin_') || actorType === 'ADMIN';
     const finalActorType: 'CUSTOMER' | 'ADMIN' | 'SYSTEM' = isAdminType ? 'ADMIN' : actorType;
 
-    // Business Identity Resolution Rule: Anonymous events allow null customer_id, downstream checkout/financial/fulfillment MUST resolve customer_id
-    const requiredCustomerEvents = [
-      'login', 'logout',
-      'checkout_started', 'address_selected', 'delivery_option_selected', 'payment_method_selected',
-      'payment_initiated', 'payment_success', 'payment_failed', 'payment_retry',
-      'order_created', 'order_confirmed', 'order_cancelled', 'order_status_updated',
-      'inventory_reserved', 'inventory_released',
-      'shipment_created', 'order_packed', 'order_shipped', 'in_transit', 'out_for_delivery', 'delivered', 'delivery_failed',
-      'return_requested', 'return_approved', 'return_rejected', 'return_picked_up', 'return_received',
-      'refund_initiated', 'refund_success', 'refund_failed',
-      'review_added', 'rating_given',
-      'invoice_generated', 'notification_created',
-      'profile_viewed', 'profile_updated', 'address_added', 'address_updated', 'address_deleted',
-      'wishlist_add', 'wishlist_remove'
-    ];
-
-    if (!isAdminType && !customer.customerId && requiredCustomerEvents.includes(eventType)) {
-      customer.customerId = customer.pendingCustomerId || `CUST-SIM-${String(++this.customerCounter).padStart(5, '0')}`;
-    }
-
-    const finalUserType: 'guest' | 'registered' | 'admin' = isAdminType ? 'admin' : (customer.customerId ? 'registered' : 'guest');
+    const finalCustomerId = isAdminType ? null : (metadata.customer_id !== undefined ? metadata.customer_id : customer.customerId);
+    const finalUserType: 'guest' | 'registered' | 'admin' = isAdminType ? 'admin' : (finalCustomerId ? 'registered' : 'guest');
+    const finalAnonymousId = (isAdminType || finalCustomerId) ? null : (metadata.anonymous_id || customer.anonymousId);
 
     const entityPayload = {
-      product_id: metadata.selected_product_id || metadata.product_id || customer.activeProductId || null,
-      cart_id: metadata.cart_id || cartId,
+      product_id: isSessionOnlyEvent ? null : (metadata.selected_product_id || metadata.product_id || customer.activeProductId || null),
+      cart_id: isSessionOnlyEvent ? null : cartId,
       order_id: (isOrderStep || metadata.order_id) ? (metadata.order_id || customer.activeOrderId || null) : null,
       order_item_id: (isOrderStep || metadata.order_item_id) ? (metadata.order_item_id || customer.activeOrderItemId || null) : null,
       payment_id: (isPaymentStep || metadata.payment_id) ? (metadata.payment_id || customer.activePaymentId || null) : null,
@@ -1101,6 +1192,13 @@ Product-category validation:
 
     const isSystemActor = finalActorType === 'SYSTEM';
 
+    const lagMs = Math.floor(10 + Math.random() * 290);
+    const defaultIngestionIso = new Date(new Date(nowIso).getTime() + lagMs).toISOString();
+    const finalIngestionIso = metadata.ingestion_time || defaultIngestionIso;
+    const computedLagSec = metadata.ingestion_time 
+      ? Math.max(0, parseFloat(((new Date(metadata.ingestion_time).getTime() - new Date(nowIso).getTime()) / 1000).toFixed(3)))
+      : parseFloat((lagMs / 1000).toFixed(3));
+
     // Build 100% valid canonical payload with explicit simulation_mode tag
     const payload = {
       event_id: `EVT-SIM-${Math.floor(10000000 + Math.random() * 90000000)}`,
@@ -1108,16 +1206,16 @@ Product-category validation:
       event_type: eventType,
       event_version: 1,
       event_time: nowIso,
-      ingestion_time: nowIso,
+      ingestion_time: finalIngestionIso,
       event_source: isAdminType ? 'admin_portal' : eventSource,
       actor_type: finalActorType,
       session_id: customer.sessionId,
-      customer_id: isAdminType ? null : customer.customerId,
-      anonymous_id: customer.anonymousId,
+      customer_id: finalCustomerId,
+      anonymous_id: finalAnonymousId,
       user_type: finalUserType,
       page: isSystemActor ? null : (isAdminType ? 'admin_dashboard' : customer.currentState.toLowerCase()),
       context: {
-        country: 'India',
+        country: 'IN',
         state: 'Tamil Nadu',
         city: 'Chennai',
         device: isSystemActor ? null : 'desktop',
@@ -1132,7 +1230,9 @@ Product-category validation:
         fraud_rule: metadata.fraud_rule || null,
         fraud_ip: metadata.fraud_ip || null,
         simulated: true,
-        simulation_mode: this.mode,
+        simulation_mode: (this.mode === 'FRAUD' || metadata.ground_truth_fraud === true) ? 'FRAUD' : 'CLEAN',
+        producer_ingestion_lag_seconds: computedLagSec,
+        forced_test: metadata.forced_test === true || !!customer.forcedSteps,
         ...(customer.isScraper ? { is_scraper: true, cookie_cleared: true } : {})
       }
     };
@@ -1153,7 +1253,7 @@ Product-category validation:
     // CHAOS MODE (isDirtyRun === true): Select chaos issue type if random trigger hits (~20% total dirty rate)
     const dirtyChance = Math.random();
     if (dirtyChance > 0.20) {
-      // 80% of events in dirty mode remain valid clean events
+      // Uncorrupted events in dirty mode retain simulation_mode = 'CLEAN'
       EventLogger.logEvent(payload);
       return;
     }
@@ -1162,13 +1262,21 @@ Product-category validation:
     const dirtyTypeRoll = Math.floor(Math.random() * 8);
 
     switch (dirtyTypeRoll) {
-      case 0: { // 1. DUPLICATE EVENT (Emit exact same event payload twice with same event_id)
+      case 0: { // 1. DUPLICATE EVENT (Emit exact same event payload twice with same event_id, tag 2nd as DIRTY)
         this.liveStats.duplicates++;
         this.liveStats.total_events++; // Count 2nd physical emitted record
         this.currentTickEmittedCount++;
         this.liveStats.invalid++;
         EventLogger.logEvent(payload);
-        EventLogger.logEvent(payload, true); // allowDuplicateEventId = true
+        const dupPayload = {
+          ...payload,
+          metadata: {
+            ...payload.metadata,
+            simulation_mode: 'DIRTY',
+            data_quality: { is_dirty: true, issue_type: 'DUPLICATE_EVENT' }
+          }
+        };
+        EventLogger.logEvent(dupPayload, true); // allowDuplicateEventId = true
         break;
       }
       case 1: { // 2. LATE EVENT (ingestion_time > event_time)
@@ -1180,6 +1288,7 @@ Product-category validation:
           ingestion_time: lateIso,
           metadata: {
             ...payload.metadata,
+            simulation_mode: 'DIRTY',
             data_quality: { is_dirty: true, issue_type: 'LATE_EVENT' }
           }
         };
@@ -1195,6 +1304,7 @@ Product-category validation:
           event_time: pastIso,
           metadata: {
             ...payload.metadata,
+            simulation_mode: 'DIRTY',
             data_quality: { is_dirty: true, issue_type: 'OUT_OF_ORDER' }
           }
         };
@@ -1209,6 +1319,7 @@ Product-category validation:
           event_time: 'INVALID_TIMESTAMP_2026',
           metadata: {
             ...payload.metadata,
+            simulation_mode: 'DIRTY',
             data_quality: { is_dirty: true, issue_type: 'INVALID_TIMESTAMP' }
           }
         };
@@ -1224,6 +1335,7 @@ Product-category validation:
           user_type: 'registered' as const, // registered user event missing required customer_id
           metadata: {
             ...payload.metadata,
+            simulation_mode: 'DIRTY',
             data_quality: { is_dirty: true, issue_type: 'MISSING_REQUIRED_CUSTOMER' }
           }
         };
@@ -1237,8 +1349,9 @@ Product-category validation:
           ...payload,
           metadata: {
             ...payload.metadata,
-            unit_price: -2500,
-            amount: -4710,
+            simulation_mode: 'DIRTY',
+            unit_price: -1499,
+            amount: -1499,
             data_quality: { is_dirty: true, issue_type: 'NEGATIVE_PRICE' }
           }
         };
@@ -1252,6 +1365,7 @@ Product-category validation:
           ...payload,
           metadata: {
             ...payload.metadata,
+            simulation_mode: 'DIRTY',
             category_id: 'INVALID_CAT_9999',
             data_quality: { is_dirty: true, issue_type: 'INVALID_CATEGORY' }
           }
@@ -1263,7 +1377,7 @@ Product-category validation:
         this.liveStats.corrupted_json++;
         this.liveStats.invalid++;
         const corruptEventId = `EVT-SIM-${Math.floor(10000000 + Math.random() * 90000000)}`;
-        const corruptedLine = `{"event_id":"${corruptEventId}","simulation_run_id":"${this.currentRunId}","simulation_mode":"${this.mode}","event_type":"${eventType}","session_id":"${customer.sessionId}","customer_id":${customer.customerId ? `"${customer.customerId}"` : 'null'},"metadata":{"simulation_mode":"${this.mode}","data_quality":{"is_dirty":true,"issue_type":"CORRUPTED_JSON"}},"unclosed_raw_payload":"CORRUPTED_PARSING_ERROR_TEST_STRING`;
+        const corruptedLine = `{"event_id":"${corruptEventId}","simulation_run_id":"${this.currentRunId}","simulation_mode":"DIRTY","event_type":"${eventType}","session_id":"${customer.sessionId}","customer_id":${customer.customerId ? `"${customer.customerId}"` : 'null'},"metadata":{"simulation_mode":"DIRTY","data_quality":{"is_dirty":true,"issue_type":"CORRUPTED_JSON"}},"unclosed_raw_payload":"CORRUPTED_PARSING_ERROR_TEST_STRING`;
         EventLogger.logRawCorruptedLine(corruptedLine);
         break;
       }
@@ -1359,14 +1473,20 @@ Product-category validation:
         const catId = customer.activeCategory || 'CAT001';
         const catObj = SEARCH_CATEGORY_MAP[catId] || SEARCH_CATEGORY_MAP['CAT001'];
 
+        const filterBrands = ['BrandX', 'TechCorp', 'StyleCo', 'UrbanFit', 'Nexus', 'Apex', 'Aura'];
+        const filterPriceMins = [200, 500, 1000, 2000, 5000];
+        const filterPriceMaxs = [3000, 5000, 10000, 25000, 50000, 100000];
+        const filterRatingMins = [3.0, 3.5, 4.0, 4.5];
+        const filterDiscountMins = [5, 10, 15, 20, 30, 50];
+
         this.triggerEvent(customer, 'filter_applied', { 
           category_id: catObj.categoryId,
           category_name: catObj.categoryName,
-          price_min: 1000,
-          price_max: 50000,
-          rating_min: 4,
-          brand: 'BrandX',
-          discount_min: 10
+          price_min: filterPriceMins[Math.floor(Math.random() * filterPriceMins.length)],
+          price_max: filterPriceMaxs[Math.floor(Math.random() * filterPriceMaxs.length)],
+          rating_min: filterRatingMins[Math.floor(Math.random() * filterRatingMins.length)],
+          brand: filterBrands[Math.floor(Math.random() * filterBrands.length)],
+          discount_min: filterDiscountMins[Math.floor(Math.random() * filterDiscountMins.length)]
         }, 'CUSTOMER', 'website');
 
         if (customer.profile.profileName === 'DEAL_HUNTER' || Math.random() < 0.4) {
@@ -1390,8 +1510,7 @@ Product-category validation:
           }
         } else if (rand < 0.85) {
           if (customer.activeProductId) {
-            const prod = this.getProductDetails(customer.activeProductId);
-            const price = prod ? prod.price : 2500;
+            const price = this.getSkuPrice(customer.activeProductId);
             customer.cart.push({ productId: customer.activeProductId, quantity: 1, unitPrice: price });
             customer.currentState = 'CART';
             this.triggerEvent(customer, 'cart_item_added', { 
@@ -1412,13 +1531,29 @@ Product-category validation:
           this.triggerEvent(customer, 'checkout_abandoned', { cart_id: `CART-${customer.sessionId}` }, 'CUSTOMER', 'website');
           customer.currentState = 'BROWSING';
         } else if (customer.profile.profileName === 'DEAL_HUNTER' && Math.random() < 0.6) {
-          this.triggerEvent(customer, 'coupon_applied', { coupon: 'SAVE10', discount_amount: 250 }, 'CUSTOMER', 'website');
+          const couponOptions = [
+            { code: 'SAVE10', pct: 0.10 },
+            { code: 'WELCOME20', pct: 0.20 },
+            { code: 'FESTIVE15', pct: 0.15 },
+            { code: 'FLAT500', flat: 500 },
+            { code: 'MEGA25', pct: 0.25 }
+          ];
+          const selectedCoupon = couponOptions[Math.floor(Math.random() * couponOptions.length)];
+          const cartTotal = customer.cart.reduce((sum, item) => sum + (item.quantity * item.unitPrice), 0) || 2500;
+          const discountAmt = selectedCoupon.flat ? Math.min(selectedCoupon.flat, cartTotal) : Math.round(cartTotal * (selectedCoupon.pct || 0.10));
+          this.triggerEvent(customer, 'coupon_applied', { coupon: selectedCoupon.code, discount_amount: discountAmt }, 'CUSTOMER', 'website');
           customer.currentState = 'CHECKOUT';
           this.triggerEvent(customer, 'checkout_started', { cart_id: `CART-${customer.sessionId}` }, 'CUSTOMER', 'website');
         } else if (rand < 0.2 && customer.cart.length > 0) {
           const item = customer.cart[0];
           item.quantity += 1;
-          this.triggerEvent(customer, 'cart_update', { product_id: item.productId, cart_id: `CART-${customer.sessionId}`, quantity: item.quantity }, 'CUSTOMER', 'website');
+          this.triggerEvent(customer, 'cart_update', { 
+            product_id: item.productId, 
+            cart_id: `CART-${customer.sessionId}`, 
+            quantity: item.quantity,
+            unit_price: item.unitPrice,
+            subtotal: item.quantity * item.unitPrice
+          }, 'CUSTOMER', 'website');
         } else if (rand < 0.35 && customer.cart.length > 0) {
           const remItem = customer.cart.pop();
           this.triggerEvent(customer, 'cart_item_removed', { product_id: remItem?.productId, cart_id: `CART-${customer.sessionId}` }, 'CUSTOMER', 'website');
@@ -1443,14 +1578,16 @@ Product-category validation:
             address_id: 'ADDR-101',
             city: 'Chennai',
             state: 'Tamil Nadu',
-            country: 'India'
+            country: 'IN'
           }
         }, 'CUSTOMER', 'website');
         
-        this.triggerEvent(customer, 'delivery_option_selected', { option_id: 'EXPRESS', delivery_fee: 100.00 }, 'CUSTOMER', 'website');
+        this.triggerEvent(customer, 'delivery_option_selected', { delivery_option: 'EXPRESS', delivery_fee: 100.00 }, 'CUSTOMER', 'website');
         
-        customer.paymentMethod = 'UPI';
+        const availableMethods = ['upi', 'credit_card', 'net_banking', 'cod', 'debit_card'];
+        customer.paymentMethod = availableMethods[Math.floor(Math.random() * availableMethods.length)];
         this.triggerEvent(customer, 'payment_method_selected', {
+          payment_method: customer.paymentMethod,
           method: customer.paymentMethod
         }, 'CUSTOMER', 'website');
         
@@ -1459,12 +1596,31 @@ Product-category validation:
           payment_id: customer.activePaymentId,
           cart_id: `CART-${customer.sessionId}`,
           order_id: customer.activeOrderId,
-          payment_method: customer.paymentMethod
+          payment_method: customer.paymentMethod,
+          currency: 'INR'
         }, 'CUSTOMER', 'website');
         break;
 
       case 'PAYMENT':
         const sessionSuffixPay = customer.sessionId.replace(/[^a-zA-Z0-9]/g, '').slice(-6).toUpperCase();
+
+        const itemsToProcess = customer.cart && customer.cart.length > 0 ? customer.cart : (() => {
+          const fallbackProd = customer.activeProductId ? (this.getProductDetails(customer.activeProductId) || this.selectProductFromCatalog()) : this.selectProductFromCatalog();
+          return [{ productId: fallbackProd.product_id, quantity: 1, unitPrice: fallbackProd.price }];
+        })();
+
+        let orderSubtotal = 0;
+        itemsToProcess.forEach(item => {
+          orderSubtotal += item.quantity * item.unitPrice;
+        });
+
+        const discount_amount = 0.00;
+        const coupon_discount = 0.00;
+        const tax_amount = Math.round(orderSubtotal * 0.18 * 100) / 100;
+        const shipping_fee = 100.00;
+        const delivery_fee = 0.00;
+        const total_amount = orderSubtotal - discount_amount - coupon_discount + tax_amount + shipping_fee + delivery_fee;
+
         if (rand < 0.15 && customer.paymentAttempts === 0) {
           customer.paymentAttempts = 1;
           customer.lastPaymentSuccess = false;
@@ -1476,6 +1632,7 @@ Product-category validation:
             attempt_id: attemptId1,
             attempt_number: 1,
             payment_status: 'failed',
+            amount: total_amount,
             reason: 'INSUFFICIENT_FUNDS'
           }, 'SYSTEM', 'payment_service');
           
@@ -1486,7 +1643,8 @@ Product-category validation:
             payment_method: customer.paymentMethod,
             attempt_id: attemptId2,
             attempt_number: 2,
-            payment_status: 'retry'
+            payment_status: 'retry',
+            amount: total_amount
           }, 'CUSTOMER', 'website');
           customer.currentState = 'CHECKOUT';
         } else {
@@ -1502,30 +1660,50 @@ Product-category validation:
             customer.activeOrderItemId = `ITEM-SIM-${sessionSuffixPay}-${customer.journeyCounter}`;
           }
 
-          const itemsToProcess = customer.cart && customer.cart.length > 0 ? customer.cart : (() => {
-            const fallbackProd = customer.activeProductId ? (this.getProductDetails(customer.activeProductId) || this.selectProductFromCatalog()) : this.selectProductFromCatalog();
-            return [{ productId: fallbackProd.product_id, quantity: 1, unitPrice: fallbackProd.price }];
-          })();
+          const randRange = (minMs: number, maxMs: number) => Math.floor(minMs + Math.random() * (maxMs - minMs));
 
-          let orderSubtotal = 0;
-          itemsToProcess.forEach(item => {
-            orderSubtotal += item.quantity * item.unitPrice;
-          });
+          // Randomized realistic gaps (hours to days) between lifecycle stages
+          const gapConfirmed = randRange(10 * 60 * 1000, 30 * 60 * 1000);              // 10-30 mins
+          const gapInv = randRange(15 * 60 * 1000, 45 * 60 * 1000);                    // 15-45 mins
+          const gapShipCreated = randRange(2 * 3600 * 1000, 6 * 3600 * 1000);          // 2-6 hours
+          const gapPacked = randRange(4 * 3600 * 1000, 12 * 3600 * 1000);              // 4-12 hours
+          const gapShipped = randRange(6 * 3600 * 1000, 18 * 3600 * 1000);             // 6-18 hours
+          const gapInTransit = randRange(12 * 3600 * 1000, 36 * 3600 * 1000);          // 12-36 hours
+          const gapOutForDeliv = randRange(12 * 3600 * 1000, 36 * 3600 * 1000);        // 12-36 hours
+          const gapDelivered = randRange(2 * 3600 * 1000, 8 * 3600 * 1000);            // 2-8 hours
 
-          const discount_amount = 0.00;
-          const coupon_discount = 0.00;
-          const tax_amount = Math.round(orderSubtotal * 0.18 * 100) / 100;
-          const shipping_fee = 100.00;
-          const delivery_fee = 0.00;
-          const total_amount = orderSubtotal - discount_amount - coupon_discount + tax_amount + shipping_fee + delivery_fee;
+          const isReturn = customer.profile.profileName === 'RETURN_PRONE' || Math.random() < 0.15;
+          const gapReturnReq = isReturn ? randRange(6 * 3600 * 1000, 48 * 3600 * 1000) : 0;     // 6-48 hours
+          const gapReturnApp = isReturn ? randRange(2 * 3600 * 1000, 12 * 3600 * 1000) : 0;     // 2-12 hours
+          const gapReturnPickup = isReturn ? randRange(12 * 3600 * 1000, 36 * 3600 * 1000) : 0; // 12-36 hours
+          const gapReturnRecv = isReturn ? randRange(12 * 3600 * 1000, 48 * 3600 * 1000) : 0;   // 12-48 hours
+          const gapRefundInit = isReturn ? randRange(1 * 3600 * 1000, 6 * 3600 * 1000) : 0;     // 1-6 hours
+          const gapRefundSucc = isReturn ? randRange(2 * 3600 * 1000, 24 * 3600 * 1000) : 0;    // 2-24 hours
+
+          let totalSpan = gapConfirmed + gapInv + gapShipCreated + gapPacked + gapShipped + gapInTransit + gapOutForDeliv + gapDelivered;
+          if (isReturn) {
+            totalSpan += gapReturnReq + gapReturnApp + gapReturnPickup + gapReturnRecv + gapRefundInit + gapRefundSucc;
+          }
+
+          // Anchor base order time T0 so all events complete prior to current time
+          const nowMs = Date.now();
+          const t0 = nowMs - totalSpan - 120000;
+
+          let currTime = t0;
+          const isoOrderCreated = new Date(currTime).toISOString();
+          const isoPaySuccess = new Date(currTime + 2000).toISOString();
+          const isoInvoiceGen = new Date(currTime + 3000).toISOString();
+          const isoNotifCreated = new Date(currTime + 4000).toISOString();
 
           itemsToProcess.forEach((item, index) => {
-            const itemId = itemsToProcess.length === 1 
-              ? customer.activeOrderItemId! 
-              : `${customer.activeOrderItemId}-${index + 1}`;
+            const itemId = (itemsToProcess.length === 1 && customer.journeyCounter === 1)
+              ? `ITEM-SIM-${sessionSuffixPay}-1`
+              : `ITEM-SIM-${sessionSuffixPay}-${customer.journeyCounter > 1 ? customer.journeyCounter + '-' : ''}${index + 1}`;
+            customer.activeOrderItemId = itemId;
             const itemSubtotal = item.quantity * item.unitPrice;
 
             const orderMetadata = {
+              event_time: isoOrderCreated,
               order_id: orderId,
               order_item_id: itemId,
               product_id: item.productId,
@@ -1556,6 +1734,7 @@ Product-category validation:
 
           // 2. Generate payment_success SECOND (so payment_success_at >= order_created_at)
           this.triggerEvent(customer, 'payment_success', { 
+            event_time: isoPaySuccess,
             payment_id: customer.activePaymentId, 
             order_id: customer.activeOrderId,
             cart_id: `CART-${customer.sessionId}`,
@@ -1569,6 +1748,7 @@ Product-category validation:
 
           const invoiceId = `INV-SIM-${Math.floor(10000 + Math.random() * 90000)}`;
           this.triggerEvent(customer, 'invoice_generated', { 
+            event_time: isoInvoiceGen,
             order_id: orderId, 
             payment_id: customer.activePaymentId,
             invoice_id: invoiceId,
@@ -1578,22 +1758,24 @@ Product-category validation:
 
           const notifId = `NOTIF-SIM-${Math.floor(10000 + Math.random() * 90000)}`;
           this.triggerEvent(customer, 'notification_created', { 
+            event_time: isoNotifCreated,
             order_id: orderId, 
             notification_id: notifId,
             type: 'ORDER_CONFIRMED',
             channel: 'EMAIL' 
           }, 'SYSTEM', 'notification_service');
 
-          // Schedule downstream fulfillment & delivery steps
-          const t = Date.now();
-          const randOffset = (min: number, max: number) => Math.floor(min + Math.random() * (max - min));
+          // Schedule downstream events with incremental wall-clock trigger times and multi-day ISO event times
+          const tSimNow = Date.now();
+          let trigStep = 300;
 
+          currTime += gapConfirmed;
           this.pendingScheduledEvents.push({
-            triggerTime: t + randOffset(1000, 2500),
-            eventTimeIso: new Date(t + 120000).toISOString(),
+            triggerTime: tSimNow + trigStep,
+            eventTimeIso: new Date(currTime).toISOString(),
             customer,
             eventType: 'order_confirmed',
-            metadata: { order_id: orderId },
+            metadata: { order_id: orderId, order_value: total_amount, currency: 'INR' },
             actorType: 'SYSTEM',
             eventSource: 'order_service'
           });
@@ -1604,17 +1786,18 @@ Product-category validation:
           }
 
           if (Math.random() < 0.05) {
+            trigStep += 300;
             this.pendingScheduledEvents.push({
-              triggerTime: t + randOffset(3000, 5000),
-              eventTimeIso: new Date(t + 300000).toISOString(),
+              triggerTime: tSimNow + trigStep,
+              eventTimeIso: new Date(currTime + 60000).toISOString(),
               customer,
               eventType: 'order_cancelled',
               metadata: { order_id: orderId, reason: 'CUSTOMER_CANCELLED' },
               actorType: 'CUSTOMER',
               eventSource: 'website'
             }, {
-              triggerTime: t + randOffset(5000, 7000),
-              eventTimeIso: new Date(t + 360000).toISOString(),
+              triggerTime: tSimNow + trigStep + 300,
+              eventTimeIso: new Date(currTime + 120000).toISOString(),
               customer,
               eventType: 'inventory_released',
               metadata: { order_id: orderId },
@@ -1622,77 +1805,241 @@ Product-category validation:
               eventSource: 'inventory_service'
             });
           } else {
-            const tInv = t + randOffset(2500, 5000);
-            const tShip = tInv + randOffset(4000, 8000);
-            const tPack = tShip + randOffset(6000, 12000);
-            const tOut = tPack + randOffset(10000, 18000);
-            const tTransit = tOut + randOffset(12000, 22000);
-            const tDeliv = tTransit + randOffset(18000, 28000);
-
-            this.pendingScheduledEvents.push(
-              { triggerTime: tInv, eventTimeIso: new Date(t + 600000).toISOString(), customer, eventType: 'inventory_reserved', metadata: { order_id: orderId }, actorType: 'SYSTEM', eventSource: 'inventory_service' }
-            );
+            currTime += gapInv;
+            trigStep += 300;
+            this.pendingScheduledEvents.push({
+              triggerTime: tSimNow + trigStep,
+              eventTimeIso: new Date(currTime).toISOString(),
+              customer,
+              eventType: 'inventory_reserved',
+              metadata: { order_id: orderId },
+              actorType: 'SYSTEM',
+              eventSource: 'inventory_service'
+            });
 
             const shipmentId = `SHIP-SIM-${Math.floor(10000 + Math.random() * 90000)}`;
 
-            this.pendingScheduledEvents.push(
-              { 
-                triggerTime: tShip, 
-                eventTimeIso: new Date(t + 14400000).toISOString(), 
-                customer, 
-                eventType: 'shipment_created', 
-                metadata: { order_id: orderId, shipment_id: shipmentId }, 
-                actorType: 'SYSTEM', 
-                eventSource: 'fulfillment_service' 
-              },
-              { triggerTime: tPack, eventTimeIso: new Date(t + 28800000).toISOString(), customer, eventType: 'order_packed', metadata: { order_id: orderId, shipment_id: shipmentId }, actorType: 'SYSTEM', eventSource: 'fulfillment_service' },
-              { triggerTime: tOut, eventTimeIso: new Date(t + 86400000).toISOString(), customer, eventType: 'order_shipped', metadata: { order_id: orderId, shipment_id: shipmentId }, actorType: 'SYSTEM', eventSource: 'fulfillment_service' },
-              { triggerTime: tTransit, eventTimeIso: new Date(t + 172800000).toISOString(), customer, eventType: 'in_transit', metadata: { order_id: orderId, shipment_id: shipmentId }, actorType: 'SYSTEM', eventSource: 'fulfillment_service' },
-              { triggerTime: tDeliv, eventTimeIso: new Date(t + 259200000).toISOString(), customer, eventType: 'out_for_delivery', metadata: { order_id: orderId, shipment_id: shipmentId }, actorType: 'SYSTEM', eventSource: 'fulfillment_service' }
-            );
+            currTime += gapShipCreated;
+            trigStep += 300;
+            this.pendingScheduledEvents.push({
+              triggerTime: tSimNow + trigStep,
+              eventTimeIso: new Date(currTime).toISOString(),
+              customer,
+              eventType: 'shipment_created',
+              metadata: { order_id: orderId, shipment_id: shipmentId },
+              actorType: 'SYSTEM',
+              eventSource: 'fulfillment_service'
+            });
 
-            if (Math.random() < 0.05) {
+            currTime += gapPacked;
+            trigStep += 300;
+            this.pendingScheduledEvents.push({
+              triggerTime: tSimNow + trigStep,
+              eventTimeIso: new Date(currTime).toISOString(),
+              customer,
+              eventType: 'order_packed',
+              metadata: { order_id: orderId, shipment_id: shipmentId },
+              actorType: 'SYSTEM',
+              eventSource: 'fulfillment_service'
+            });
+
+            currTime += gapShipped;
+            trigStep += 300;
+            this.pendingScheduledEvents.push({
+              triggerTime: tSimNow + trigStep,
+              eventTimeIso: new Date(currTime).toISOString(),
+              customer,
+              eventType: 'order_shipped',
+              metadata: { order_id: orderId, shipment_id: shipmentId },
+              actorType: 'SYSTEM',
+              eventSource: 'fulfillment_service'
+            });
+
+            currTime += gapInTransit;
+            trigStep += 300;
+            this.pendingScheduledEvents.push({
+              triggerTime: tSimNow + trigStep,
+              eventTimeIso: new Date(currTime).toISOString(),
+              customer,
+              eventType: 'in_transit',
+              metadata: { order_id: orderId, shipment_id: shipmentId },
+              actorType: 'SYSTEM',
+              eventSource: 'fulfillment_service'
+            });
+
+            const isDeliveryFail = Math.random() < 0.10;
+            if (isDeliveryFail) {
+              currTime += gapOutForDeliv;
+              trigStep += 300;
               this.pendingScheduledEvents.push({
-                triggerTime: tDeliv + 5000,
-                eventTimeIso: new Date(t + 262800000).toISOString(),
+                triggerTime: tSimNow + trigStep,
+                eventTimeIso: new Date(currTime).toISOString(),
+                customer,
+                eventType: 'out_for_delivery',
+                metadata: { order_id: orderId, shipment_id: shipmentId, attempt_number: 1 },
+                actorType: 'SYSTEM',
+                eventSource: 'fulfillment_service'
+              });
+
+              currTime += 3600 * 1000 * 3;
+              trigStep += 300;
+              this.pendingScheduledEvents.push({
+                triggerTime: tSimNow + trigStep,
+                eventTimeIso: new Date(currTime).toISOString(),
                 customer,
                 eventType: 'delivery_failed',
-                metadata: { order_id: orderId, shipment_id: shipmentId, reason: 'CUSTOMER_UNAVAILABLE' },
+                metadata: { order_id: orderId, shipment_id: shipmentId, reason: 'CUSTOMER_UNAVAILABLE', attempt_number: 1 },
+                actorType: 'SYSTEM',
+                eventSource: 'fulfillment_service'
+              });
+
+              currTime += gapOutForDeliv;
+              trigStep += 300;
+              this.pendingScheduledEvents.push({
+                triggerTime: tSimNow + trigStep,
+                eventTimeIso: new Date(currTime).toISOString(),
+                customer,
+                eventType: 'out_for_delivery',
+                metadata: { order_id: orderId, shipment_id: shipmentId, attempt_number: 2 },
+                actorType: 'SYSTEM',
+                eventSource: 'fulfillment_service'
+              });
+
+              currTime += gapDelivered;
+              trigStep += 300;
+              this.pendingScheduledEvents.push({
+                triggerTime: tSimNow + trigStep,
+                eventTimeIso: new Date(currTime).toISOString(),
+                customer,
+                eventType: 'delivered',
+                metadata: { order_id: orderId, shipment_id: shipmentId, attempt_number: 2 },
                 actorType: 'SYSTEM',
                 eventSource: 'fulfillment_service'
               });
             } else {
+              currTime += gapOutForDeliv;
+              trigStep += 300;
               this.pendingScheduledEvents.push({
-                triggerTime: tDeliv + 4000,
-                eventTimeIso: new Date(t + 261000000).toISOString(),
+                triggerTime: tSimNow + trigStep,
+                eventTimeIso: new Date(currTime).toISOString(),
+                customer,
+                eventType: 'out_for_delivery',
+                metadata: { order_id: orderId, shipment_id: shipmentId },
+                actorType: 'SYSTEM',
+                eventSource: 'fulfillment_service'
+              });
+
+              currTime += gapDelivered;
+              trigStep += 300;
+              this.pendingScheduledEvents.push({
+                triggerTime: tSimNow + trigStep,
+                eventTimeIso: new Date(currTime).toISOString(),
                 customer,
                 eventType: 'delivered',
                 metadata: { order_id: orderId, shipment_id: shipmentId },
                 actorType: 'SYSTEM',
                 eventSource: 'fulfillment_service'
               });
+            }
 
-              if (customer.profile.profileName === 'RETURN_PRONE' || Math.random() < 0.1) {
-                const tRet = tDeliv + randOffset(6000, 10000);
-                const returnId = `RET-SIM-${Math.floor(10000 + Math.random() * 90000)}`;
-                const refundId = `REF-SIM-${Math.floor(10000 + Math.random() * 90000)}`;
+            if (isReturn) {
+              const returnId = `RET-SIM-${Math.floor(10000 + Math.random() * 90000)}`;
+              const refundId = `REF-SIM-${Math.floor(10000 + Math.random() * 90000)}`;
 
-                this.pendingScheduledEvents.push(
-                  { triggerTime: tRet, eventTimeIso: new Date(t + 345600000).toISOString(), customer, eventType: 'return_requested', metadata: { order_id: orderId, return_id: returnId, reason: 'SIZE_ISSUE' }, actorType: 'CUSTOMER', eventSource: 'website' },
-                  { triggerTime: tRet + 2000, eventTimeIso: new Date(t + 350000000).toISOString(), customer, eventType: 'return_approved', metadata: { order_id: orderId, return_id: returnId }, actorType: 'SYSTEM', eventSource: 'fulfillment_service' },
-                  { triggerTime: tRet + 4000, eventTimeIso: new Date(t + 360000000).toISOString(), customer, eventType: 'return_picked_up', metadata: { order_id: orderId, return_id: returnId }, actorType: 'SYSTEM', eventSource: 'fulfillment_service' },
-                  { triggerTime: tRet + 6000, eventTimeIso: new Date(t + 370000000).toISOString(), customer, eventType: 'return_received', metadata: { order_id: orderId, return_id: returnId }, actorType: 'SYSTEM', eventSource: 'fulfillment_service' },
-                  { triggerTime: tRet + 8000, eventTimeIso: new Date(t + 380000000).toISOString(), customer, eventType: 'refund_initiated', metadata: { order_id: orderId, return_id: returnId, refund_id: refundId }, actorType: 'SYSTEM', eventSource: 'payment_service' },
-                  { triggerTime: tRet + 10000, eventTimeIso: new Date(t + 390000000).toISOString(), customer, eventType: 'refund_success', metadata: { order_id: orderId, return_id: returnId, refund_id: refundId, amount: total_amount }, actorType: 'SYSTEM', eventSource: 'payment_service' }
-                );
-              } else if (Math.random() < 0.4) {
-                const tRev = tDeliv + randOffset(5000, 9000);
-                const reviewId = `REV-SIM-${Math.floor(10000 + Math.random() * 90000)}`;
-                this.pendingScheduledEvents.push(
-                  { triggerTime: tRev, eventTimeIso: new Date(t + 300000000).toISOString(), customer, eventType: 'review_added', metadata: { order_id: orderId, review_id: reviewId }, actorType: 'CUSTOMER', eventSource: 'website' },
-                  { triggerTime: tRev + 1000, eventTimeIso: new Date(t + 300005000).toISOString(), customer, eventType: 'rating_given', metadata: { order_id: orderId, review_id: reviewId, rating: 5 }, actorType: 'CUSTOMER', eventSource: 'website' }
-                );
-              }
+              const returnReasons = ['SIZE_ISSUE', 'DAMAGED', 'WRONG_ITEM', 'NOT_AS_DESCRIBED', 'CHANGED_MIND', 'DEFECTIVE', 'QUALITY_DISAPPOINTED'];
+              const returnReason = returnReasons[Math.floor(Math.random() * returnReasons.length)];
+
+              currTime += gapReturnReq;
+              trigStep += 300;
+              this.pendingScheduledEvents.push({
+                triggerTime: tSimNow + trigStep,
+                eventTimeIso: new Date(currTime).toISOString(),
+                customer,
+                eventType: 'return_requested',
+                metadata: { order_id: orderId, return_id: returnId, reason: returnReason },
+                actorType: 'CUSTOMER',
+                eventSource: 'website'
+              });
+
+              currTime += gapReturnApp;
+              trigStep += 300;
+              this.pendingScheduledEvents.push({
+                triggerTime: tSimNow + trigStep,
+                eventTimeIso: new Date(currTime).toISOString(),
+                customer,
+                eventType: 'return_approved',
+                metadata: { order_id: orderId, return_id: returnId },
+                actorType: 'SYSTEM',
+                eventSource: 'fulfillment_service'
+              });
+
+              currTime += gapReturnPickup;
+              trigStep += 300;
+              this.pendingScheduledEvents.push({
+                triggerTime: tSimNow + trigStep,
+                eventTimeIso: new Date(currTime).toISOString(),
+                customer,
+                eventType: 'return_picked_up',
+                metadata: { order_id: orderId, return_id: returnId },
+                actorType: 'SYSTEM',
+                eventSource: 'fulfillment_service'
+              });
+
+              currTime += gapReturnRecv;
+              trigStep += 300;
+              this.pendingScheduledEvents.push({
+                triggerTime: tSimNow + trigStep,
+                eventTimeIso: new Date(currTime).toISOString(),
+                customer,
+                eventType: 'return_received',
+                metadata: { order_id: orderId, return_id: returnId },
+                actorType: 'SYSTEM',
+                eventSource: 'fulfillment_service'
+              });
+
+              currTime += gapRefundInit;
+              trigStep += 300;
+              this.pendingScheduledEvents.push({
+                triggerTime: tSimNow + trigStep,
+                eventTimeIso: new Date(currTime).toISOString(),
+                customer,
+                eventType: 'refund_initiated',
+                metadata: { order_id: orderId, return_id: returnId, refund_id: refundId },
+                actorType: 'SYSTEM',
+                eventSource: 'payment_service'
+              });
+
+              currTime += gapRefundSucc;
+              trigStep += 300;
+              this.pendingScheduledEvents.push({
+                triggerTime: tSimNow + trigStep,
+                eventTimeIso: new Date(currTime).toISOString(),
+                customer,
+                eventType: 'refund_success',
+                metadata: { order_id: orderId, return_id: returnId, refund_id: refundId, amount: total_amount },
+                actorType: 'SYSTEM',
+                eventSource: 'payment_service'
+              });
+            } else if (Math.random() < 0.4) {
+              const reviewId = `REV-SIM-${Math.floor(10000 + Math.random() * 90000)}`;
+              trigStep += 300;
+              this.pendingScheduledEvents.push({
+                triggerTime: tSimNow + trigStep,
+                eventTimeIso: new Date(currTime + 7200000).toISOString(),
+                customer,
+                eventType: 'review_added',
+                metadata: { order_id: orderId, review_id: reviewId },
+                actorType: 'CUSTOMER',
+                eventSource: 'website'
+              }, {
+                triggerTime: tSimNow + trigStep + 300,
+                eventTimeIso: new Date(currTime + 7260000).toISOString(),
+                customer,
+                eventType: 'rating_given',
+                metadata: { order_id: orderId, review_id: reviewId, rating: 5 },
+                actorType: 'CUSTOMER',
+                eventSource: 'website'
+              });
             }
           }
 
@@ -1747,13 +2094,19 @@ Product-category validation:
       eventSource = 'payment_service';
     }
 
+    if (eventType === 'delivery_option_selected') {
+      metadata.delivery_option = 'EXPRESS';
+      metadata.delivery_fee = 100.00;
+    }
     if (eventType === 'payment_method_selected') {
-      customer.paymentMethod = 'UPI';
+      customer.paymentMethod = 'upi';
+      metadata.payment_method = customer.paymentMethod;
       metadata.method = customer.paymentMethod;
     }
     if (['payment_initiated', 'payment_failed', 'payment_retry', 'payment_success', 'order_created'].includes(eventType)) {
-      if (!customer.paymentMethod) customer.paymentMethod = 'UPI';
-      metadata.payment_method = customer.paymentMethod;
+      if (!customer.paymentMethod) customer.paymentMethod = 'upi';
+      metadata.payment_method = customer.paymentMethod.toLowerCase();
+      if (!metadata.currency) metadata.currency = 'INR';
     }
 
     if (ctx.orderId) metadata.order_id = ctx.orderId;
@@ -1778,6 +2131,14 @@ Product-category validation:
       metadata.subtotal = subtotal;
       metadata.currency = 'INR';
       metadata.total_amount = subtotal + 100.00;
+      (customer as any).lastOrderTotal = metadata.total_amount;
+    }
+
+    if (['payment_success', 'payment_failed', 'payment_retry'].includes(eventType)) {
+      if (!metadata.amount) metadata.amount = (customer as any).lastOrderTotal || 2600.00;
+      if (eventType === 'payment_failed') metadata.payment_status = 'failed';
+      if (eventType === 'payment_retry') metadata.payment_status = 'retry';
+      if (eventType === 'payment_success') metadata.payment_status = 'success';
     }
 
     this.triggerEvent(customer, eventType, metadata, actorType, eventSource);

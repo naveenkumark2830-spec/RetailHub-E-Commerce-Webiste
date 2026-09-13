@@ -37,6 +37,20 @@ export async function publishEvent(
     await connectKafka();
   }
 
+  // Capture send time immediately before calling producer.send
+  // Enforce invariant: event_time <= sendTimeMs <= kafka_timestamp
+  const sendTimeMs = Date.now();
+  if (event.event_time) {
+    const evTimeMs = new Date(event.event_time).getTime();
+    if (!isNaN(evTimeMs) && evTimeMs > sendTimeMs) {
+      event.event_time = new Date(sendTimeMs).toISOString();
+    }
+  }
+
+  if (!event.ingestion_time) {
+    event.ingestion_time = new Date(sendTimeMs).toISOString();
+  }
+
   await producer!.send({
     topic,
     messages: [

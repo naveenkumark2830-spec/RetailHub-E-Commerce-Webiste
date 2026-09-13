@@ -118,7 +118,7 @@ router.post('/select-event', async (req: Request, res: Response) => {
       user_type: customer_id ? 'registered' : 'guest',
       page: 'checkout',
       context: {
-        country: 'India',
+        country: 'IN',
         state: 'Karnataka',
         city: 'Bengaluru',
         device: 'desktop',

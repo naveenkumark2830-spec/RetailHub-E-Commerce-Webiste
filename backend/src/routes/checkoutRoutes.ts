@@ -97,7 +97,7 @@ router.post('/log-address-selected', (req: Request, res: Response) => {
         address_id,
         city,
         state,
-        country: 'India'
+        country: 'IN'
       }
     }
   });
@@ -130,7 +130,7 @@ router.post('/log-delivery-selected', (req: Request, res: Response) => {
     user_type: 'registered',
     page: 'checkout',
     metadata: {
-      delivery_option,
+      delivery_option: delivery_option || 'EXPRESS',
       delivery_fee,
       estimated_days
     }
@@ -146,6 +146,7 @@ router.post('/log-payment-method-selected', (req: Request, res: Response) => {
     return res.status(400).json({ success: false, error: 'Missing fields.' });
   }
 
+  const normalizedMethod = payment_method.toLowerCase();
   EventLogger.logEvent({
     event_type: 'payment_method_selected',
     session_id,
@@ -153,7 +154,8 @@ router.post('/log-payment-method-selected', (req: Request, res: Response) => {
     user_type: 'registered',
     page: 'checkout',
     metadata: {
-      payment_method
+      payment_method: normalizedMethod,
+      method: normalizedMethod
     }
   });
 
@@ -183,7 +185,7 @@ router.post('/place-order', async (req: Request, res: Response) => {
       address_id,
       city: addr?.city || 'Bengaluru',
       state: addr?.state || 'Karnataka',
-      country: addr?.country || 'India'
+      country: addr?.country || 'IN'
     };
 
     // Log payment_initiated (CUSTOMER, website)
@@ -249,17 +251,17 @@ router.post('/place-order', async (req: Request, res: Response) => {
         entity: {
           order_id: result.order_id,
           order_item_id: (result as any).order_item_id || `OI-${result.order_id}-1`,
-          product_id: req.body?.items?.[0]?.product_id || 'PROD-CAT001-01',
+          product_id: req.body?.items?.[0]?.product_id || 'PROD-CAT001-001',
           payment_id: result.payment_id,
           cart_id: result.cart_id || 'CART-UNKNOWN'
         },
         metadata: {
           order_id: result.order_id,
           order_item_id: (result as any).order_item_id || `OI-${result.order_id}-1`,
-          product_id: req.body?.items?.[0]?.product_id || 'PROD-CAT001-01',
+          product_id: req.body?.items?.[0]?.product_id || 'PROD-CAT001-001',
           quantity: req.body?.items?.[0]?.quantity || 1,
-          unit_price: req.body?.items?.[0]?.price || 2500.00,
-          subtotal: (req.body?.items?.[0]?.quantity || 1) * (req.body?.items?.[0]?.price || 2500.00),
+          unit_price: req.body?.items?.[0]?.price || (result.total_amount ? Math.round(result.total_amount * 0.8 * 100) / 100 : 1499.00),
+          subtotal: (req.body?.items?.[0]?.quantity || 1) * (req.body?.items?.[0]?.price || (result.total_amount ? Math.round(result.total_amount * 0.8 * 100) / 100 : 1499.00)),
           currency: 'INR',
           total_amount: result.total_amount,
           payment_method,
@@ -327,6 +329,7 @@ router.post('/place-order', async (req: Request, res: Response) => {
           attempt_id: result.attempt_id,
           attempt_number: 1,
           payment_method,
+          payment_status: 'failed',
           amount: result.total_amount,
           currency: 'INR',
           failure_reason: result.failure_reason || 'BANK_DECLINED'
@@ -418,16 +421,16 @@ router.post('/retry-payment', async (req: Request, res: Response) => {
         entity: {
           order_id,
           order_item_id: `OI-${order_id}-1`,
-          product_id: 'PROD-CAT001-01',
+          product_id: 'PROD-CAT001-001',
           payment_id: result.payment_id
         },
         metadata: {
           order_id,
           order_item_id: `OI-${order_id}-1`,
-          product_id: 'PROD-CAT001-01',
+          product_id: 'PROD-CAT001-001',
           quantity: 1,
-          unit_price: 2500.00,
-          subtotal: 2500.00,
+          unit_price: result.total_amount ? Math.round(result.total_amount * 0.8 * 100) / 100 : 1499.00,
+          subtotal: result.total_amount ? Math.round(result.total_amount * 0.8 * 100) / 100 : 1499.00,
           currency: 'INR',
           total_amount: result.total_amount,
           payment_method,
@@ -455,6 +458,7 @@ router.post('/retry-payment', async (req: Request, res: Response) => {
           attempt_id: result.attempt_id,
           attempt_number: result.attempt_number,
           payment_method,
+          payment_status: 'failed',
           amount: result.total_amount,
           currency: 'INR',
           failure_reason: result.failure_reason || 'BANK_DECLINED'
