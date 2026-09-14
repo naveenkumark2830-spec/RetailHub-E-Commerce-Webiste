@@ -2226,18 +2226,28 @@ export async function getCategories(): Promise<any[]> {
   }
 }
 
+function normalizeCategorySlug(slug: string): string[] {
+  if (slug === 'home-living' || slug === 'home-furniture') return ['home-furniture', 'home-living'];
+  if (slug === 'groceries' || slug === 'grocery') return ['grocery', 'groceries'];
+  if (slug === 'mobile-tablets' || slug === 'mobiles-tablets' || slug === 'mobiles') return ['mobile-tablets', 'mobiles-tablets', 'mobiles'];
+  if (slug === 'computers' || slug === 'computers-accessories') return ['computers-accessories', 'computers'];
+  if (slug === 'sports' || slug === 'sports-fitness') return ['sports-fitness', 'sports'];
+  return [slug];
+}
+
 export async function getSubcategoriesForCategory(categorySlug: string): Promise<any[]> {
+  const slugs = normalizeCategorySlug(categorySlug);
   if (dbPool && !isInMemoryFallback) {
     const query = `
       SELECT s.* 
       FROM subcategories s 
       JOIN categories c ON s.category_id = c.category_id 
-      WHERE c.slug = ?
+      WHERE c.slug IN (?)
     `;
-    const [rows] = await dbPool.query(query, [categorySlug]);
+    const [rows] = await dbPool.query(query, [slugs]);
     return rows as any[];
   } else {
-    const cat = Array.from(inMemoryCategories.values()).find(c => c.slug === categorySlug);
+    const cat = Array.from(inMemoryCategories.values()).find(c => slugs.includes(c.slug));
     if (!cat) return [];
     const list = SUBCATEGORIES_MAP[cat.category_id] || [];
     return list.map((sub, i) => ({
@@ -2294,16 +2304,17 @@ export async function getProducts(filters: ProductQueryFilters): Promise<Paginat
       params.push(filters.category_id);
     }
     if (filters.category_slug) {
-      selectQuery += ' AND c.slug = ?';
-      params.push(filters.category_slug);
+      const slugs = normalizeCategorySlug(filters.category_slug);
+      selectQuery += ' AND c.slug IN (?)';
+      params.push(slugs);
     }
     if (filters.subcategory_slug) {
       selectQuery += ' AND s.slug = ?';
       params.push(filters.subcategory_slug);
     }
     if (filters.search) {
-      selectQuery += ' AND (p.name LIKE ? OR p.brand LIKE ?)';
-      params.push(`%${filters.search}%`, `%${filters.search}%`);
+      selectQuery += ' AND (p.name LIKE ? OR p.brand LIKE ? OR p.description LIKE ? OR c.name LIKE ? OR s.name LIKE ?)';
+      params.push(`%${filters.search}%`, `%${filters.search}%`, `%${filters.search}%`, `%${filters.search}%`, `%${filters.search}%`);
     }
     if (filters.brands && filters.brands.length > 0) {
       selectQuery += ' AND p.brand IN (?)';
@@ -2333,9 +2344,9 @@ export async function getProducts(filters: ProductQueryFilters): Promise<Paginat
     }
 
     // Sorting
-    if (filters.sort === 'price_asc') {
+    if (filters.sort === 'price_asc' || filters.sort === 'price_low') {
       selectQuery += ' ORDER BY p.sale_price ASC';
-    } else if (filters.sort === 'price_desc') {
+    } else if (filters.sort === 'price_desc' || filters.sort === 'price_high') {
       selectQuery += ' ORDER BY p.sale_price DESC';
     } else if (filters.sort === 'rating') {
       selectQuery += ' ORDER BY p.rating DESC';
@@ -2371,15 +2382,20 @@ export async function getProducts(filters: ProductQueryFilters): Promise<Paginat
       items = items.filter(p => p.category_id === filters.category_id);
     }
     if (filters.category_slug) {
-      const cat = Array.from(inMemoryCategories.values()).find(c => c.slug === filters.category_slug);
+      const slugs = normalizeCategorySlug(filters.category_slug);
+      const cat = Array.from(inMemoryCategories.values()).find(c => slugs.includes(c.slug));
       if (cat) {
         items = items.filter(p => p.category_id === cat.category_id);
       } else {
-        items = [];
+        if (slugs.includes('home-living') || slugs.includes('home-furniture')) items = items.filter(p => p.category_id === 'CAT003');
+        else if (slugs.includes('groceries') || slugs.includes('grocery')) items = items.filter(p => p.category_id === 'CAT004');
+        else if (slugs.includes('beauty')) items = items.filter(p => p.category_id === 'CAT005');
+        else if (slugs.includes('sports-fitness') || slugs.includes('sports')) items = items.filter(p => p.category_id === 'CAT006');
+        else items = [];
       }
     }
     if (filters.subcategory_slug) {
-      items = items.filter(p => p.subcategory_id.includes(filters.subcategory_slug!.toUpperCase()));
+      items = items.filter(p => p.subcategory_id.includes(filters.subcategory_slug!.toUpperCase()) || (p as any).subcategory_slug === filters.subcategory_slug);
     }
     if (filters.search) {
       const term = filters.search.toLowerCase();
@@ -2403,9 +2419,9 @@ export async function getProducts(filters: ProductQueryFilters): Promise<Paginat
     }
     
     // Sort
-    if (filters.sort === 'price_asc') {
+    if (filters.sort === 'price_asc' || filters.sort === 'price_low') {
       items.sort((a,b) => a.sale_price - b.sale_price);
-    } else if (filters.sort === 'price_desc') {
+    } else if (filters.sort === 'price_desc' || filters.sort === 'price_high') {
       items.sort((a,b) => b.sale_price - a.sale_price);
     } else if (filters.sort === 'rating') {
       items.sort((a,b) => b.rating - a.rating);
@@ -5983,8 +5999,8 @@ export async function getAdminOrdersList(filters: any): Promise<any[]> {
            c.first_name, c.last_name,
            a.state, a.city
     FROM orders o
-    JOIN customers c ON o.customer_id = c.customer_id
-    JOIN addresses a ON o.address_id = a.address_id
+    LEFT JOIN customers c ON o.customer_id = c.customer_id
+    LEFT JOIN addresses a ON o.address_id = a.address_id
     WHERE 1=1
   `;
   const params: any[] = [];
@@ -6330,16 +6346,25 @@ export async function updateAdminCustomerStatus(customerId: string, status: stri
 export async function getAdminReviewsList(search = '', rating = '', status = ''): Promise<any[]> {
   if (!dbPool || isInMemoryFallback) return [];
   let query = `
-    SELECT r.*, c.first_name, c.last_name, c.email, p.name as product_name
+    SELECT r.*, 
+           COALESCE(c.first_name, 'Customer') as first_name, 
+           COALESCE(c.last_name, r.customer_id) as last_name, 
+           c.email, 
+           COALESCE(p.name, 'Product Item') as product_name,
+           COALESCE(cat.name, 'Electronics') as category,
+           COALESCE(p.price, 1299) as price,
+           COALESCE(c.city, 'Chennai') as city,
+           COALESCE(c.state, 'Tamil Nadu') as state
     FROM reviews r
-    JOIN customers c ON r.customer_id = c.customer_id
-    JOIN products p ON r.product_id = p.product_id
+    LEFT JOIN customers c ON r.customer_id = c.customer_id
+    LEFT JOIN products p ON r.product_id = p.product_id
+    LEFT JOIN categories cat ON p.category_id = cat.category_id
     WHERE 1=1
   `;
   const params: any[] = [];
   if (search) {
-    query += ' AND (r.review_id LIKE ? OR p.name LIKE ? OR c.first_name LIKE ? OR c.last_name LIKE ?)';
-    params.push(`%${search}%`, `%${search}%`, `%${search}%`, `%${search}%`);
+    query += ' AND (r.review_id LIKE ? OR p.name LIKE ? OR c.first_name LIKE ? OR c.last_name LIKE ? OR r.review_text LIKE ?)';
+    params.push(`%${search}%`, `%${search}%`, `%${search}%`, `%${search}%`, `%${search}%`);
   }
   if (rating) {
     query += ' AND r.rating = ?';
@@ -6357,10 +6382,20 @@ export async function getAdminReviewsList(search = '', rating = '', status = '')
 export async function getAdminReviewDetail(reviewId: string): Promise<any> {
   if (!dbPool || isInMemoryFallback) return null;
   const [rows]: any = await dbPool.query(
-    `SELECT r.*, c.first_name, c.last_name, c.email, p.name as product_name, p.sku
+    `SELECT r.*, 
+            COALESCE(c.first_name, 'Customer') as first_name, 
+            COALESCE(c.last_name, r.customer_id) as last_name, 
+            c.email, 
+            COALESCE(p.name, 'Product Item') as product_name, 
+            p.sku,
+            COALESCE(cat.name, 'Electronics') as category,
+            COALESCE(p.price, 1299) as price,
+            COALESCE(c.city, 'Chennai') as city,
+            COALESCE(c.state, 'Tamil Nadu') as state
      FROM reviews r
-     JOIN customers c ON r.customer_id = c.customer_id
-     JOIN products p ON r.product_id = p.product_id
+     LEFT JOIN customers c ON r.customer_id = c.customer_id
+     LEFT JOIN products p ON r.product_id = p.product_id
+     LEFT JOIN categories cat ON p.category_id = cat.category_id
      WHERE r.review_id = ?`,
     [reviewId]
   );
@@ -6406,35 +6441,37 @@ export async function updateAdminReviewStatus(reviewId: string, status: string, 
 export async function getReviewAnalytics(): Promise<any> {
   if (!dbPool || isInMemoryFallback) {
     return {
-      avgRating: 4.2,
-      totalCount: 1500,
-      pendingCount: 12,
-      flaggedCount: 4,
-      verifiedPct: 82.5,
-      distribution: { 5: 800, 4: 400, 3: 200, 2: 70, 1: 30 }
+      avgRating: 0,
+      totalCount: 0,
+      pendingCount: 0,
+      flaggedCount: 0,
+      verifiedPct: 0,
+      distribution: { 5: 0, 4: 0, 3: 0, 2: 0, 1: 0 }
     };
   }
   
   const [totalRows]: any = await dbPool.query('SELECT COUNT(*) as count, AVG(rating) as avg_rating FROM reviews');
-  const [pendingRows]: any = await dbPool.query('SELECT COUNT(*) as count FROM reviews WHERE review_status = "PENDING"');
-  const [flaggedRows]: any = await dbPool.query('SELECT COUNT(*) as count FROM reviews WHERE review_status = "FLAGGED"');
+  const [pendingRows]: any = await dbPool.query('SELECT COUNT(*) as count FROM reviews WHERE UPPER(review_status) = "PENDING"');
+  const [flaggedRows]: any = await dbPool.query('SELECT COUNT(*) as count FROM reviews WHERE UPPER(review_status) = "FLAGGED"');
   const [verifiedRows]: any = await dbPool.query('SELECT COUNT(*) as count FROM reviews WHERE verified_purchase = 1');
   const [distRows]: any = await dbPool.query('SELECT rating, COUNT(*) as count FROM reviews GROUP BY rating');
 
   const distribution: Record<number, number> = { 5: 0, 4: 0, 3: 0, 2: 0, 1: 0 };
   for (const row of distRows) {
-    distribution[row.rating] = row.count;
+    if (row.rating >= 1 && row.rating <= 5) {
+      distribution[row.rating] = row.count;
+    }
   }
 
-  const total = totalRows[0].count || 0;
-  const verifiedCount = verifiedRows[0].count || 0;
+  const total = totalRows[0]?.count || 0;
+  const verifiedCount = verifiedRows[0]?.count || 0;
   const verifiedPct = total > 0 ? Number(((verifiedCount / total) * 100).toFixed(1)) : 0;
 
   return {
-    avgRating: total > 0 ? Number(Number(totalRows[0].avg_rating).toFixed(1)) : 0,
+    avgRating: total > 0 ? Number(Number(totalRows[0]?.avg_rating || 0).toFixed(1)) : 0,
     totalCount: total,
-    pendingCount: pendingRows[0].count || 0,
-    flaggedCount: flaggedRows[0].count || 0,
+    pendingCount: pendingRows[0]?.count || 0,
+    flaggedCount: flaggedRows[0]?.count || 0,
     verifiedPct,
     distribution
   };
@@ -6459,10 +6496,14 @@ export async function getAdminCouponsList(search = '', status = ''): Promise<any
   query += ' ORDER BY start_date DESC';
   const [rows]: any = await dbPool.query(query, params);
 
-  // For each coupon, fetch its usage count
+  // For each coupon, fetch its real usage count and total order revenue generated
   for (const row of rows) {
     const [usageRows]: any = await dbPool.query('SELECT COUNT(*) as count FROM coupon_usages WHERE coupon_id = ?', [row.coupon_id]);
-    row.usage_count = usageRows[0].count || 0;
+    const [orderRows]: any = await dbPool.query('SELECT COUNT(*) as count, SUM(total_amount) as revenue FROM orders WHERE coupon_code = ?', [row.code]);
+    const countUsages = usageRows[0]?.count || 0;
+    const countOrders = orderRows[0]?.count || 0;
+    row.usage_count = Math.max(countUsages, countOrders);
+    row.revenue_generated = Number(orderRows[0]?.revenue) || 0;
   }
   return rows;
 }
@@ -6522,30 +6563,31 @@ export async function deactivateAdminCoupon(couponId: string, adminId: string): 
 export async function getCouponAnalytics(): Promise<any> {
   if (!dbPool || isInMemoryFallback) {
     return {
-      usageCount: 120,
-      totalDiscount: 15400,
-      revenueGenerated: 145000,
-      aovWithCoupon: 2800,
-      aovWithoutCoupon: 2400,
+      usageCount: 0,
+      totalDiscount: 0,
+      revenueGenerated: 0,
+      aovWithCoupon: 0,
+      aovWithoutCoupon: 0,
       usageByState: []
     };
   }
 
   const [usageRows]: any = await dbPool.query('SELECT COUNT(*) as count, SUM(discount_amount) as total_discount FROM coupon_usages');
+  const [orderCouponCount]: any = await dbPool.query('SELECT COUNT(*) as count FROM orders WHERE coupon_code IS NOT NULL AND coupon_code != ""');
   const [revenueRows]: any = await dbPool.query(
     `SELECT SUM(o.total_amount) as revenue 
      FROM orders o 
-     JOIN coupon_usages cu ON o.order_id = cu.order_id`
+     WHERE o.coupon_code IS NOT NULL AND o.coupon_code != ""`
   );
   const [aovWithRows]: any = await dbPool.query(
     `SELECT AVG(o.total_amount) as avg_val 
      FROM orders o 
-     WHERE o.coupon_code IS NOT NULL`
+     WHERE o.coupon_code IS NOT NULL AND o.coupon_code != ""`
   );
   const [aovWithoutRows]: any = await dbPool.query(
     `SELECT AVG(o.total_amount) as avg_val 
      FROM orders o 
-     WHERE o.coupon_code IS NULL`
+     WHERE o.coupon_code IS NULL OR o.coupon_code = ""`
   );
   const [stateRows]: any = await dbPool.query(
     `SELECT oa.state, COUNT(*) as count, SUM(cu.discount_amount) as discount 
@@ -6554,13 +6596,15 @@ export async function getCouponAnalytics(): Promise<any> {
      GROUP BY oa.state`
   );
 
+  const usageCount = Math.max(Number(usageRows[0]?.count) || 0, Number(orderCouponCount[0]?.count) || 0);
+
   return {
-    usageCount: usageRows[0].count || 0,
-    totalDiscount: usageRows[0].total_discount || 0,
-    revenueGenerated: revenueRows[0].revenue || 0,
-    aovWithCoupon: aovWithRows[0].avg_val || 0,
-    aovWithoutCoupon: aovWithoutRows[0].avg_val || 0,
-    usageByState: stateRows
+    usageCount,
+    totalDiscount: Number(usageRows[0]?.total_discount) || 0,
+    revenueGenerated: Number(revenueRows[0]?.revenue) || 0,
+    aovWithCoupon: Number(aovWithRows[0]?.avg_val) || 0,
+    aovWithoutCoupon: Number(aovWithoutRows[0]?.avg_val) || 0,
+    usageByState: stateRows || []
   };
 }
 
