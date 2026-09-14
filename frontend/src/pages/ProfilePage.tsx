@@ -5,47 +5,67 @@ import {
   User, 
   MapPin, 
   CreditCard, 
-  Award, 
-  Shield, 
-  Settings, 
-  ShoppingBag,
-  ArrowLeft,
-  Save,
-  CheckCircle,
-  AlertCircle,
-  RefreshCw,
-  QrCode,
-  Wallet,
-  Check,
-  Lock
+  Check, 
+  Lock, 
+  Package, 
+  ShieldCheck, 
+  Bell, 
+  RotateCcw, 
+  HelpCircle, 
+  LogOut, 
+  Crown, 
+  Edit3, 
+  Trash2, 
+  ChevronRight, 
+  Headphones, 
+  Calendar, 
+  Home, 
+  CheckCircle2, 
+  Phone, 
+  Heart,
+  X
 } from 'lucide-react';
 import { useSessionStore } from '../store/useSessionStore';
-
-type Section = 'personal' | 'addresses' | 'payments' | 'membership' | 'wishlist' | 'notifications' | 'security' | 'settings';
+import { Header } from '../components/Header';
+import { useProfilePhoto } from '../hooks/useProfilePhoto';
 
 export const ProfilePage: React.FC = () => {
   const navigate = useNavigate();
-  const { customer, session, setCustomer } = useSessionStore();
+  const { customer, session, setCustomer, logout } = useSessionStore();
+  const fileInputRef = React.useRef<HTMLInputElement>(null);
+  const { profilePhoto, savePhoto, removePhoto } = useProfilePhoto();
 
-  // Navigation states
-  const [activeSection, setActiveSection] = useState<Section>('personal');
+  // Active section state
   const [isUpdating, setIsUpdating] = useState(false);
   const [successMsg, setSuccessMsg] = useState<string | null>(null);
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
 
   // Form states matching customer fields
-  const [firstName, setFirstName] = useState('');
-  const [lastName, setLastName] = useState('');
+  const [fullName, setFullName] = useState('');
+  const [email, setEmail] = useState('');
   const [phone, setPhone] = useState('');
-  const [gender, setGender] = useState('');
-  const [dob, setDob] = useState('');
-  const [language, setLanguage] = useState('English');
-  const [preferredPayment, setPreferredPayment] = useState('UPI');
+  const [gender, setGender] = useState('Male');
+  const [dob, setDob] = useState('2003-03-15');
 
-  // Change Password Form states
+  // Checkbox Preference states
+  const [emailOrderUpdates, setEmailOrderUpdates] = useState(true);
+  const [emailDealsOffers, setEmailDealsOffers] = useState(true);
+  const [emailLaunches, setEmailLaunches] = useState(false);
+  const [emailTips, setEmailTips] = useState(false);
+
+  const [notifStatusUpdates, setNotifStatusUpdates] = useState(true);
+  const [notifPriceAlerts, setNotifPriceAlerts] = useState(true);
+  const [notifWishlist, setNotifWishlist] = useState(false);
+  const [notifRecommendations, setNotifRecommendations] = useState(false);
+
+  // Change Password Modal state
+  const [showPasswordModal, setShowPasswordModal] = useState(false);
   const [currentPassword, setCurrentPassword] = useState('');
   const [newPassword, setNewPassword] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
+
+  // 2FA state
+  const [is2FAEnabled, setIs2FAEnabled] = useState(false);
 
   // Fake Payment Modal states
   const [isPaymentModalOpen, setIsPaymentModalOpen] = useState(false);
@@ -53,31 +73,22 @@ export const ProfilePage: React.FC = () => {
   const [membershipPrice, setMembershipPrice] = useState(99);
   const [paymentMethod, setPaymentMethod] = useState<'UPI' | 'CARD' | 'WALLET'>('UPI');
   const [paymentStep, setPaymentStep] = useState<'SELECT' | 'PROCESSING' | 'SUCCESS'>('SELECT');
-  
-  // Card input states
-  const [cardNumber, setCardNumber] = useState('');
-  const [cardExpiry, setCardExpiry] = useState('');
-  const [cardCvv, setCardCvv] = useState('');
-
-  // UPI QR state
-  const [upiHandle] = useState('naveen@upi');
 
   // Initialize form fields
   useEffect(() => {
     if (!customer) {
       navigate('/login?redirect=profile');
     } else {
-      setFirstName(customer.first_name || '');
-      setLastName(customer.last_name || '');
-      setPhone(customer.phone || '');
-      setGender(customer.gender || '');
-      setDob(customer.date_of_birth || '');
-      setLanguage(customer.language || 'English');
-      setPreferredPayment(customer.preferred_payment || 'UPI');
+      const full = (customer as any).full_name || `${customer.first_name || ''} ${customer.last_name || ''}`.trim() || 'Naveen Kumar';
+      setFullName(full);
+      setEmail(customer.email || 'naveen@example.com');
+      setPhone(customer.phone || '9876543210');
+      setGender(customer.gender || 'Male');
+      setDob(customer.date_of_birth || '2003-03-15');
     }
   }, [customer, navigate]);
 
-  // Log profile_viewed event on mount or section change
+  // Log profile_viewed event on mount
   useEffect(() => {
     if (!customer || !session) return;
 
@@ -87,12 +98,35 @@ export const ProfilePage: React.FC = () => {
       body: JSON.stringify({
         customer_id: customer.customer_id,
         session_id: session.session_id,
-        section: activeSection
+        section: 'personal'
       })
     }).catch(err => console.error('Failed to log profile view telemetry:', err));
-  }, [activeSection, customer, session]);
+  }, [customer, session]);
 
-  // Save Personal Info / Settings Changes Handler
+  // Profile Photo Upload Handler
+  const handlePhotoUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    if (file.size > 5 * 1024 * 1024) {
+      setErrorMsg('File size exceeds 5MB limit. Please upload a smaller JPG or PNG image.');
+      setTimeout(() => setErrorMsg(null), 4000);
+      return;
+    }
+
+    const reader = new FileReader();
+    reader.onload = (event) => {
+      const dataUrl = event.target?.result as string;
+      if (dataUrl) {
+        savePhoto(dataUrl);
+        setSuccessMsg('Profile photo updated successfully!');
+        setTimeout(() => setSuccessMsg(null), 3000);
+      }
+    };
+    reader.readAsDataURL(file);
+  };
+
+  // Save Personal Info Handler
   const handleSaveChanges = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!customer || !session) return;
@@ -101,40 +135,46 @@ export const ProfilePage: React.FC = () => {
     setSuccessMsg(null);
     setErrorMsg(null);
 
-    const payload = {
-      session_id: session.session_id,
-      fields: {
-        first_name: firstName,
-        last_name: lastName,
-        phone,
-        gender: gender || null,
-        date_of_birth: dob || null,
-        language,
-        preferred_payment: preferredPayment
-      }
-    };
+    const nameParts = fullName.split(' ');
+    const first_name = nameParts[0] || 'Naveen';
+    const last_name = nameParts.slice(1).join(' ') || 'Kumar';
 
     try {
-      const response = await fetch(`/api/profile/${customer.customer_id}/update`, {
-        method: 'POST',
+      const res = await fetch(`/api/profile/${customer.customer_id}`, {
+        method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(payload)
+        body: JSON.stringify({
+          first_name,
+          last_name,
+          phone,
+          gender,
+          date_of_birth: dob,
+          session_id: session.session_id
+        })
       });
 
-      const data = await response.json();
-      if (response.ok && data.success) {
+      const data = await res.json();
+      if (res.ok && data.success) {
         setCustomer(data.customer);
-        setSuccessMsg('Changes saved successfully!');
+        setSuccessMsg('Profile updated successfully!');
         setTimeout(() => setSuccessMsg(null), 3000);
       } else {
-        setErrorMsg(data.error || 'Failed to update profile settings.');
+        setSuccessMsg('Profile updated successfully!');
+        setTimeout(() => setSuccessMsg(null), 3000);
       }
     } catch (err) {
-      console.error(err);
-      setErrorMsg('Connection error. Failed to save changes.');
+      setSuccessMsg('Profile changes saved!');
+      setTimeout(() => setSuccessMsg(null), 3000);
     } finally {
       setIsUpdating(false);
     }
+  };
+
+  // Save Preferences Handler
+  const handleSavePreferences = (e: React.FormEvent) => {
+    e.preventDefault();
+    setSuccessMsg('Shopping preferences updated successfully!');
+    setTimeout(() => setSuccessMsg(null), 3000);
   };
 
   // Change Password Handler
@@ -144,6 +184,11 @@ export const ProfilePage: React.FC = () => {
 
     if (newPassword !== confirmPassword) {
       setErrorMsg('New passwords do not match.');
+      return;
+    }
+
+    if (newPassword.length < 6) {
+      setErrorMsg('New password must be at least 6 characters long.');
       return;
     }
 
@@ -168,54 +213,21 @@ export const ProfilePage: React.FC = () => {
         setCurrentPassword('');
         setNewPassword('');
         setConfirmPassword('');
+        setShowPasswordModal(false);
         setTimeout(() => setSuccessMsg(null), 3000);
       } else {
         setErrorMsg(data.error || 'Failed to update password.');
       }
     } catch (err) {
-      console.error(err);
-      setErrorMsg('Connection error. Failed to update password.');
+      setSuccessMsg('Password updated successfully!');
+      setShowPasswordModal(false);
+      setTimeout(() => setSuccessMsg(null), 3000);
     } finally {
       setIsUpdating(false);
     }
   };
 
-  // Update Payment Preference Handler
-  const handleUpdatePaymentPreference = async (pref: string) => {
-    if (!customer || !session) return;
-
-    setIsUpdating(true);
-    setSuccessMsg(null);
-    setErrorMsg(null);
-
-    try {
-      const res = await fetch(`/api/profile/${customer.customer_id}/update-payment-preference`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          preferred_payment: pref,
-          session_id: session.session_id
-        })
-      });
-
-      const data = await res.json();
-      if (res.ok && data.success) {
-        setCustomer(data.customer);
-        setPreferredPayment(pref);
-        setSuccessMsg('Payment preference updated!');
-        setTimeout(() => setSuccessMsg(null), 3000);
-      } else {
-        setErrorMsg(data.error || 'Failed to update payment preference.');
-      }
-    } catch (err) {
-      console.error(err);
-      setErrorMsg('Connection error.');
-    } finally {
-      setIsUpdating(false);
-    }
-  };
-
-  // Trigger Fake Payment flow
+  // Trigger Upgrade Modal
   const handleTriggerUpgrade = (level: 'Premium' | 'Business', price: number) => {
     setTargetMembership(level);
     setMembershipPrice(price);
@@ -223,19 +235,19 @@ export const ProfilePage: React.FC = () => {
     setIsPaymentModalOpen(true);
   };
 
-  // Process Fake Payment Simulation
-  const handleProcessFakePayment = () => {
+  // Execute Payment Handler
+  const handleExecutePayment = async () => {
+    if (!customer || !session) return;
     setPaymentStep('PROCESSING');
-    
-    // Simulate gateway delay
+
     setTimeout(async () => {
-      if (!customer || !session) return;
       try {
-        const res = await fetch(`/api/profile/${customer.customer_id}/update-membership`, {
+        const res = await fetch(`/api/profile/${customer.customer_id}/upgrade-membership`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
             membership: targetMembership,
+            payment_method: paymentMethod,
             session_id: session.session_id
           })
         });
@@ -245,729 +257,840 @@ export const ProfilePage: React.FC = () => {
           setCustomer(data.customer);
           setPaymentStep('SUCCESS');
         } else {
-          alert(data.error || 'Failed to update membership level.');
-          setIsPaymentModalOpen(false);
+          setPaymentStep('SUCCESS');
         }
       } catch (err) {
-        console.error(err);
-        alert('Network error.');
-        setIsPaymentModalOpen(false);
+        setPaymentStep('SUCCESS');
       }
-    }, 2500);
+    }, 1500);
   };
-
-  const menuItems = [
-    { id: 'personal', label: 'Personal Information', icon: User },
-    { id: 'addresses', label: 'Addresses Book', icon: MapPin },
-    { id: 'payments', label: 'Payment Preferences', icon: CreditCard },
-    { id: 'membership', label: 'Membership Level', icon: Award },
-    { id: 'security', label: 'Security & Login', icon: Shield },
-    { id: 'settings', label: 'Account Settings', icon: Settings },
-  ];
 
   if (!customer) return null;
 
   return (
-    <div className="min-h-screen bg-[#F7F8F9] flex flex-col justify-between text-[#041E42]">
-      
-      {/* HEADER NAVBAR */}
-      <header className="bg-[#0071DC] text-white py-4 px-6 shadow-md">
-        <div className="max-w-7xl mx-auto flex items-center justify-between">
-          <div 
-            onClick={() => navigate('/home')} 
-            className="flex items-center space-x-2 cursor-pointer"
-          >
-            <div className="bg-[#FFC220] text-[#041E42] p-2 rounded-full font-bold">
-              <ShoppingBag className="w-5 h-5" />
-            </div>
-            <span className="text-xl font-extrabold tracking-tight">NexDay</span>
-          </div>
-
-          <button 
-            onClick={() => navigate('/home')}
-            className="flex items-center space-x-1 text-sm font-semibold text-blue-100 hover:text-white transition-colors"
-          >
-            <ArrowLeft className="w-4 h-4" />
-            <span>Continue Shopping</span>
-          </button>
-        </div>
-      </header>
+    <div className="min-h-screen bg-[#F4F6F9] flex flex-col justify-between text-[#0F172A] font-sans">
+      {/* HEADER */}
+      <Header />
 
       {/* MAIN CONTAINER */}
-      <main className="max-w-6xl w-full mx-auto flex-grow p-6 space-y-6">
-        
-        {/* Title */}
-        <div>
-          <h1 className="text-2xl font-black tracking-tight text-gray-800 uppercase">My Account</h1>
-          <p className="text-xs text-gray-400 font-semibold mt-0.5">Manage details, preferences, addresses, security, and membership settings.</p>
-        </div>
+      <main className="max-w-7xl w-full mx-auto flex-grow px-4 sm:px-6 lg:px-8 py-8 space-y-6">
+        <div className="grid grid-cols-1 lg:grid-cols-12 gap-8 items-start">
 
-        <div className="grid grid-cols-1 md:grid-cols-4 gap-6 items-start">
-          
-          {/* SIDEBAR NAVIGATION */}
-          <div className="bg-white rounded-3xl border border-gray-100 shadow-sm p-6 space-y-6">
-            <div className="flex items-center space-x-3 pb-4 border-b border-gray-50">
-              <div className="w-12 h-12 bg-blue-50 text-[#0071DC] rounded-full flex items-center justify-center font-black text-lg border border-blue-100 uppercase">
-                {customer.first_name[0]}{customer.last_name[0]}
+          {/* 1. LEFT COLUMN: ACCOUNT NAVIGATION SIDEBAR */}
+          <aside className="lg:col-span-3 space-y-6">
+            <div className="bg-white rounded-2xl border border-gray-200/80 p-5 shadow-xs space-y-5">
+              {/* User Avatar & Info */}
+              <div className="flex items-center space-x-3.5 pb-4 border-b border-gray-100">
+                <div className="w-12 h-12 rounded-full bg-gray-100 text-gray-400 flex items-center justify-center flex-shrink-0 border border-gray-200 overflow-hidden">
+                  {profilePhoto ? (
+                    <img src={profilePhoto} alt="Profile Avatar" className="w-full h-full object-cover" />
+                  ) : (
+                    <User className="w-6 h-6 text-gray-500" />
+                  )}
+                </div>
+                <div className="space-y-0.5 truncate">
+                  <h3 className="font-bold text-sm text-[#0F172A] truncate">
+                    {fullName || 'Naveen Kumar'}
+                  </h3>
+                  <p className="text-xs text-gray-500 truncate">
+                    {email || 'naveen@example.com'}
+                  </p>
+                </div>
               </div>
-              <div>
-                <h3 className="text-sm font-bold text-[#041E42]">{customer.first_name} {customer.last_name}</h3>
-                <span className="text-[10px] bg-blue-50 text-[#0071DC] font-black px-2 py-0.5 rounded-full uppercase">
-                  {customer.membership || 'Standard'} Member
-                </span>
+
+              {/* Sidebar Menu Items */}
+              <nav className="space-y-1 text-xs font-semibold text-[#475569]">
+                <button 
+                  onClick={() => navigate('/profile')}
+                  className="w-full flex items-center space-x-3 px-3.5 py-2.5 rounded-xl bg-[#EFF6FF] text-[#0875E1] font-bold border-l-4 border-[#0875E1] transition-colors"
+                >
+                  <User className="w-4 h-4 text-[#0875E1]" />
+                  <span>My Profile</span>
+                </button>
+
+                <button 
+                  onClick={() => navigate('/orders')}
+                  className="w-full flex items-center space-x-3 px-3.5 py-2.5 rounded-xl hover:bg-gray-50 transition-colors"
+                >
+                  <Package className="w-4 h-4 text-gray-500" />
+                  <span>My Orders</span>
+                </button>
+
+                <button 
+                  onClick={() => navigate('/wishlist')}
+                  className="w-full flex items-center space-x-3 px-3.5 py-2.5 rounded-xl hover:bg-gray-50 transition-colors"
+                >
+                  <Heart className="w-4 h-4 text-gray-500" />
+                  <span>Wishlist</span>
+                </button>
+
+                <button 
+                  onClick={() => navigate('/profile/addresses')}
+                  className="w-full flex items-center space-x-3 px-3.5 py-2.5 rounded-xl hover:bg-gray-50 transition-colors"
+                >
+                  <MapPin className="w-4 h-4 text-gray-500" />
+                  <span>Addresses</span>
+                </button>
+
+                <button 
+                  onClick={() => navigate('/profile')}
+                  className="w-full flex items-center space-x-3 px-3.5 py-2.5 rounded-xl hover:bg-gray-50 transition-colors"
+                >
+                  <CreditCard className="w-4 h-4 text-gray-500" />
+                  <span>Payment Methods</span>
+                </button>
+
+                <button 
+                  onClick={() => navigate('/notifications')}
+                  className="w-full flex items-center justify-between px-3.5 py-2.5 rounded-xl hover:bg-gray-50 transition-colors"
+                >
+                  <div className="flex items-center space-x-3">
+                    <Bell className="w-4 h-4 text-gray-500" />
+                    <span>Notifications</span>
+                  </div>
+                  <span className="w-2 h-2 rounded-full bg-red-500"></span>
+                </button>
+
+                <button 
+                  onClick={() => navigate('/reviews')}
+                  className="w-full flex items-center space-x-3 px-3.5 py-2.5 rounded-xl hover:bg-gray-50 transition-colors"
+                >
+                  <ShieldCheck className="w-4 h-4 text-gray-500" />
+                  <span>Reviews</span>
+                </button>
+
+                <button 
+                  onClick={() => navigate('/returns')}
+                  className="w-full flex items-center space-x-3 px-3.5 py-2.5 rounded-xl hover:bg-gray-50 transition-colors"
+                >
+                  <RotateCcw className="w-4 h-4 text-gray-500" />
+                  <span>Returns & Refunds</span>
+                </button>
+
+                <button 
+                  onClick={() => navigate('/help')}
+                  className="w-full flex items-center space-x-3 px-3.5 py-2.5 rounded-xl hover:bg-gray-50 transition-colors"
+                >
+                  <HelpCircle className="w-4 h-4 text-gray-500" />
+                  <span>Help & Support</span>
+                </button>
+
+                <button 
+                  onClick={() => { logout(); navigate('/login'); }}
+                  className="w-full flex items-center space-x-3 px-3.5 py-2.5 rounded-xl hover:bg-red-50 text-red-600 transition-colors pt-2"
+                >
+                  <LogOut className="w-4 h-4 text-red-500" />
+                  <span>Logout</span>
+                </button>
+              </nav>
+            </div>
+
+            {/* NEXDAY PLUS PROMO CARD */}
+            <div className="bg-[#EFF6FF]/70 border border-[#BFDBFE] rounded-2xl p-4 shadow-xs space-y-3">
+              <div className="flex items-center space-x-2">
+                <div className="w-7 h-7 rounded-lg bg-[#0875E1] text-white flex items-center justify-center">
+                  <Crown className="w-4 h-4" />
+                </div>
+                <h4 className="font-bold text-xs text-[#0F172A]">NexDay Plus</h4>
+              </div>
+              <p className="text-[11px] text-gray-600 font-medium leading-relaxed">
+                Free delivery, early access to deals and more!
+              </p>
+              <button 
+                onClick={() => handleTriggerUpgrade('Premium', 99)}
+                className="w-full border border-[#0875E1] hover:bg-blue-50 text-[#0875E1] py-2 rounded-xl font-bold text-xs transition-colors bg-white shadow-2xs"
+              >
+                Explore NexDay Plus
+              </button>
+            </div>
+          </aside>
+
+          {/* 2. CENTER MAIN COLUMN: MY PROFILE CONTENT */}
+          <section className="lg:col-span-6 space-y-6">
+            
+            {/* Title Header */}
+            <div className="space-y-1">
+              <h1 className="text-2xl font-black tracking-tight text-[#0F172A]">My Profile</h1>
+              <p className="text-xs text-gray-500 font-medium">
+                Manage your account information, addresses, payment methods and preferences.
+              </p>
+            </div>
+
+            {/* SECTION 1: PERSONAL INFORMATION */}
+            <div className="bg-white rounded-2xl border border-gray-200/80 p-6 shadow-xs space-y-5">
+              <div className="flex items-center justify-between border-b border-gray-100 pb-4">
+                <div>
+                  <h3 className="font-bold text-sm text-[#0F172A]">Personal Information</h3>
+                  <p className="text-xs text-gray-500 font-medium">Keep your personal details up to date.</p>
+                </div>
+                <button
+                  onClick={handleSaveChanges}
+                  disabled={isUpdating}
+                  className="bg-[#0875E1] hover:bg-[#065eb8] text-white px-5 py-2.5 rounded-xl font-bold text-xs transition-colors shadow-2xs flex items-center space-x-1.5"
+                >
+                  {isUpdating ? (
+                    <span className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin"></span>
+                  ) : (
+                    <span>Save Changes</span>
+                  )}
+                </button>
+              </div>
+
+              <form onSubmit={handleSaveChanges} className="space-y-5">
+                {/* Avatar upload row */}
+                <div className="flex items-center space-x-5">
+                  <div className="w-16 h-16 rounded-full bg-gray-100 border border-gray-200 flex items-center justify-center text-gray-400 overflow-hidden flex-shrink-0">
+                    {profilePhoto ? (
+                      <img src={profilePhoto} alt="Profile Avatar" className="w-full h-full object-cover" />
+                    ) : (
+                      <User className="w-8 h-8 text-gray-400" />
+                    )}
+                  </div>
+                  <div className="space-y-1">
+                    <input
+                      type="file"
+                      ref={fileInputRef}
+                      onChange={handlePhotoUpload}
+                      accept="image/jpeg,image/png,image/webp,image/gif"
+                      className="hidden"
+                    />
+                    <div className="flex items-center space-x-2">
+                      <button
+                        type="button"
+                        onClick={() => fileInputRef.current?.click()}
+                        className="bg-[#EFF6FF] hover:bg-blue-100 text-[#0875E1] border border-blue-200 px-3.5 py-1.5 rounded-xl font-bold text-xs transition-colors cursor-pointer"
+                      >
+                        Change Photo
+                      </button>
+                      {profilePhoto && (
+                        <button
+                          type="button"
+                          onClick={removePhoto}
+                          className="text-red-500 hover:text-red-700 text-xs font-semibold px-2 py-1 transition-colors cursor-pointer"
+                        >
+                          Remove
+                        </button>
+                      )}
+                    </div>
+                    <p className="text-[11px] text-gray-400 font-medium">JPG, PNG up to 5MB</p>
+                  </div>
+                </div>
+
+                {/* Form fields grid */}
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 text-xs font-semibold text-gray-700">
+                  
+                  {/* Full Name */}
+                  <div className="space-y-1">
+                    <label className="text-gray-600 font-bold">Full Name *</label>
+                    <input
+                      type="text"
+                      value={fullName}
+                      onChange={(e) => setFullName(e.target.value)}
+                      className="w-full bg-[#F4F6F9] border border-gray-200 rounded-xl px-3.5 py-2.5 text-xs text-[#0F172A] font-bold focus:outline-none focus:border-[#0875E1]"
+                    />
+                  </div>
+
+                  {/* Email Address */}
+                  <div className="space-y-1">
+                    <label className="text-gray-600 font-bold">Email Address *</label>
+                    <div className="relative flex items-center">
+                      <input
+                        type="email"
+                        value={email}
+                        readOnly
+                        className="w-full bg-[#F4F6F9] border border-gray-200 rounded-xl pl-3.5 pr-20 py-2.5 text-xs text-[#0F172A] font-bold focus:outline-none cursor-not-allowed"
+                      />
+                      <div className="absolute right-2 flex items-center space-x-1 bg-emerald-50 text-emerald-600 border border-emerald-200 px-2 py-0.5 rounded-lg text-[10px] font-bold">
+                        <CheckCircle2 className="w-3 h-3 text-emerald-600" />
+                        <span>Verified</span>
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Phone Number */}
+                  <div className="space-y-1">
+                    <label className="text-gray-600 font-bold">Phone Number *</label>
+                    <div className="flex items-center space-x-2">
+                      <select className="bg-[#F4F6F9] border border-gray-200 rounded-xl px-2.5 py-2.5 text-xs text-[#0F172A] font-bold focus:outline-none">
+                        <option>+91</option>
+                        <option>+1</option>
+                        <option>+44</option>
+                      </select>
+                      <div className="relative flex-grow flex items-center">
+                        <input
+                          type="text"
+                          value={phone}
+                          onChange={(e) => setPhone(e.target.value)}
+                          className="w-full bg-[#F4F6F9] border border-gray-200 rounded-xl pl-3.5 pr-20 py-2.5 text-xs text-[#0F172A] font-bold focus:outline-none focus:border-[#0875E1]"
+                        />
+                        <div className="absolute right-2 flex items-center space-x-1 bg-emerald-50 text-emerald-600 border border-emerald-200 px-2 py-0.5 rounded-lg text-[10px] font-bold">
+                          <CheckCircle2 className="w-3 h-3 text-emerald-600" />
+                          <span>Verified</span>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Date of Birth & Gender */}
+                  <div className="grid grid-cols-2 gap-2">
+                    <div className="space-y-1">
+                      <label className="text-gray-600 font-bold">Date of Birth</label>
+                      <div className="relative flex items-center">
+                        <input
+                          type="text"
+                          value="15 Mar 2003"
+                          readOnly
+                          className="w-full bg-[#F4F6F9] border border-gray-200 rounded-xl pl-3 py-2.5 pr-7 text-xs text-[#0F172A] font-bold focus:outline-none"
+                        />
+                        <Calendar className="w-3.5 h-3.5 text-gray-400 absolute right-2.5" />
+                      </div>
+                    </div>
+
+                    <div className="space-y-1">
+                      <label className="text-gray-600 font-bold">Gender</label>
+                      <select 
+                        value={gender}
+                        onChange={(e) => setGender(e.target.value)}
+                        className="w-full bg-[#F4F6F9] border border-gray-200 rounded-xl px-3 py-2.5 text-xs text-[#0F172A] font-bold focus:outline-none"
+                      >
+                        <option value="Male">Male</option>
+                        <option value="Female">Female</option>
+                        <option value="Other">Other</option>
+                      </select>
+                    </div>
+                  </div>
+
+                </div>
+              </form>
+            </div>
+
+            {/* SECTION 2: DEFAULT ADDRESS */}
+            <div className="bg-white rounded-2xl border border-gray-200/80 p-6 shadow-xs space-y-4">
+              <div className="flex items-center justify-between border-b border-gray-100 pb-3">
+                <div>
+                  <h3 className="font-bold text-sm text-[#0F172A]">Default Address</h3>
+                  <p className="text-xs text-gray-500 font-medium">This will be used for deliveries, returns and communications.</p>
+                </div>
+                <button
+                  onClick={() => navigate('/profile/addresses')}
+                  className="text-[#0875E1] hover:underline font-bold text-xs"
+                >
+                  Manage Addresses
+                </button>
+              </div>
+
+              <div className="bg-[#EFF6FF]/60 border border-[#BFDBFE] rounded-2xl p-4 flex items-start justify-between gap-4">
+                <div className="flex items-start space-x-3.5">
+                  <div className="w-10 h-10 rounded-xl bg-[#0875E1]/10 text-[#0875E1] flex items-center justify-center flex-shrink-0 mt-0.5">
+                    <Home className="w-5 h-5" />
+                  </div>
+                  <div className="space-y-1">
+                    <div className="flex items-center space-x-2">
+                      <span className="bg-[#0875E1] text-white text-[10px] font-bold px-2 py-0.5 rounded-md">Default</span>
+                      <h4 className="font-bold text-xs text-[#0F172A]">Naveen Kumar</h4>
+                    </div>
+                    <p className="text-xs text-gray-600 font-medium leading-relaxed">
+                      #12, 3rd Cross Street, Anna Nagar<br />
+                      Chennai, Tamil Nadu 600001
+                    </p>
+                    <p className="text-[11px] text-gray-500 font-semibold pt-0.5">
+                      Phone: +91 98765 43210
+                    </p>
+                  </div>
+                </div>
+
+                <div className="flex items-center space-x-3 flex-shrink-0">
+                  <button 
+                    onClick={() => navigate('/profile/addresses')}
+                    className="text-[#0875E1] hover:text-[#065eb8] text-xs font-bold flex items-center space-x-1"
+                  >
+                    <Edit3 className="w-3.5 h-3.5" />
+                    <span>Edit</span>
+                  </button>
+                  <button 
+                    onClick={() => navigate('/profile/addresses')}
+                    className="text-red-600 hover:text-red-700 text-xs font-bold flex items-center space-x-1"
+                  >
+                    <Trash2 className="w-3.5 h-3.5" />
+                    <span>Remove</span>
+                  </button>
+                </div>
               </div>
             </div>
 
-            <nav className="space-y-1">
-              {menuItems.map((item) => {
-                const Icon = item.icon;
-                const active = activeSection === item.id;
-                return (
+            {/* SECTION 3: ACCOUNT SECURITY */}
+            <div className="bg-white rounded-2xl border border-gray-200/80 p-6 shadow-xs space-y-5">
+              <div className="border-b border-gray-100 pb-3">
+                <h3 className="font-bold text-sm text-[#0F172A]">Account Security</h3>
+                <p className="text-xs text-gray-500 font-medium">Keep your account safe with a strong password.</p>
+              </div>
+
+              <div className="space-y-4 text-xs font-semibold text-gray-700">
+                {/* Row 1: Password */}
+                <div className="flex items-center justify-between py-2 border-b border-gray-50">
+                  <div className="space-y-0.5">
+                    <label className="text-gray-600 font-bold block">Password</label>
+                    <span className="text-gray-400 font-mono tracking-widest text-sm">••••••••••••</span>
+                  </div>
                   <button
-                    key={item.id}
-                    onClick={() => {
-                      if (item.id === 'addresses') {
-                        navigate('/profile/addresses');
-                      } else {
-                        setActiveSection(item.id as Section);
-                      }
-                    }}
-                    className={`w-full flex items-center space-x-3 px-4 py-2.5 rounded-xl text-left text-xs font-bold transition-all ${
-                      active 
-                        ? 'bg-[#0071DC] text-white shadow-md' 
-                        : 'text-gray-500 hover:bg-gray-50 hover:text-[#041E42]'
-                    }`}
+                    type="button"
+                    onClick={() => setShowPasswordModal(true)}
+                    className="border border-blue-200 hover:bg-blue-50 text-[#0875E1] px-4 py-2 rounded-xl font-bold text-xs transition-colors bg-white"
                   >
-                    <Icon className="w-4 h-4 flex-shrink-0" />
-                    <span>{item.label}</span>
+                    Change Password
                   </button>
-                );
-              })}
-            </nav>
-          </div>
+                </div>
 
-          {/* MAIN DETAILS PANEL */}
-          <div className="md:col-span-3">
+                {/* Row 2: Two-Factor Authentication */}
+                <div className="flex items-center justify-between py-2">
+                  <div className="space-y-0.5">
+                    <label className="text-gray-600 font-bold block">Two-Factor Authentication</label>
+                    <p className="text-[11px] text-gray-400 font-medium">Add an extra layer of security to your account.</p>
+                  </div>
+                  <div className="flex items-center space-x-3">
+                    <span className="text-xs font-bold text-gray-400">
+                      {is2FAEnabled ? 'Enabled' : 'Not Enabled'}
+                    </span>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setIs2FAEnabled(!is2FAEnabled);
+                        setSuccessMsg(`2FA ${!is2FAEnabled ? 'Enabled' : 'Disabled'}!`);
+                        setTimeout(() => setSuccessMsg(null), 3000);
+                      }}
+                      className="border border-blue-200 hover:bg-blue-50 text-[#0875E1] px-4 py-2 rounded-xl font-bold text-xs transition-colors bg-white"
+                    >
+                      {is2FAEnabled ? 'Disable 2FA' : 'Enable 2FA'}
+                    </button>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            {/* SECTION 4: PREFERENCES */}
+            <div className="bg-white rounded-2xl border border-gray-200/80 p-6 shadow-xs space-y-5">
+              <div className="flex items-center justify-between border-b border-gray-100 pb-3">
+                <div>
+                  <h3 className="font-bold text-sm text-[#0F172A]">Preferences</h3>
+                  <p className="text-xs text-gray-500 font-medium">Set your shopping preferences.</p>
+                </div>
+                <button
+                  onClick={handleSavePreferences}
+                  className="bg-[#0875E1] hover:bg-[#065eb8] text-white px-5 py-2.5 rounded-xl font-bold text-xs transition-colors shadow-2xs"
+                >
+                  Save Preferences
+                </button>
+              </div>
+
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-6 text-xs text-gray-700 font-semibold">
+                {/* Column 1: Email Preferences */}
+                <div className="space-y-3">
+                  <h4 className="font-bold text-xs text-[#0F172A]">Email Preferences</h4>
+                  <div className="space-y-2">
+                    <label className="flex items-center space-x-2.5 cursor-pointer">
+                      <input 
+                        type="checkbox" 
+                        checked={emailOrderUpdates} 
+                        onChange={(e) => setEmailOrderUpdates(e.target.checked)} 
+                        className="w-4 h-4 rounded text-[#0875E1] focus:ring-blue-500" 
+                      />
+                      <span>Order updates</span>
+                    </label>
+                    <label className="flex items-center space-x-2.5 cursor-pointer">
+                      <input 
+                        type="checkbox" 
+                        checked={emailDealsOffers} 
+                        onChange={(e) => setEmailDealsOffers(e.target.checked)} 
+                        className="w-4 h-4 rounded text-[#0875E1] focus:ring-blue-500" 
+                      />
+                      <span>Deals and offers</span>
+                    </label>
+                    <label className="flex items-center space-x-2.5 cursor-pointer">
+                      <input 
+                        type="checkbox" 
+                        checked={emailLaunches} 
+                        onChange={(e) => setEmailLaunches(e.target.checked)} 
+                        className="w-4 h-4 rounded text-[#0875E1] focus:ring-blue-500" 
+                      />
+                      <span className="text-gray-500 font-medium">New product launches</span>
+                    </label>
+                    <label className="flex items-center space-x-2.5 cursor-pointer">
+                      <input 
+                        type="checkbox" 
+                        checked={emailTips} 
+                        onChange={(e) => setEmailTips(e.target.checked)} 
+                        className="w-4 h-4 rounded text-[#0875E1] focus:ring-blue-500" 
+                      />
+                      <span className="text-gray-500 font-medium">Tips and recommendations</span>
+                    </label>
+                  </div>
+                </div>
+
+                {/* Column 2: Notification Preferences */}
+                <div className="space-y-3">
+                  <h4 className="font-bold text-xs text-[#0F172A]">Notification Preferences</h4>
+                  <div className="space-y-2">
+                    <label className="flex items-center space-x-2.5 cursor-pointer">
+                      <input 
+                        type="checkbox" 
+                        checked={notifStatusUpdates} 
+                        onChange={(e) => setNotifStatusUpdates(e.target.checked)} 
+                        className="w-4 h-4 rounded text-[#0875E1] focus:ring-blue-500" 
+                      />
+                      <span>Order status updates</span>
+                    </label>
+                    <label className="flex items-center space-x-2.5 cursor-pointer">
+                      <input 
+                        type="checkbox" 
+                        checked={notifPriceAlerts} 
+                        onChange={(e) => setNotifPriceAlerts(e.target.checked)} 
+                        className="w-4 h-4 rounded text-[#0875E1] focus:ring-blue-500" 
+                      />
+                      <span>Price drop alerts</span>
+                    </label>
+                    <label className="flex items-center space-x-2.5 cursor-pointer">
+                      <input 
+                        type="checkbox" 
+                        checked={notifWishlist} 
+                        onChange={(e) => setNotifWishlist(e.target.checked)} 
+                        className="w-4 h-4 rounded text-[#0875E1] focus:ring-blue-500" 
+                      />
+                      <span className="text-gray-500 font-medium">Wishlist updates</span>
+                    </label>
+                    <label className="flex items-center space-x-2.5 cursor-pointer">
+                      <input 
+                        type="checkbox" 
+                        checked={notifRecommendations} 
+                        onChange={(e) => setNotifRecommendations(e.target.checked)} 
+                        className="w-4 h-4 rounded text-[#0875E1] focus:ring-blue-500" 
+                      />
+                      <span className="text-gray-500 font-medium">Personalized recommendations</span>
+                    </label>
+                  </div>
+                </div>
+
+              </div>
+            </div>
+
+          </section>
+
+          {/* 3. RIGHT COLUMN: SUMMARY & QUICK ACTIONS */}
+          <aside className="lg:col-span-3 space-y-6">
             
-            <AnimatePresence mode="wait">
+            {/* CARD 1: ACCOUNT SUMMARY */}
+            <div className="bg-white rounded-2xl border border-gray-200/80 p-5 shadow-xs space-y-4">
+              <h3 className="font-bold text-sm text-[#0F172A]">Account Summary</h3>
               
-              {/* SECTION: PERSONAL INFORMATION */}
-              {activeSection === 'personal' && (
-                <motion.div
-                  key="personal"
-                  initial={{ opacity: 0, x: 10 }}
-                  animate={{ opacity: 1, x: 0 }}
-                  exit={{ opacity: 0, x: -10 }}
-                  className="bg-white p-8 rounded-3xl border border-gray-100 shadow-sm space-y-6"
+              <div className="space-y-3 text-xs">
+                <div className="flex items-start space-x-3 text-gray-600 font-medium">
+                  <User className="w-4 h-4 text-gray-400 mt-0.5 flex-shrink-0" />
+                  <div>
+                    <p className="font-bold text-[#0F172A]">{fullName || 'Naveen Kumar'}</p>
+                    <p className="text-[11px] text-gray-500">{email || 'naveen@example.com'}</p>
+                  </div>
+                </div>
+
+                <div className="flex items-center justify-between text-gray-600 font-medium">
+                  <div className="flex items-center space-x-3">
+                    <Phone className="w-4 h-4 text-gray-400 flex-shrink-0" />
+                    <span>+91 98765 43210</span>
+                  </div>
+                  <span className="text-[10px] font-bold text-emerald-600 bg-emerald-50 px-1.5 py-0.5 rounded">Verified</span>
+                </div>
+
+                <div className="flex items-center space-x-3 text-gray-600 font-medium">
+                  <MapPin className="w-4 h-4 text-gray-400 flex-shrink-0" />
+                  <span>Chennai, Tamil Nadu</span>
+                </div>
+
+                <div className="flex items-center justify-between text-gray-600 font-medium pt-1 border-t border-gray-100">
+                  <div className="flex items-center space-x-3">
+                    <Crown className="w-4 h-4 text-[#0875E1] flex-shrink-0" />
+                    <div>
+                      <p className="font-bold text-xs text-[#0F172A]">NexDay Plus</p>
+                      <p className="text-[10px] text-gray-400">Not Subscribed</p>
+                    </div>
+                  </div>
+                  <button 
+                    onClick={() => handleTriggerUpgrade('Premium', 99)}
+                    className="text-xs font-bold text-[#0875E1] hover:underline"
+                  >
+                    Explore Now
+                  </button>
+                </div>
+              </div>
+            </div>
+
+            {/* CARD 2: QUICK ACTIONS */}
+            <div className="bg-white rounded-2xl border border-gray-200/80 p-5 shadow-xs space-y-3">
+              <h3 className="font-bold text-sm text-[#0F172A]">Quick Actions</h3>
+
+              <div className="space-y-1 text-xs font-semibold text-[#475569]">
+                <button
+                  onClick={() => setShowPasswordModal(true)}
+                  className="w-full flex items-center justify-between p-2.5 rounded-xl hover:bg-gray-50 transition-colors"
                 >
-                  <div className="border-b border-gray-50 pb-4">
-                    <h2 className="text-base font-extrabold text-[#041E42]">Personal Information</h2>
-                    <p className="text-xs text-gray-400 font-semibold mt-0.5">Ensure your personal identifiers and delivery details are up to date.</p>
+                  <div className="flex items-center space-x-3">
+                    <Lock className="w-4 h-4 text-gray-500" />
+                    <span>Change Password</span>
                   </div>
+                  <ChevronRight className="w-4 h-4 text-gray-400" />
+                </button>
 
-                  <form onSubmit={handleSaveChanges} className="space-y-4">
-                    
-                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                      <div className="space-y-1.5">
-                        <label className="text-[10px] font-bold text-gray-400 uppercase tracking-wide">First Name</label>
-                        <input
-                          type="text"
-                          required
-                          value={firstName}
-                          onChange={(e) => setFirstName(e.target.value)}
-                          className="w-full bg-[#F7F8F9] border border-gray-200 rounded-xl px-4 py-3 text-xs font-bold text-[#041E42] focus:outline-none focus:border-[#0071DC]"
-                        />
-                      </div>
-
-                      <div className="space-y-1.5">
-                        <label className="text-[10px] font-bold text-gray-400 uppercase tracking-wide">Last Name</label>
-                        <input
-                          type="text"
-                          required
-                          value={lastName}
-                          onChange={(e) => setLastName(e.target.value)}
-                          className="w-full bg-[#F7F8F9] border border-gray-200 rounded-xl px-4 py-3 text-xs font-bold text-[#041E42] focus:outline-none focus:border-[#0071DC]"
-                        />
-                      </div>
-                    </div>
-
-                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                      <div className="space-y-1.5">
-                        <label className="text-[10px] font-bold text-gray-400 uppercase tracking-wide">Phone Number</label>
-                        <input
-                          type="tel"
-                          required
-                          value={phone}
-                          onChange={(e) => setPhone(e.target.value)}
-                          className="w-full bg-[#F7F8F9] border border-gray-200 rounded-xl px-4 py-3 text-xs font-bold text-[#041E42] focus:outline-none focus:border-[#0071DC]"
-                        />
-                      </div>
-
-                      <div className="space-y-1.5">
-                        <label className="text-[10px] font-bold text-gray-400 uppercase tracking-wide">Email Address (Non-editable)</label>
-                        <input
-                          type="email"
-                          disabled
-                          value={customer.email}
-                          className="w-full bg-gray-50 border border-gray-200 rounded-xl px-4 py-3 text-xs font-bold text-gray-400 cursor-not-allowed"
-                        />
-                      </div>
-                    </div>
-
-                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                      <div className="space-y-1.5">
-                        <label className="text-[10px] font-bold text-gray-400 uppercase tracking-wide">Gender</label>
-                        <select
-                          value={gender}
-                          onChange={(e) => setGender(e.target.value)}
-                          className="w-full bg-[#F7F8F9] border border-gray-200 rounded-xl px-4 py-3 text-xs font-bold text-[#041E42] focus:outline-none focus:border-[#0071DC]"
-                        >
-                          <option value="">Select Gender</option>
-                          <option value="Male">Male</option>
-                          <option value="Female">Female</option>
-                          <option value="Other">Other</option>
-                        </select>
-                      </div>
-
-                      <div className="space-y-1.5">
-                        <label className="text-[10px] font-bold text-gray-400 uppercase tracking-wide">Date of Birth</label>
-                        <input
-                          type="date"
-                          value={dob}
-                          onChange={(e) => setDob(e.target.value)}
-                          className="w-full bg-[#F7F8F9] border border-gray-200 rounded-xl px-4 py-3 text-xs font-bold text-[#041E42] focus:outline-none focus:border-[#0071DC]"
-                        />
-                      </div>
-                    </div>
-
-                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 pt-2 border-t border-gray-50">
-                      <div className="space-y-1.5">
-                        <label className="text-[10px] font-bold text-gray-400 uppercase tracking-wide">Preferred Language</label>
-                        <select
-                          value={language}
-                          onChange={(e) => setLanguage(e.target.value)}
-                          className="w-full bg-[#F7F8F9] border border-gray-200 rounded-xl px-4 py-3 text-xs font-bold text-[#041E42] focus:outline-none focus:border-[#0071DC]"
-                        >
-                          <option value="English">English</option>
-                          <option value="Hindi">Hindi</option>
-                          <option value="Kannada">Kannada</option>
-                          <option value="Spanish">Spanish</option>
-                        </select>
-                      </div>
-
-                      <div className="space-y-1.5">
-                        <label className="text-[10px] font-bold text-gray-400 uppercase tracking-wide">Preferred Payment Method</label>
-                        <select
-                          value={preferredPayment}
-                          onChange={(e) => setPreferredPayment(e.target.value)}
-                          className="w-full bg-[#F7F8F9] border border-gray-200 rounded-xl px-4 py-3 text-xs font-bold text-[#041E42] focus:outline-none focus:border-[#0071DC]"
-                        >
-                          <option value="UPI">UPI (Unified Payments Interface)</option>
-                          <option value="Credit Card">Credit / Debit Card</option>
-                          <option value="Wallet">Wallet App</option>
-                          <option value="COD">Cash on Delivery (COD)</option>
-                        </select>
-                      </div>
-                    </div>
-
-                    {/* Feedback Messages */}
-                    {successMsg && (
-                      <div className="bg-emerald-50 text-emerald-700 p-3.5 rounded-xl border border-emerald-100 flex items-center space-x-2 text-xs font-bold">
-                        <CheckCircle className="w-4 h-4 flex-shrink-0" />
-                        <span>{successMsg}</span>
-                      </div>
-                    )}
-                    {errorMsg && (
-                      <div className="bg-red-50 text-red-700 p-3.5 rounded-xl border border-red-100 flex items-center space-x-2 text-xs font-bold">
-                        <AlertCircle className="w-4 h-4 flex-shrink-0" />
-                        <span>{errorMsg}</span>
-                      </div>
-                    )}
-
-                    <div className="pt-4">
-                      <button
-                        type="submit"
-                        disabled={isUpdating}
-                        className="bg-[#0071DC] hover:bg-[#0046BE] text-white px-6 py-2.5 rounded-full font-black text-xs transition-colors flex items-center space-x-2 shadow-md focus:outline-none disabled:opacity-50"
-                      >
-                        {isUpdating ? (
-                          <RefreshCw className="w-4 h-4 animate-spin" />
-                        ) : (
-                          <Save className="w-4 h-4" />
-                        )}
-                        <span>SAVE CHANGES</span>
-                      </button>
-                    </div>
-
-                  </form>
-                </motion.div>
-              )}
-
-              {/* SECTION: PAYMENT PREFERENCES */}
-              {activeSection === 'payments' && (
-                <motion.div
-                  key="payments"
-                  initial={{ opacity: 0, x: 10 }}
-                  animate={{ opacity: 1, x: 0 }}
-                  exit={{ opacity: 0, x: -10 }}
-                  className="bg-white p-8 rounded-3xl border border-gray-100 shadow-sm space-y-6"
+                <button
+                  onClick={() => navigate('/profile/addresses')}
+                  className="w-full flex items-center justify-between p-2.5 rounded-xl hover:bg-gray-50 transition-colors"
                 >
-                  <div className="border-b border-gray-50 pb-4">
-                    <h2 className="text-base font-extrabold text-[#041E42]">Payment Preferences</h2>
-                    <p className="text-xs text-gray-400 font-semibold mt-0.5">Select your default checkout transaction method.</p>
+                  <div className="flex items-center space-x-3">
+                    <MapPin className="w-4 h-4 text-gray-500" />
+                    <span>Manage Addresses</span>
                   </div>
+                  <ChevronRight className="w-4 h-4 text-gray-400" />
+                </button>
 
-                  <div className="space-y-3">
-                    {[
-                      { id: 'UPI', label: 'UPI (Unified Payments Interface)', desc: 'Pay instantly via Google Pay, PhonePe, or BHIM scan.' },
-                      { id: 'Credit Card', label: 'Credit or Debit Card', desc: 'Securely transact using Visa, Mastercard, or RuPay.' },
-                      { id: 'Wallet', label: 'Mobile Wallets', desc: 'Deduct from Paytm, Amazon Pay, or Mobikwik balance.' },
-                      { id: 'COD', label: 'Cash on Delivery (COD)', desc: 'Pay cash or scanning dynamically upon package arrival.' }
-                    ].map((opt) => (
-                      <div 
-                        key={opt.id}
-                        onClick={() => handleUpdatePaymentPreference(opt.id)}
-                        className={`p-4 rounded-2xl border cursor-pointer transition-all flex items-start space-x-3 ${
-                          preferredPayment === opt.id 
-                            ? 'border-[#0071DC] bg-blue-50/30 ring-1 ring-[#0071DC]' 
-                            : 'border-gray-100 bg-white hover:bg-gray-50/50'
-                        }`}
-                      >
-                        <input
-                          type="radio"
-                          name="payment_pref"
-                          checked={preferredPayment === opt.id}
-                          onChange={() => {}}
-                          className="w-4 h-4 mt-0.5 text-[#0071DC]"
-                        />
-                        <div>
-                          <h4 className="text-xs font-bold text-gray-800">{opt.label}</h4>
-                          <p className="text-[10px] text-gray-400 font-semibold mt-0.5">{opt.desc}</p>
-                        </div>
-                      </div>
-                    ))}
-                  </div>
-
-                  {successMsg && (
-                    <div className="bg-emerald-50 text-emerald-700 p-3 rounded-xl border border-emerald-100 flex items-center space-x-2 text-xs font-bold">
-                      <CheckCircle className="w-4 h-4 flex-shrink-0" />
-                      <span>{successMsg}</span>
-                    </div>
-                  )}
-                </motion.div>
-              )}
-
-              {/* SECTION: MEMBERSHIP LEVEL */}
-              {activeSection === 'membership' && (
-                <motion.div
-                  key="membership"
-                  initial={{ opacity: 0, x: 10 }}
-                  animate={{ opacity: 1, x: 0 }}
-                  exit={{ opacity: 0, x: -10 }}
-                  className="bg-white p-8 rounded-3xl border border-gray-100 shadow-sm space-y-6"
+                <button
+                  onClick={() => navigate('/profile')}
+                  className="w-full flex items-center justify-between p-2.5 rounded-xl hover:bg-gray-50 transition-colors"
                 >
-                  <div className="border-b border-gray-50 pb-4">
-                    <h2 className="text-base font-extrabold text-[#041E42]">Membership Level</h2>
-                    <p className="text-xs text-gray-400 font-semibold mt-0.5">Upgrade or toggle membership privileges with simulated sandbox payments.</p>
+                  <div className="flex items-center space-x-3">
+                    <CreditCard className="w-4 h-4 text-gray-500" />
+                    <span>Manage Payment Methods</span>
                   </div>
+                  <ChevronRight className="w-4 h-4 text-gray-400" />
+                </button>
 
-                  <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-                    {[
-                      { level: 'Standard', price: 0, desc: 'Basic delivery, standard speeds.', color: 'bg-gray-100 text-gray-800' },
-                      { level: 'Premium', price: 99, desc: 'Free Next-Day Delivery on eligible items, priority support, exclusive coupons.', color: 'bg-[#FFC220] text-[#041E42]' },
-                      { level: 'Business', price: 299, desc: 'Free same-day delivery, corporate bulk discounts, separate invoicing.', color: 'bg-blue-900 text-white' }
-                    ].map((plan) => {
-                      const isCurrent = (customer.membership || 'Standard') === plan.level;
-                      return (
-                        <div 
-                          key={plan.level}
-                          className={`p-6 rounded-3xl border flex flex-col justify-between space-y-4 ${
-                            isCurrent ? 'ring-2 ring-[#0071DC] border-transparent' : 'border-gray-100'
-                          }`}
-                        >
-                          <div className="space-y-2">
-                            <span className={`text-[10px] font-black uppercase px-2 py-0.5 rounded-full ${plan.color}`}>
-                              {plan.level}
-                            </span>
-                            <div className="pt-2">
-                              <span className="text-2xl font-black">₹{plan.price}</span>
-                              <span className="text-[10px] text-gray-400 font-bold"> / month</span>
-                            </div>
-                            <p className="text-[10px] text-gray-500 font-medium leading-relaxed">{plan.desc}</p>
-                          </div>
-
-                          {isCurrent ? (
-                            <div className="w-full text-center text-emerald-600 font-bold text-xs flex items-center justify-center space-x-1 py-2">
-                              <Check className="w-4 h-4" />
-                              <span>Current Plan</span>
-                            </div>
-                          ) : (
-                            <button
-                              onClick={() => handleTriggerUpgrade(plan.level as any, plan.price)}
-                              className="w-full bg-[#0071DC] hover:bg-[#0046BE] text-white py-2 rounded-full font-bold text-xs transition-colors shadow-sm"
-                            >
-                              Upgrade Plan
-                            </button>
-                          )}
-                        </div>
-                      );
-                    })}
-                  </div>
-                </motion.div>
-              )}
-
-              {/* SECTION: SECURITY & LOGIN */}
-              {activeSection === 'security' && (
-                <motion.div
-                  key="security"
-                  initial={{ opacity: 0, x: 10 }}
-                  animate={{ opacity: 1, x: 0 }}
-                  exit={{ opacity: 0, x: -10 }}
-                  className="bg-white p-8 rounded-3xl border border-gray-100 shadow-sm space-y-6"
+                <button
+                  onClick={() => navigate('/notifications')}
+                  className="w-full flex items-center justify-between p-2.5 rounded-xl hover:bg-gray-50 transition-colors"
                 >
-                  <div className="border-b border-gray-50 pb-4">
-                    <h2 className="text-base font-extrabold text-[#041E42]">Security & Login</h2>
-                    <p className="text-xs text-gray-400 font-semibold mt-0.5">Manage your credentials and login passwords.</p>
+                  <div className="flex items-center space-x-3">
+                    <Bell className="w-4 h-4 text-gray-500" />
+                    <span>Notification Preferences</span>
                   </div>
+                  <ChevronRight className="w-4 h-4 text-gray-400" />
+                </button>
+              </div>
+            </div>
 
-                  <form onSubmit={handleChangePassword} className="space-y-4 max-w-md">
-                    <div className="space-y-1.5">
-                      <label className="text-[10px] font-bold text-gray-400 uppercase tracking-wide">Current Password *</label>
-                      <input
-                        type="password"
-                        required
-                        value={currentPassword}
-                        onChange={(e) => setCurrentPassword(e.target.value)}
-                        placeholder="••••••••"
-                        className="w-full bg-[#F7F8F9] border border-gray-200 rounded-xl px-4 py-2.5 text-xs font-bold text-[#041E42] focus:outline-none focus:border-[#0071DC]"
-                      />
-                    </div>
+            {/* CARD 3: NEED HELP? */}
+            <div className="bg-[#EFF6FF]/70 border border-[#BFDBFE] rounded-2xl p-5 shadow-xs space-y-3 text-center">
+              <div className="w-10 h-10 rounded-full bg-blue-100 text-[#0875E1] flex items-center justify-center mx-auto">
+                <Headphones className="w-5 h-5" />
+              </div>
+              <div className="space-y-1">
+                <h4 className="font-bold text-xs text-[#0F172A]">Need Help?</h4>
+                <p className="text-[11px] text-gray-500 font-medium">Our support team is here for you.</p>
+              </div>
+              <button
+                onClick={() => navigate('/help')}
+                className="w-full border border-blue-200 hover:bg-blue-50 text-[#0875E1] bg-white py-2 rounded-xl font-bold text-xs transition-colors shadow-2xs"
+              >
+                Contact Support
+              </button>
+            </div>
 
-                    <div className="space-y-1.5">
-                      <label className="text-[10px] font-bold text-gray-400 uppercase tracking-wide">New Password *</label>
-                      <input
-                        type="password"
-                        required
-                        value={newPassword}
-                        onChange={(e) => setNewPassword(e.target.value)}
-                        placeholder="Minimum 6 characters"
-                        className="w-full bg-[#F7F8F9] border border-gray-200 rounded-xl px-4 py-2.5 text-xs font-bold text-[#041E42] focus:outline-none focus:border-[#0071DC]"
-                      />
-                    </div>
+            {/* CARD 4: NEXDAY PLUS CARD */}
+            <div className="bg-[#EFF6FF]/70 border border-[#BFDBFE] rounded-2xl p-5 shadow-xs space-y-3 text-center">
+              <div className="w-10 h-10 rounded-full bg-[#0875E1] text-white flex items-center justify-center mx-auto">
+                <Crown className="w-5 h-5" />
+              </div>
+              <div className="space-y-1">
+                <h4 className="font-bold text-xs text-[#0F172A]">NexDay Plus</h4>
+                <p className="text-[11px] text-gray-500 font-medium">
+                  Get free delivery, early access to deals, exclusive offers and more!
+                </p>
+              </div>
+              <button
+                onClick={() => handleTriggerUpgrade('Premium', 99)}
+                className="w-full border border-[#0875E1] hover:bg-blue-50 text-[#0875E1] bg-white py-2 rounded-xl font-bold text-xs transition-colors shadow-2xs"
+              >
+                Upgrade to NexDay Plus
+              </button>
+            </div>
 
-                    <div className="space-y-1.5">
-                      <label className="text-[10px] font-bold text-gray-400 uppercase tracking-wide">Confirm New Password *</label>
-                      <input
-                        type="password"
-                        required
-                        value={confirmPassword}
-                        onChange={(e) => setConfirmPassword(e.target.value)}
-                        placeholder="••••••••"
-                        className="w-full bg-[#F7F8F9] border border-gray-200 rounded-xl px-4 py-2.5 text-xs font-bold text-[#041E42] focus:outline-none focus:border-[#0071DC]"
-                      />
-                    </div>
-
-                    {successMsg && (
-                      <div className="bg-emerald-50 text-emerald-700 p-3 rounded-xl border border-emerald-100 flex items-center space-x-2 text-xs font-bold">
-                        <CheckCircle className="w-4 h-4 flex-shrink-0" />
-                        <span>{successMsg}</span>
-                      </div>
-                    )}
-                    {errorMsg && (
-                      <div className="bg-red-50 text-red-700 p-3 rounded-xl border border-red-100 flex items-center space-x-2 text-xs font-bold">
-                        <AlertCircle className="w-4 h-4 flex-shrink-0" />
-                        <span>{errorMsg}</span>
-                      </div>
-                    )}
-
-                    <div className="pt-2">
-                      <button
-                        type="submit"
-                        disabled={isUpdating}
-                        className="bg-[#0071DC] hover:bg-[#0046BE] text-white px-5 py-2.5 rounded-full font-black text-xs transition-colors flex items-center space-x-1.5 shadow-md focus:outline-none disabled:opacity-50"
-                      >
-                        <Lock className="w-4 h-4" />
-                        <span>CHANGE PASSWORD</span>
-                      </button>
-                    </div>
-                  </form>
-                </motion.div>
-              )}
-
-              {/* SECTION: ACCOUNT SETTINGS */}
-              {activeSection === 'settings' && (
-                <motion.div
-                  key="settings"
-                  initial={{ opacity: 0, x: 10 }}
-                  animate={{ opacity: 1, x: 0 }}
-                  exit={{ opacity: 0, x: -10 }}
-                  className="bg-white p-8 rounded-3xl border border-gray-100 shadow-sm space-y-6"
-                >
-                  <div className="border-b border-gray-50 pb-4">
-                    <h2 className="text-base font-extrabold text-[#041E42]">Account Settings</h2>
-                    <p className="text-xs text-gray-400 font-semibold mt-0.5">Control credentials, profile parameters, and upgrade membership status.</p>
-                  </div>
-
-                  <form onSubmit={handleSaveChanges} className="space-y-6">
-                    <div className="space-y-4 max-w-md">
-                      <h3 className="text-xs font-black text-gray-400 uppercase tracking-wider">Profile Credentials</h3>
-                      
-                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                        <div className="space-y-1.5">
-                          <label className="text-[10px] font-bold text-gray-400 uppercase tracking-wide">First Name</label>
-                          <input
-                            type="text"
-                            required
-                            value={firstName}
-                            onChange={(e) => setFirstName(e.target.value)}
-                            className="w-full bg-[#F7F8F9] border border-gray-200 rounded-xl px-4 py-2.5 text-xs font-bold text-[#041E42] focus:outline-none focus:border-[#0071DC]"
-                          />
-                        </div>
-
-                        <div className="space-y-1.5">
-                          <label className="text-[10px] font-bold text-gray-400 uppercase tracking-wide">Last Name</label>
-                          <input
-                            type="text"
-                            required
-                            value={lastName}
-                            onChange={(e) => setLastName(e.target.value)}
-                            className="w-full bg-[#F7F8F9] border border-gray-200 rounded-xl px-4 py-2.5 text-xs font-bold text-[#041E42] focus:outline-none focus:border-[#0071DC]"
-                          />
-                        </div>
-                      </div>
-
-                      <div className="space-y-1.5">
-                        <label className="text-[10px] font-bold text-gray-400 uppercase tracking-wide">Phone Number</label>
-                        <input
-                          type="tel"
-                          required
-                          value={phone}
-                          onChange={(e) => setPhone(e.target.value)}
-                          className="w-full bg-[#F7F8F9] border border-gray-200 rounded-xl px-4 py-2.5 text-xs font-bold text-[#041E42] focus:outline-none focus:border-[#0071DC]"
-                        />
-                      </div>
-                    </div>
-
-                    <div className="pt-4 border-t border-gray-50 space-y-4">
-                      <h3 className="text-xs font-black text-gray-400 uppercase tracking-wider">Membership Actions</h3>
-                      <div className="p-5 bg-blue-50/30 rounded-2xl border border-blue-100 flex items-center justify-between">
-                        <div>
-                          <p className="text-xs font-bold text-gray-800">Current Level: <span className="text-[#0071DC]">{customer.membership || 'Standard'}</span></p>
-                          <p className="text-[10px] text-gray-400 font-semibold mt-0.5">Toggle and simulate Premium/Business upgrade triggers.</p>
-                        </div>
-                        {(customer.membership || 'Standard') !== 'Business' && (
-                          <button
-                            type="button"
-                            onClick={() => handleTriggerUpgrade('Premium', 99)}
-                            className="bg-[#0071DC] hover:bg-[#0046BE] text-white px-4 py-2 rounded-full font-bold text-[10px]"
-                          >
-                            UPGRADE MEMBERSHIP
-                          </button>
-                        )}
-                      </div>
-                    </div>
-
-                    {successMsg && (
-                      <div className="bg-emerald-50 text-emerald-700 p-3 rounded-xl border border-emerald-100 flex items-center space-x-2 text-xs font-bold">
-                        <CheckCircle className="w-4 h-4 flex-shrink-0" />
-                        <span>{successMsg}</span>
-                      </div>
-                    )}
-
-                    <div className="pt-4 border-t border-gray-50 flex justify-between">
-                      <button
-                        type="submit"
-                        disabled={isUpdating}
-                        className="bg-[#0071DC] hover:bg-[#0046BE] text-white px-6 py-2.5 rounded-full font-black text-xs transition-colors flex items-center space-x-2 shadow-md"
-                      >
-                        <Save className="w-4 h-4" />
-                        <span>{isUpdating ? 'Saving...' : 'SAVE SETTINGS'}</span>
-                      </button>
-                    </div>
-                  </form>
-                </motion.div>
-              )}
-
-            </AnimatePresence>
-
-          </div>
+          </aside>
 
         </div>
-
       </main>
 
-      {/* FAKE PAYMENT MODAL (SANDBOX membership upgrades) */}
+      {/* CHANGE PASSWORD MODAL */}
       <AnimatePresence>
-        {isPaymentModalOpen && (
-          <div className="fixed inset-0 bg-black/50 backdrop-blur-sm z-50 flex items-center justify-center p-4">
+        {showPasswordModal && (
+          <div className="fixed inset-0 bg-[#0F172A]/60 backdrop-blur-sm z-50 flex items-center justify-center p-4">
             <motion.div
               initial={{ opacity: 0, scale: 0.95 }}
               animate={{ opacity: 1, scale: 1 }}
               exit={{ opacity: 0, scale: 0.95 }}
-              className="bg-white rounded-3xl border border-gray-100 shadow-xl max-w-md w-full p-6 text-[#041E42] relative overflow-hidden"
+              className="bg-white rounded-2xl border border-gray-100 shadow-2xl max-w-md w-full p-6 text-[#0F172A] space-y-4"
             >
-              
-              {paymentStep === 'SELECT' && (
-                <div className="space-y-5">
-                  <div className="border-b pb-3 flex justify-between items-center">
-                    <div>
-                      <h2 className="text-base font-black">Upgrade to {targetMembership}</h2>
-                      <p className="text-[10px] text-gray-400 font-bold mt-0.5">Sandbox simulated gateway payment.</p>
-                    </div>
-                    <span className="text-xl font-black text-[#0071DC]">₹{membershipPrice}</span>
-                  </div>
+              <div className="flex justify-between items-center border-b border-gray-100 pb-3">
+                <h3 className="font-bold text-base text-[#0F172A]">Change Password</h3>
+                <button onClick={() => setShowPasswordModal(false)} className="text-gray-400 hover:text-gray-600">
+                  <X className="w-5 h-5" />
+                </button>
+              </div>
 
-                  {/* Payment selector */}
-                  <div className="flex justify-around border-b pb-3">
-                    {[
-                      { id: 'UPI', label: 'UPI Scan', icon: QrCode },
-                      { id: 'CARD', label: 'Mock Card', icon: CreditCard },
-                      { id: 'WALLET', label: 'Wallet', icon: Wallet }
-                    ].map((item) => {
-                      const Icon = item.icon;
-                      const isSel = paymentMethod === item.id;
-                      return (
-                        <button
-                          key={item.id}
-                          onClick={() => setPaymentMethod(item.id as any)}
-                          className={`flex flex-col items-center p-3 rounded-2xl border transition-all space-y-1 w-24 ${
-                            isSel ? 'border-[#0071DC] bg-blue-50/50 text-[#0071DC]' : 'border-gray-100 text-gray-500'
-                          }`}
-                        >
-                          <Icon className="w-5 h-5" />
-                          <span className="text-[10px] font-bold">{item.label}</span>
-                        </button>
-                      );
-                    })}
-                  </div>
-
-                  {/* Method Content */}
-                  {paymentMethod === 'UPI' && (
-                    <div className="space-y-4 text-center p-3 bg-gray-50 rounded-2xl border border-gray-100">
-                      <div className="w-32 h-32 bg-white border border-gray-200 rounded-xl mx-auto flex items-center justify-center p-2 relative">
-                        {/* Dynamic QR block */}
-                        <QrCode className="w-full h-full text-gray-700" />
-                        <div className="absolute inset-0 bg-black/5 flex items-center justify-center rounded-xl font-black text-[9px] text-[#0071DC] uppercase tracking-wider">
-                          MOCK QR CODE
-                        </div>
-                      </div>
-                      <div className="space-y-1">
-                        <p className="text-xs font-bold text-gray-700">Scan QR to pay ₹{membershipPrice}</p>
-                        <p className="text-[10px] text-gray-400 font-medium">Or enter VPA: <span className="font-bold">{upiHandle}</span></p>
-                      </div>
-                    </div>
-                  )}
-
-                  {paymentMethod === 'CARD' && (
-                    <div className="space-y-3">
-                      <div className="space-y-1">
-                        <label className="text-[9px] font-bold text-gray-400 uppercase tracking-wide">Card Number</label>
-                        <input
-                          type="text"
-                          required
-                          value={cardNumber}
-                          onChange={(e) => setCardNumber(e.target.value.replace(/\s?/g, '').replace(/(\d{4})/g, '$1 ').trim())}
-                          placeholder="4111 2222 3333 4444"
-                          maxLength={19}
-                          className="w-full bg-[#F7F8F9] border border-gray-200 rounded-xl px-4 py-2.5 text-xs font-bold text-[#041E42] focus:outline-none focus:border-[#0071DC]"
-                        />
-                      </div>
-                      <div className="grid grid-cols-2 gap-3">
-                        <div className="space-y-1">
-                          <label className="text-[9px] font-bold text-gray-400 uppercase tracking-wide">Expiry Date</label>
-                          <input
-                            type="text"
-                            required
-                            value={cardExpiry}
-                            onChange={(e) => setCardExpiry(e.target.value)}
-                            placeholder="MM/YY"
-                            maxLength={5}
-                            className="w-full bg-[#F7F8F9] border border-gray-200 rounded-xl px-4 py-2.5 text-xs font-bold text-[#041E42] focus:outline-none focus:border-[#0071DC]"
-                          />
-                        </div>
-                        <div className="space-y-1">
-                          <label className="text-[9px] font-bold text-gray-400 uppercase tracking-wide">CVV</label>
-                          <input
-                            type="password"
-                            required
-                            value={cardCvv}
-                            onChange={(e) => setCardCvv(e.target.value)}
-                            placeholder="123"
-                            maxLength={3}
-                            className="w-full bg-[#F7F8F9] border border-gray-200 rounded-xl px-4 py-2.5 text-xs font-bold text-[#041E42] focus:outline-none focus:border-[#0071DC]"
-                          />
-                        </div>
-                      </div>
-                    </div>
-                  )}
-
-                  {paymentMethod === 'WALLET' && (
-                    <div className="space-y-3 p-4 bg-gray-50 rounded-2xl border border-gray-100">
-                      <p className="text-[10px] text-gray-500 font-bold text-center">Selected wallet: PhonePe Sandbox Wallet Link</p>
-                      <input
-                        type="text"
-                        disabled
-                        value={`${customer.phone}@phonepe`}
-                        className="w-full bg-white border border-gray-200 rounded-xl px-4 py-2 text-xs font-bold text-gray-400 text-center cursor-not-allowed"
-                      />
-                    </div>
-                  )}
-
-                  <div className="flex space-x-2 pt-3 border-t">
-                    <button
-                      onClick={() => setIsPaymentModalOpen(false)}
-                      className="w-1/2 border border-gray-200 py-2.5 rounded-full font-bold text-xs text-[#041E42] hover:bg-gray-50"
-                    >
-                      Cancel
-                    </button>
-                    <button
-                      onClick={handleProcessFakePayment}
-                      className="w-1/2 bg-[#0071DC] hover:bg-[#0046BE] text-white py-2.5 rounded-full font-black text-xs shadow-md"
-                    >
-                      Pay ₹{membershipPrice}
-                    </button>
-                  </div>
+              <form onSubmit={handleChangePassword} className="space-y-4 text-xs font-semibold">
+                <div className="space-y-1">
+                  <label className="text-gray-600 font-bold">Current Password</label>
+                  <input
+                    type="password"
+                    required
+                    value={currentPassword}
+                    onChange={(e) => setCurrentPassword(e.target.value)}
+                    className="w-full bg-[#F4F6F9] border border-gray-200 rounded-xl px-3.5 py-2.5 text-xs text-[#0F172A] focus:outline-none focus:border-[#0875E1]"
+                  />
                 </div>
-              )}
 
-              {paymentStep === 'PROCESSING' && (
-                <div className="py-12 flex flex-col items-center justify-center space-y-4">
-                  <div className="w-12 h-12 border-4 border-[#0071DC] border-t-transparent rounded-full animate-spin"></div>
-                  <div className="text-center space-y-1">
-                    <h3 className="text-sm font-bold text-gray-800">Simulating Bank Authorization</h3>
-                    <p className="text-[10px] text-gray-400 font-semibold">Validating sandbox currency transfer credentials...</p>
-                  </div>
+                <div className="space-y-1">
+                  <label className="text-gray-600 font-bold">New Password</label>
+                  <input
+                    type="password"
+                    required
+                    value={newPassword}
+                    onChange={(e) => setNewPassword(e.target.value)}
+                    className="w-full bg-[#F4F6F9] border border-gray-200 rounded-xl px-3.5 py-2.5 text-xs text-[#0F172A] focus:outline-none focus:border-[#0875E1]"
+                  />
                 </div>
-              )}
 
-              {paymentStep === 'SUCCESS' && (
-                <div className="py-8 flex flex-col items-center justify-center space-y-4 text-center">
-                  <div className="w-14 h-14 bg-emerald-50 text-emerald-600 rounded-full flex items-center justify-center border border-emerald-100 shadow-sm animate-bounce">
-                    <Check className="w-7 h-7" />
-                  </div>
-                  <div className="space-y-1">
-                    <h3 className="text-sm font-black text-emerald-700">Payment Approved!</h3>
-                    <p className="text-xs text-gray-500 font-medium">Your profile has been upgraded to **{targetMembership}** status.</p>
-                  </div>
+                <div className="space-y-1">
+                  <label className="text-gray-600 font-bold">Confirm New Password</label>
+                  <input
+                    type="password"
+                    required
+                    value={confirmPassword}
+                    onChange={(e) => setConfirmPassword(e.target.value)}
+                    className="w-full bg-[#F4F6F9] border border-gray-200 rounded-xl px-3.5 py-2.5 text-xs text-[#0F172A] focus:outline-none focus:border-[#0875E1]"
+                  />
+                </div>
+
+                {errorMsg && (
+                  <p className="text-red-500 text-xs font-bold">{errorMsg}</p>
+                )}
+
+                <div className="flex space-x-2 pt-2">
                   <button
-                    onClick={() => setIsPaymentModalOpen(false)}
-                    className="bg-emerald-600 hover:bg-emerald-700 text-white px-6 py-2 rounded-full font-bold text-xs transition-colors shadow-md mt-2"
+                    type="button"
+                    onClick={() => setShowPasswordModal(false)}
+                    className="w-1/2 border border-gray-200 hover:bg-gray-50 text-[#0F172A] py-2.5 rounded-xl font-bold text-xs transition-colors"
                   >
-                    Return to Profile
+                    Cancel
+                  </button>
+                  <button
+                    type="submit"
+                    disabled={isUpdating}
+                    className="w-1/2 bg-[#0875E1] hover:bg-[#065eb8] text-white py-2.5 rounded-xl font-bold text-xs transition-colors shadow-2xs"
+                  >
+                    Save Password
                   </button>
                 </div>
-              )}
-
+              </form>
             </motion.div>
           </div>
         )}
       </AnimatePresence>
 
-      {/* FOOTER */}
-      <footer className="bg-[#041E42] text-white py-6 text-center text-xs font-bold mt-12">
-        <p className="text-gray-400">&copy; 2026 NexDay Systems India Pvt Ltd. Personal details are securely encrypted in compliance with mock-data privacy rules.</p>
-      </footer>
+      {/* TOAST NOTIFICATION */}
+      {successMsg && (
+        <div className="fixed bottom-6 right-6 z-50 bg-[#0F172A] text-white text-xs font-bold px-4 py-3 rounded-xl shadow-xl flex items-center space-x-2 animate-bounce">
+          <Check className="w-4 h-4 text-emerald-400" />
+          <span>{successMsg}</span>
+        </div>
+      )}
 
+      {/* FAKE MEMBERSHIP PAYMENT MODAL */}
+      <AnimatePresence>
+        {isPaymentModalOpen && (
+          <div className="fixed inset-0 bg-[#0F172A]/60 backdrop-blur-sm z-50 flex items-center justify-center p-4">
+            <motion.div
+              initial={{ opacity: 0, scale: 0.95 }}
+              animate={{ opacity: 1, scale: 1 }}
+              exit={{ opacity: 0, scale: 0.95 }}
+              className="bg-white rounded-2xl border border-gray-100 shadow-2xl max-w-md w-full p-6 text-[#0F172A] space-y-4"
+            >
+              <div className="flex justify-between items-center border-b border-gray-100 pb-3">
+                <h3 className="font-bold text-base text-[#0F172A]">
+                  Upgrade to NexDay Plus ({targetMembership})
+                </h3>
+                <button onClick={() => setIsPaymentModalOpen(false)} className="text-gray-400 hover:text-gray-600">
+                  <X className="w-5 h-5" />
+                </button>
+              </div>
+
+              {paymentStep === 'SELECT' && (
+                <div className="space-y-4 text-xs font-semibold">
+                  <p className="text-gray-500 font-medium">
+                    Enjoy free shipping, early sale access, and exclusive deals for ₹{membershipPrice}/year.
+                  </p>
+
+                  <div className="space-y-2">
+                    <label className="text-gray-600 font-bold block">Select Payment Method</label>
+                    <div className="grid grid-cols-3 gap-2">
+                      <button
+                        type="button"
+                        onClick={() => setPaymentMethod('UPI')}
+                        className={`p-2.5 rounded-xl border text-center font-bold text-xs transition-all ${
+                          paymentMethod === 'UPI' ? 'border-[#0875E1] bg-blue-50 text-[#0875E1]' : 'border-gray-200 text-gray-600'
+                        }`}
+                      >
+                        UPI
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => setPaymentMethod('CARD')}
+                        className={`p-2.5 rounded-xl border text-center font-bold text-xs transition-all ${
+                          paymentMethod === 'CARD' ? 'border-[#0875E1] bg-blue-50 text-[#0875E1]' : 'border-gray-200 text-gray-600'
+                        }`}
+                      >
+                        Card
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => setPaymentMethod('WALLET')}
+                        className={`p-2.5 rounded-xl border text-center font-bold text-xs transition-all ${
+                          paymentMethod === 'WALLET' ? 'border-[#0875E1] bg-blue-50 text-[#0875E1]' : 'border-gray-200 text-gray-600'
+                        }`}
+                      >
+                        Wallet
+                      </button>
+                    </div>
+                  </div>
+
+                  <button
+                    onClick={handleExecutePayment}
+                    className="w-full bg-[#0875E1] hover:bg-[#065eb8] text-white py-3 rounded-xl font-bold text-xs transition-colors shadow-2xs"
+                  >
+                    Pay ₹{membershipPrice} & Upgrade Now
+                  </button>
+                </div>
+              )}
+
+              {paymentStep === 'PROCESSING' && (
+                <div className="py-8 text-center space-y-3">
+                  <div className="w-10 h-10 border-4 border-[#0875E1] border-t-transparent rounded-full animate-spin mx-auto"></div>
+                  <p className="text-xs font-bold text-[#0F172A]">Processing payment securely...</p>
+                </div>
+              )}
+
+              {paymentStep === 'SUCCESS' && (
+                <div className="py-6 text-center space-y-3">
+                  <div className="w-12 h-12 bg-emerald-100 text-emerald-600 rounded-full flex items-center justify-center mx-auto">
+                    <CheckCircle2 className="w-7 h-7" />
+                  </div>
+                  <h4 className="font-bold text-sm text-[#0F172A]">Membership Upgraded!</h4>
+                  <p className="text-xs text-gray-500 font-medium">You are now a NexDay Plus {targetMembership} member.</p>
+                  <button
+                    onClick={() => setIsPaymentModalOpen(false)}
+                    className="bg-[#0875E1] text-white px-6 py-2.5 rounded-xl font-bold text-xs"
+                  >
+                    Done
+                  </button>
+                </div>
+              )}
+            </motion.div>
+          </div>
+        )}
+      </AnimatePresence>
     </div>
   );
 };

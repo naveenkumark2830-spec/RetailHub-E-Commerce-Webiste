@@ -30,13 +30,23 @@ import AdminReviewsPage from './pages/AdminReviewsPage';
 import AdminCouponsPage from './pages/AdminCouponsPage';
 import AdminWarehousesPage from './pages/AdminWarehousesPage';
 import AdminSimulatorPage from './pages/AdminSimulatorPage';
+import { isRouteAllowed, getDefaultRouteForRole } from './utils/rbac';
 import { useSessionStore } from './store/useSessionStore';
 
-// Protected Admin Route wrapper: redirects to /admin/login if not logged in
-const ProtectedAdminRoute = ({ children }: { children: React.ReactElement }) => {
+// Protected Admin Route wrapper: redirects to /admin/login if not logged in or unauthorized for specific route
+const ProtectedAdminRoute = ({ children, path }: { children: React.ReactElement; path: string }) => {
   const token = localStorage.getItem('adminToken');
   const adminData = localStorage.getItem('adminUser');
   if (!token || !adminData) {
+    return <Navigate to="/admin/login" replace />;
+  }
+  try {
+    const admin = JSON.parse(adminData);
+    if (!isRouteAllowed(admin.role_id, path)) {
+      const defaultPath = getDefaultRouteForRole(admin.role_id);
+      return <Navigate to={defaultPath} replace />;
+    }
+  } catch (e) {
     return <Navigate to="/admin/login" replace />;
   }
   return children;
@@ -68,7 +78,11 @@ export const App: React.FC = () => {
         <Route path="/orders/:orderId/tracking" element={<OrderTrackingPage />} />
         <Route path="/invoices/:invoiceId" element={<InvoicePage />} />
         <Route path="/orders/:orderId/return" element={<ReturnPage />} />
+        <Route path="/returns" element={<ReturnPage />} />
+        <Route path="/returns-refunds" element={<ReturnPage />} />
         <Route path="/orders/:orderId/review/:productId" element={<WriteReviewPage />} />
+        <Route path="/reviews" element={<WriteReviewPage />} />
+        <Route path="/my-reviews" element={<WriteReviewPage />} />
         <Route path="/profile" element={<ProfilePage />} />
         <Route path="/profile/addresses" element={<AddressesPage />} />
         <Route path="/notifications" element={<NotificationsPage />} />
@@ -79,17 +93,17 @@ export const App: React.FC = () => {
 
         {/* Protected Admin Routes */}
         <Route path="/admin/dashboard" element={<Navigate to="/admin/simulator" replace />} />
-        <Route path="/admin/products" element={<ProtectedAdminRoute><AdminProductsPage /></ProtectedAdminRoute>} />
-        <Route path="/admin/operators" element={<ProtectedAdminRoute><AdminOperatorsPage /></ProtectedAdminRoute>} />
-        <Route path="/admin/categories" element={<ProtectedAdminRoute><AdminCategoriesPage /></ProtectedAdminRoute>} />
-        <Route path="/admin/inventory" element={<ProtectedAdminRoute><AdminInventoryPage /></ProtectedAdminRoute>} />
-        <Route path="/admin/orders" element={<ProtectedAdminRoute><AdminOrderManagementPage /></ProtectedAdminRoute>} />
-        <Route path="/admin/customers" element={<ProtectedAdminRoute><AdminCustomersPage /></ProtectedAdminRoute>} />
-        <Route path="/admin/reviews" element={<ProtectedAdminRoute><AdminReviewsPage /></ProtectedAdminRoute>} />
-        <Route path="/admin/coupons" element={<ProtectedAdminRoute><AdminCouponsPage /></ProtectedAdminRoute>} />
-        <Route path="/admin/warehouses" element={<ProtectedAdminRoute><AdminWarehousesPage /></ProtectedAdminRoute>} />
+        <Route path="/admin/products" element={<ProtectedAdminRoute path="/admin/products"><AdminProductsPage /></ProtectedAdminRoute>} />
+        <Route path="/admin/operators" element={<ProtectedAdminRoute path="/admin/operators"><AdminOperatorsPage /></ProtectedAdminRoute>} />
+        <Route path="/admin/categories" element={<ProtectedAdminRoute path="/admin/categories"><AdminCategoriesPage /></ProtectedAdminRoute>} />
+        <Route path="/admin/inventory" element={<ProtectedAdminRoute path="/admin/inventory"><AdminInventoryPage /></ProtectedAdminRoute>} />
+        <Route path="/admin/orders" element={<ProtectedAdminRoute path="/admin/orders"><AdminOrderManagementPage /></ProtectedAdminRoute>} />
+        <Route path="/admin/customers" element={<ProtectedAdminRoute path="/admin/customers"><AdminCustomersPage /></ProtectedAdminRoute>} />
+        <Route path="/admin/reviews" element={<ProtectedAdminRoute path="/admin/reviews"><AdminReviewsPage /></ProtectedAdminRoute>} />
+        <Route path="/admin/coupons" element={<ProtectedAdminRoute path="/admin/coupons"><AdminCouponsPage /></ProtectedAdminRoute>} />
+        <Route path="/admin/warehouses" element={<ProtectedAdminRoute path="/admin/warehouses"><AdminWarehousesPage /></ProtectedAdminRoute>} />
         <Route path="/admin/events" element={<Navigate to="/admin/simulator" replace />} />
-        <Route path="/admin/simulator" element={<ProtectedAdminRoute><AdminSimulatorPage /></ProtectedAdminRoute>} />
+        <Route path="/admin/simulator" element={<ProtectedAdminRoute path="/admin/simulator"><AdminSimulatorPage /></ProtectedAdminRoute>} />
         <Route path="/admin" element={<Navigate to="/admin/login" replace />} />
       </Routes>
     </Router>

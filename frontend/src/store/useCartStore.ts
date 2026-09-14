@@ -73,7 +73,10 @@ export const useCartStore = create<CartState>((set, get) => ({
   error: null,
 
   fetchCart: async () => {
-    const session = useSessionStore.getState().session;
+    let session = useSessionStore.getState().session;
+    if (!session) {
+      session = await useSessionStore.getState().createGuestSession();
+    }
     const customer = useSessionStore.getState().customer;
     if (!session) return;
 
@@ -98,7 +101,10 @@ export const useCartStore = create<CartState>((set, get) => ({
   },
 
   addItemToCart: async (product, quantity, source = 'product_page') => {
-    const session = useSessionStore.getState().session;
+    let session = useSessionStore.getState().session;
+    if (!session) {
+      session = await useSessionStore.getState().createGuestSession();
+    }
     const customer = useSessionStore.getState().customer;
     const sessionId = session?.session_id || 'sess_anonymous';
     const customerId = customer?.customer_id || null;

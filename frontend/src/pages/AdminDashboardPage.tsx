@@ -1,12 +1,9 @@
 import { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { 
-  User, 
   LogOut, 
-  LayoutDashboard, 
   ShoppingBag, 
   Warehouse, 
-  TrendingUp, 
   Cpu, 
   Settings,
   DollarSign,
@@ -14,12 +11,9 @@ import {
   Users,
   Database,
   Radio,
-  Server,
-  FolderOpen,
-  Eye,
-  Layers,
-  Terminal
+  Server
 } from 'lucide-react';
+import AdminSidebar from '../components/AdminSidebar';
 
 interface Metrics {
   kpis: {
@@ -179,57 +173,7 @@ export default function AdminDashboardPage() {
 
       <div className="flex-grow flex">
         {/* SIDEBAR NAVIGATION */}
-        <aside className="w-64 bg-white border-r border-gray-250 flex flex-col justify-between flex-shrink-0">
-          <div className="p-4 space-y-6">
-            <p className="text-[10px] font-bold text-gray-400 uppercase tracking-widest pl-3">OPERATIONS DESK</p>
-
-            <nav className="space-y-1">
-              {[
-                { name: 'Dashboard', icon: <LayoutDashboard className="w-4 h-4" />, path: '/admin/dashboard' },
-                { name: 'Products', icon: <ShoppingBag className="w-4 h-4" />, path: '/admin/products' },
-                { name: 'Categories', icon: <FolderOpen className="w-4 h-4" />, path: '/admin/categories' },
-                { name: 'Operators', icon: <User className="w-4 h-4" />, path: '/admin/operators' },
-                { name: 'Inventory', icon: <Warehouse className="w-4 h-4" />, path: '/admin/inventory' },
-                { name: 'Orders', icon: <TrendingUp className="w-4 h-4" />, path: '/admin/orders' },
-                { name: 'Customers', icon: <User className="w-4 h-4" />, path: '/admin/customers' },
-                { name: 'Reviews', icon: <Eye className="w-4 h-4" />, path: '/admin/reviews' },
-                { name: 'Coupons', icon: <Layers className="w-4 h-4" />, path: '/admin/coupons' },
-                { name: 'Warehouses', icon: <Warehouse className="w-4 h-4" />, path: '/admin/warehouses' },
-                { name: 'Event Monitor', icon: <Terminal className="w-4 h-4" />, path: '/admin/events' },
-                { name: 'Simulator', icon: <Cpu className="w-4 h-4" />, path: '/admin/simulator' },
-                { name: 'System Monitor', icon: <Settings className="w-4 h-4" />, path: '/admin/dashboard' }
-              ].map((item, idx) => (
-                <div
-                  key={item.name}
-                  onClick={() => navigate(item.path)}
-                  className={`flex items-center space-x-3 px-4 py-3 rounded-xl text-xs font-bold uppercase tracking-wider cursor-pointer transition-colors ${
-                    idx === 0
-                      ? 'bg-blue-50 text-[#0071DC] border-l-4 border-[#0071DC] rounded-l-none'
-                      : 'text-gray-600 hover:text-[#0071DC] hover:bg-gray-50'
-                  }`}
-                >
-                  {item.icon}
-                  <span>{item.name}</span>
-                </div>
-              ))}
-            </nav>
-          </div>
-
-          {/* User Card in Sidebar Footer */}
-          <div className="p-4 border-t border-gray-200 bg-gray-50">
-            <div className="flex items-center space-x-3">
-              <div className="w-10 h-10 rounded-full bg-blue-50 flex items-center justify-center border border-blue-100 shadow-inner">
-                <User className="w-5 h-5 text-[#0071DC]" />
-              </div>
-              <div className="flex-grow overflow-hidden">
-                <p className="text-sm font-bold text-[#041E42] truncate">{admin.first_name} {admin.last_name}</p>
-                <span className="text-[9px] font-bold text-[#041E42] uppercase tracking-wide bg-[#FFC220] px-2.5 py-0.5 rounded-full">
-                  {admin.role_id}
-                </span>
-              </div>
-            </div>
-          </div>
-        </aside>
+        <AdminSidebar />
 
         {/* MAIN BODY AREA */}
         <main className="flex-grow p-8 space-y-8 overflow-y-auto">

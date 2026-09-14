@@ -1,21 +1,20 @@
 import React, { useState, useEffect } from 'react';
-import { useNavigate } from 'react-router-dom';
-import { motion } from 'framer-motion';
+import { motion, AnimatePresence } from 'framer-motion';
 import { 
-  HelpCircle,
   Search,
   MessageSquare,
   FileText,
   ShoppingBag,
   Send,
   PlusCircle,
-  ArrowLeft,
   ChevronDown,
   ChevronUp,
   CheckCircle2,
   Clock,
   Briefcase
 } from 'lucide-react';
+import { Header } from '../components/Header';
+import { Footer } from '../components/Footer';
 
 interface HelpArticle {
   article_id: string;
@@ -55,83 +54,184 @@ interface Order {
 }
 
 const FAQ_CATEGORIES = [
-  { name: 'Orders', icon: <ShoppingBag className="w-4 h-4" /> },
-  { name: 'Delivery', icon: <Clock className="w-4 h-4" /> },
-  { name: 'Payments', icon: <FileText className="w-4 h-4" /> },
-  { name: 'Returns', icon: <HelpCircle className="w-4 h-4 text-rose-400" /> },
-  { name: 'Refunds', icon: <FileText className="w-4 h-4 text-emerald-400" /> },
-  { name: 'Account', icon: <Briefcase className="w-4 h-4" /> }
+  { name: 'All Topics', icon: <Search className="w-4 h-4 text-blue-500" /> },
+  { name: 'Orders', icon: <ShoppingBag className="w-4 h-4 text-[#0875E1]" /> },
+  { name: 'Delivery', icon: <Clock className="w-4 h-4 text-amber-500" /> },
+  { name: 'Payments', icon: <FileText className="w-4 h-4 text-emerald-500" /> },
+  { name: 'Account', icon: <Briefcase className="w-4 h-4 text-purple-500" /> },
 ];
 
-export default function HelpSupportPage() {
-  const navigate = useNavigate();
-  const [searchQuery, setSearchQuery] = useState<string>('');
-  const [articles, setArticles] = useState<HelpArticle[]>([]);
+const PREDEFINED_FAQS: HelpArticle[] = [
+  {
+    article_id: 'faq-1',
+    category: 'Orders',
+    title: 'How do I track my order status?',
+    content: 'Go to the "My Orders" page from your profile sidebar or header menu. Click "Track Order" next to any order to view live status updates, delivery partner details, and estimated delivery dates.',
+    keywords: 'track order status shipping delivery'
+  },
+  {
+    article_id: 'faq-2',
+    category: 'Orders',
+    title: 'Can I cancel my order after placing it?',
+    content: 'Yes! You can cancel any order that is currently in "Confirmed" or "Processing" status directly from the My Orders page by clicking "Cancel Order". If your order has already been shipped, you can refuse delivery or initiate a return upon receipt.',
+    keywords: 'cancel order return refund'
+  },
+  {
+    article_id: 'faq-3',
+    category: 'Delivery',
+    title: 'What are the estimated delivery timelines?',
+    content: 'Standard delivery takes 2 to 4 business days depending on your location. NexDay Plus members enjoy guaranteed next-day delivery on eligible products.',
+    keywords: 'delivery timeline shipping time nexday plus'
+  },
+  {
+    article_id: 'faq-4',
+    category: 'Delivery',
+    title: 'What should I do if my package is delayed?',
+    content: 'Check the real-time tracking link on your Order Tracking page. If the delay exceeds 48 hours past the estimated delivery date, please click "Get Help" or raise a support ticket below for immediate assistance.',
+    keywords: 'delayed package late delivery help support'
+  },
+  {
+    article_id: 'faq-5',
+    category: 'Payments',
+    title: 'What payment methods are supported on NexDay?',
+    content: 'We support all major payment methods including UPI (Google Pay, PhonePe, Paytm), Credit & Debit Cards (Visa, MasterCard, RuPay), Net Banking across all major banks, and Cash on Delivery (COD).',
+    keywords: 'payment methods upi card cod netbanking'
+  },
+  {
+    article_id: 'faq-6',
+    category: 'Payments',
+    title: 'How long does a refund take to reflect in my bank account?',
+    content: 'Once a return is received and verified, refunds are initiated within 24 hours. Refunds to UPI or Wallets credit instantly or within 24 hours. Bank card refunds take 3-5 business days.',
+    keywords: 'refund status timeline bank credit upi'
+  },
+  {
+    article_id: 'faq-7',
+    category: 'Account',
+    title: 'How do I update my delivery address or phone number?',
+    content: 'Navigate to My Profile -> Addresses Book to manage saved delivery addresses, or edit your phone number directly on the Personal Information tab.',
+    keywords: 'update address profile phone number change'
+  },
+  {
+    article_id: 'faq-8',
+    category: 'Account',
+    title: 'How do I change or reset my password?',
+    content: 'You can change your password under My Profile -> Account Security by clicking "Change Password". If you forgot your password, use the "Forgot Password" link on the login screen.',
+    keywords: 'password reset change security login'
+  }
+];
+
+function FAQCollapseCard({ article }: { article: HelpArticle }) {
+  const [isOpen, setIsOpen] = useState(false);
+
+  return (
+    <div className="bg-white border border-gray-200/80 rounded-2xl shadow-xs overflow-hidden transition-all hover:border-gray-300">
+      <button
+        onClick={() => setIsOpen(!isOpen)}
+        className="w-full px-5 py-4 text-left flex items-center justify-between focus:outline-none"
+      >
+        <span className="font-bold text-[#0F172A] text-sm">{article.title}</span>
+        <div className="p-1.5 rounded-full bg-gray-100 text-gray-600">
+          {isOpen ? <ChevronUp className="w-4 h-4" /> : <ChevronDown className="w-4 h-4" />}
+        </div>
+      </button>
+      <AnimatePresence>
+        {isOpen && (
+          <motion.div
+            initial={{ height: 0, opacity: 0 }}
+            animate={{ height: 'auto', opacity: 1 }}
+            exit={{ height: 0, opacity: 0 }}
+            transition={{ duration: 0.2 }}
+          >
+            <div className="px-5 pb-4 pt-1 text-gray-600 text-xs md:text-sm border-t border-gray-100 leading-relaxed whitespace-pre-line font-medium">
+              {article.content}
+            </div>
+          </motion.div>
+        )}
+      </AnimatePresence>
+    </div>
+  );
+}
+
+export function HelpSupportPage() {
+  // Retrieve customer data from local storage session
+  const storedCustomer = localStorage.getItem('retailhub_customer');
+  const storedSession = localStorage.getItem('retailhub_session');
+
+  const customerId = storedCustomer ? JSON.parse(storedCustomer).customer_id : null;
+  const sessionId = storedSession ? JSON.parse(storedSession).session_id : null;
+
+  const [articles, setArticles] = useState<HelpArticle[]>(PREDEFINED_FAQS);
+  const [selectedTopic, setSelectedTopic] = useState<string>('All Topics');
   const [tickets, setTickets] = useState<SupportTicket[]>([]);
   const [orders, setOrders] = useState<Order[]>([]);
+  const [searchQuery, setSearchQuery] = useState<string>('');
   const [loadingFAQs, setLoadingFAQs] = useState<boolean>(false);
-  const [selectedTicket, setSelectedTicket] = useState<SupportTicket | null>(null);
-  const [newMessage, setNewMessage] = useState<string>('');
-  
-  // Ticket Form States
+
+  // Ticket creation state
   const [showRaiseForm, setShowRaiseForm] = useState<boolean>(false);
-  const [category, setCategory] = useState<string>('ORDERS');
-  const [priority, setPriority] = useState<string>('MEDIUM');
+  const [category, setCategory] = useState<string>('GENERAL');
+  const [priority] = useState<string>('MEDIUM');
+  const [selectedOrderId, setSelectedOrderId] = useState<string>('');
   const [subject, setSubject] = useState<string>('');
   const [description, setDescription] = useState<string>('');
-  const [selectedOrderId, setSelectedOrderId] = useState<string>('');
   const [formSuccess, setFormSuccess] = useState<boolean>(false);
 
-  const customerId = localStorage.getItem('customerId') || 'CUST87527';
-  const sessionId = localStorage.getItem('sessionId') || 'sess_default';
+  // Selected ticket view
+  const [selectedTicket, setSelectedTicket] = useState<SupportTicket | null>(null);
+  const [newMessage, setNewMessage] = useState<string>('');
 
   useEffect(() => {
     fetchFAQs();
-    fetchTickets();
-    fetchOrders();
+    if (customerId) {
+      fetchTickets();
+      fetchOrders();
+    }
   }, [customerId]);
 
-  const fetchFAQs = async (queryStr = '') => {
+  const fetchFAQs = async (query = '') => {
     try {
       setLoadingFAQs(true);
-      const res = await fetch(`/api/help/search?q=${encodeURIComponent(queryStr)}`);
-      if (res.ok) {
-        const data = await res.json();
-        setArticles(data);
+      const res = await fetch(`/api/help/faqs?q=${encodeURIComponent(query)}`);
+      const data = await res.json();
+      if (data.success && data.articles && data.articles.length > 0) {
+        setArticles(data.articles);
+      } else {
+        setArticles(PREDEFINED_FAQS);
       }
     } catch (err) {
-      console.error('FAQ load error:', err);
+      setArticles(PREDEFINED_FAQS);
     } finally {
       setLoadingFAQs(false);
     }
   };
 
   const fetchTickets = async () => {
+    if (!customerId) return;
     try {
       const res = await fetch(`/api/help/customer/${customerId}/tickets`);
-      if (res.ok) {
-        const data = await res.json();
-        setTickets(data);
-        // Refresh active ticket reference if open
+      const data = await res.json();
+      if (data.success) {
+        setTickets(data.tickets || []);
         if (selectedTicket) {
-          const updated = data.find((t: SupportTicket) => t.ticket_id === selectedTicket.ticket_id);
+          const updated = (data.tickets || []).find((t: SupportTicket) => t.ticket_id === selectedTicket.ticket_id);
           if (updated) setSelectedTicket(updated);
         }
       }
     } catch (err) {
-      console.error('Tickets fetch error:', err);
+      console.error('Error fetching tickets:', err);
     }
   };
 
   const fetchOrders = async () => {
+    if (!customerId) return;
     try {
-      const res = await fetch(`/api/checkout/orders?customer_id=${customerId}`);
-      if (res.ok) {
-        const data = await res.json();
-        setOrders(data.slice(0, 3)); // show top 3 recent orders
+      const res = await fetch(`/api/orders/customer/${customerId}`);
+      const data = await res.json();
+      if (data.success) {
+        setOrders((data.orders || []).slice(0, 3));
       }
     } catch (err) {
-      console.error('Orders load error:', err);
+      console.error('Error fetching orders:', err);
     }
   };
 
@@ -140,14 +240,9 @@ export default function HelpSupportPage() {
     fetchFAQs(searchQuery);
   };
 
-  const handleCategoryClick = (catName: string) => {
-    setSearchQuery(catName);
-    fetchFAQs(catName);
-  };
-
   const handleRaiseTicketSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!subject || !description) return;
+    if (!subject || !description || !customerId) return;
 
     try {
       const res = await fetch(`/api/help/customer/${customerId}/tickets/create`, {
@@ -162,7 +257,8 @@ export default function HelpSupportPage() {
           sessionId
         })
       });
-      if (res.ok) {
+      const data = await res.json();
+      if (res.ok || data.success) {
         setFormSuccess(true);
         setSubject('');
         setDescription('');
@@ -180,7 +276,7 @@ export default function HelpSupportPage() {
 
   const handleSendMessageSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!newMessage.trim() || !selectedTicket) return;
+    if (!newMessage.trim() || !selectedTicket || !customerId) return;
 
     try {
       const res = await fetch(`/api/help/tickets/${selectedTicket.ticket_id}/message`, {
@@ -193,7 +289,8 @@ export default function HelpSupportPage() {
           sessionId
         })
       });
-      if (res.ok) {
+      const data = await res.json();
+      if (res.ok || data.success) {
         setNewMessage('');
         fetchTickets();
       }
@@ -210,111 +307,122 @@ export default function HelpSupportPage() {
   };
 
   return (
-    <div className="min-h-screen bg-slate-900 text-slate-100 flex flex-col font-sans">
-      {/* NAVBAR */}
-      <header className="bg-slate-800/80 backdrop-blur-md border-b border-slate-700/50 sticky top-0 z-50 px-6 py-4">
-        <div className="max-w-6xl w-full mx-auto flex items-center justify-between">
-          <div className="flex items-center space-x-3 cursor-pointer" onClick={() => navigate('/home')}>
-            <div className="bg-blue-600 p-2 rounded-lg text-white shadow-lg shadow-blue-500/20">
-              <HelpCircle className="w-5 h-5" />
-            </div>
-            <span className="text-xl font-extrabold tracking-tight">RetailHub Support</span>
-          </div>
+    <div className="min-h-screen bg-[#F5F7FA] text-[#172033] flex flex-col font-sans">
+      <Header />
 
-          <button 
-            onClick={() => navigate('/home')}
-            className="flex items-center space-x-1 text-sm font-semibold text-slate-300 hover:text-white transition-colors"
-          >
-            <ArrowLeft className="w-4 h-4" />
-            <span>Back to Shop</span>
-          </button>
-        </div>
-      </header>
-
-      {/* HERO HERO CONTAINER */}
-      <div className="bg-gradient-to-b from-blue-900/20 to-slate-900 border-b border-slate-800 py-16 px-6 text-center">
+      {/* HERO BANNER */}
+      <div className="bg-[#0B2A55] text-white py-12 px-6 text-center">
         <div className="max-w-2xl mx-auto space-y-4">
-          <h1 className="text-4xl md:text-5xl font-extrabold text-white tracking-tight">How can we help?</h1>
-          <p className="text-slate-400 text-lg">Search our FAQ database or raise a direct support request</p>
+          <h1 className="text-3xl md:text-4xl font-extrabold tracking-tight">How Can We Help You?</h1>
+          <p className="text-blue-100 text-sm">Search our Help Center or connect directly with NexDay Customer Care</p>
 
           <form onSubmit={handleSearchSubmit} className="relative mt-6 max-w-xl mx-auto">
             <input
               type="text"
-              placeholder="Search orders, payments, returns..."
+              placeholder="Search orders, payments, returns, delivery..."
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
-              className="w-full bg-slate-850 hover:bg-slate-800 text-slate-100 placeholder-slate-500 pl-12 pr-4 py-4 rounded-xl border border-slate-700 focus:border-blue-500 focus:outline-none transition-all shadow-md"
+              className="w-full bg-white text-[#172033] placeholder-gray-400 pl-12 pr-4 py-3.5 rounded-full border-none focus:ring-2 focus:ring-[#FFC20A] focus:outline-none transition-all shadow-md text-sm font-medium"
             />
-            <Search className="absolute left-4 top-1/2 -translate-y-1/2 w-5 h-5 text-slate-500" />
+            <Search className="absolute left-4 top-1/2 -translate-y-1/2 w-5 h-5 text-gray-400" />
           </form>
 
-          {/* Quick FAQ Pills */}
-          <div className="flex flex-wrap justify-center gap-2 pt-4">
-            {FAQ_CATEGORIES.map((cat) => (
-              <button
-                key={cat.name}
-                type="button"
-                onClick={() => handleCategoryClick(cat.name)}
-                className="flex items-center space-x-1.5 bg-slate-800 hover:bg-slate-700 text-slate-300 px-3 py-1.5 rounded-full text-xs font-semibold border border-slate-750 transition-colors"
-              >
-                {cat.icon}
-                <span>{cat.name}</span>
-              </button>
-            ))}
+          {/* Quick FAQ Pills matching target reference pill design */}
+          <div className="flex flex-wrap justify-center gap-2.5 pt-3">
+            {FAQ_CATEGORIES.map((cat) => {
+              const isSelected = selectedTopic === cat.name;
+              return (
+                <button
+                  key={cat.name}
+                  type="button"
+                  onClick={() => setSelectedTopic(cat.name)}
+                  className={`flex items-center space-x-2 px-4 py-2 rounded-full text-xs font-bold transition-all border cursor-pointer ${
+                    isSelected
+                      ? 'bg-white text-[#0B2A55] border-white shadow-md scale-105'
+                      : 'bg-white/10 hover:bg-white/20 text-white border-white/20 backdrop-blur-sm'
+                  }`}
+                >
+                  {cat.icon}
+                  <span>{cat.name}</span>
+                </button>
+              );
+            })}
           </div>
         </div>
       </div>
 
       {/* GRID BODY LAYOUT */}
-      <main className="max-w-6xl w-full mx-auto p-6 grid grid-cols-1 lg:grid-cols-3 gap-8">
+      <main className="max-w-6xl w-full mx-auto p-6 flex-grow grid grid-cols-1 lg:grid-cols-3 gap-8">
         
         {/* LEFT COLUMN: FAQ SEARCH RESULTS & RECENT ORDERS */}
         <div className="lg:col-span-2 space-y-8">
           
           {/* FAQ Search Results */}
           <section className="space-y-4">
-            <h2 className="text-2xl font-extrabold text-white tracking-tight">Help Topics</h2>
+            <div className="flex items-center justify-between">
+              <h2 className="text-xl font-extrabold text-[#0B2A55] tracking-tight">Help Topics ({selectedTopic})</h2>
+              {selectedTopic !== 'All Topics' && (
+                <button
+                  onClick={() => setSelectedTopic('All Topics')}
+                  className="text-xs font-bold text-[#0875E1] hover:underline"
+                >
+                  Show All Topics
+                </button>
+              )}
+            </div>
             
             {loadingFAQs ? (
               <div className="flex justify-center py-10">
-                <div className="w-8 h-8 border-4 border-blue-500 border-t-transparent rounded-full animate-spin"></div>
+                <div className="w-8 h-8 border-4 border-[#0875E1] border-t-transparent rounded-full animate-spin"></div>
               </div>
-            ) : articles.length === 0 ? (
-              <div className="bg-slate-800/40 p-6 rounded-xl text-slate-400">
-                No FAQ articles match "{searchQuery}". Try a different keyword.
-              </div>
-            ) : (
-              <div className="space-y-4">
-                {articles.map((art) => (
-                  <FAQCollapseCard key={art.article_id} article={art} />
-                ))}
-              </div>
-            )}
+            ) : (() => {
+              const filteredArticles = articles.filter(art => {
+                if (selectedTopic !== 'All Topics' && art.category.toLowerCase() !== selectedTopic.toLowerCase()) {
+                  return false;
+                }
+                if (searchQuery.trim()) {
+                  const q = searchQuery.toLowerCase();
+                  return art.title.toLowerCase().includes(q) || art.content.toLowerCase().includes(q) || (art.keywords && art.keywords.toLowerCase().includes(q));
+                }
+                return true;
+              });
+
+              if (filteredArticles.length === 0) {
+                return (
+                  <div className="bg-white p-6 rounded-2xl border border-gray-100 text-gray-500 text-sm font-medium">
+                    No help articles found for "{selectedTopic}"{searchQuery ? ` matching "${searchQuery}"` : ''}.
+                  </div>
+                );
+              }
+
+              return (
+                <div className="space-y-3">
+                  {filteredArticles.map((art) => (
+                    <FAQCollapseCard key={art.article_id} article={art} />
+                  ))}
+                </div>
+              );
+            })()}
           </section>
 
-          {/* Recent Orders Support Quick Access */}
+          {/* Quick Help for Recent Orders */}
           {orders.length > 0 && (
-            <section className="space-y-4">
-              <h2 className="text-2xl font-extrabold text-white tracking-tight">Your Recent Orders</h2>
-              <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+            <section className="bg-white p-6 rounded-2xl border border-gray-100 shadow-sm space-y-4">
+              <div className="flex items-center justify-between">
+                <h3 className="text-sm font-extrabold text-[#0B2A55] uppercase tracking-wider">Quick Help For Recent Orders</h3>
+              </div>
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
                 {orders.map((ord) => (
-                  <div key={ord.order_id} className="bg-slate-800/60 p-4 rounded-xl border border-slate-700/40 space-y-3 flex flex-col justify-between">
+                  <div key={ord.order_id} className="p-4 rounded-xl border border-gray-100 bg-[#F5F7FA] space-y-2 flex flex-col justify-between">
                     <div>
-                      <div className="flex items-center justify-between">
-                        <span className="text-xs font-semibold text-slate-400">#{ord.order_id}</span>
-                        <span className={`text-[10px] uppercase font-bold px-2 py-0.5 rounded-full ${
-                          ord.status === 'DELIVERED' 
-                            ? 'bg-emerald-950 text-emerald-400' 
-                            : 'bg-blue-950 text-blue-400'
-                        }`}>
-                          {ord.status}
-                        </span>
+                      <div className="flex justify-between items-center text-xs font-bold text-gray-700">
+                        <span>Order #{ord.order_id.slice(-8)}</span>
                       </div>
-                      <h4 className="text-lg font-bold text-white mt-1">₹{Number(ord.total_amount).toLocaleString('en-IN')}</h4>
+                      <p className="text-[10px] text-gray-400 font-semibold mt-1">₹{ord.total_amount.toLocaleString()} &bull; {ord.status}</p>
                     </div>
                     <button
                       onClick={() => handleQuickHelpOrder(ord.order_id)}
-                      className="w-full text-center bg-slate-750 hover:bg-slate-700 text-blue-400 font-semibold py-2 rounded-lg text-xs transition-colors border border-slate-700/50"
+                      className="w-full mt-2 bg-[#0875E1] hover:bg-[#065eb8] text-white py-1.5 rounded-lg text-xs font-bold transition-colors"
                     >
                       Get Help
                     </button>
@@ -323,257 +431,159 @@ export default function HelpSupportPage() {
               </div>
             </section>
           )}
+
         </div>
 
-        {/* RIGHT COLUMN: SUPPORT TICKETS & TICKET MESSAGES */}
-        <div className="space-y-8">
-          
-          {/* Support Tickets Section */}
-          <section className="bg-slate-850 border border-slate-800 rounded-2xl p-6 space-y-6 shadow-xl">
-            <div className="flex items-center justify-between">
-              <h2 className="text-xl font-bold text-white">Support Tickets</h2>
+        {/* RIGHT COLUMN: SUPPORT TICKETS & CHAT */}
+        <div className="space-y-6">
+          <div className="bg-white p-6 rounded-2xl border border-gray-100 shadow-sm space-y-4">
+            <div className="flex justify-between items-center border-b border-gray-100 pb-3">
+              <h3 className="text-sm font-extrabold text-[#0B2A55] uppercase tracking-wider">Support Tickets</h3>
               <button
-                onClick={() => setShowRaiseForm(true)}
-                className="flex items-center space-x-1 text-sm font-bold text-blue-400 hover:text-blue-300 transition-colors"
+                onClick={() => setShowRaiseForm(!showRaiseForm)}
+                className="bg-[#FFC20A] hover:bg-[#e0a908] text-[#0B2A55] px-3.5 py-1.5 rounded-full font-bold text-xs flex items-center space-x-1 shadow-sm transition-colors uppercase tracking-wider"
               >
-                <PlusCircle className="w-4 h-4" />
-                <span>Raise Ticket</span>
+                <PlusCircle className="w-3.5 h-3.5" />
+                <span>New Ticket</span>
               </button>
             </div>
 
-            {/* Raise Ticket Modal Overlay Form */}
-            {showRaiseForm && (
-              <div className="fixed inset-0 bg-slate-950/70 backdrop-blur-sm z-50 flex items-center justify-center p-4">
-                <motion.div
-                  initial={{ scale: 0.95, opacity: 0 }}
-                  animate={{ scale: 1, opacity: 1 }}
-                  className="bg-slate-900 border border-slate-800 max-w-lg w-full rounded-2xl p-6 space-y-4 shadow-2xl relative"
-                >
-                  <h3 className="text-2xl font-bold text-white">Create Support Ticket</h3>
-                  
-                  {formSuccess ? (
-                    <div className="flex flex-col items-center justify-center py-10 space-y-3">
-                      <CheckCircle2 className="w-16 h-16 text-emerald-500 animate-bounce" />
-                      <p className="text-lg text-white font-bold">Ticket Submitted Successfully!</p>
+            {showRaiseForm ? (
+              <form onSubmit={handleRaiseTicketSubmit} className="space-y-4 pt-2">
+                {formSuccess && (
+                  <div className="bg-emerald-50 border border-emerald-200 text-emerald-800 text-xs font-bold p-3 rounded-xl flex items-center space-x-2">
+                    <CheckCircle2 className="w-4 h-4 text-emerald-600" />
+                    <span>Ticket created! Redirecting...</span>
+                  </div>
+                )}
+                <div>
+                  <label className="block text-xs font-bold text-gray-700 uppercase mb-1">Category</label>
+                  <select
+                    value={category}
+                    onChange={(e) => setCategory(e.target.value)}
+                    className="w-full px-3 py-2 rounded-xl border border-gray-200 text-xs font-medium text-gray-800 bg-white"
+                  >
+                    <option value="GENERAL">General Support</option>
+                    <option value="ORDERS">Order Issues</option>
+                    <option value="PAYMENTS">Payment Failures</option>
+                    <option value="DELIVERY">Delivery Status</option>
+                    <option value="RETURNS">Returns & Refunds</option>
+                  </select>
+                </div>
+
+                <div>
+                  <label className="block text-xs font-bold text-gray-700 uppercase mb-1">Subject</label>
+                  <input
+                    type="text"
+                    required
+                    placeholder="Brief summary..."
+                    value={subject}
+                    onChange={(e) => setSubject(e.target.value)}
+                    className="w-full px-3 py-2 rounded-xl border border-gray-200 text-xs font-medium text-gray-800"
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-xs font-bold text-gray-700 uppercase mb-1">Description</label>
+                  <textarea
+                    rows={3}
+                    required
+                    placeholder="Explain your problem..."
+                    value={description}
+                    onChange={(e) => setDescription(e.target.value)}
+                    className="w-full px-3 py-2 rounded-xl border border-gray-200 text-xs font-medium text-gray-800"
+                  />
+                </div>
+
+                <div className="flex space-x-2 pt-2">
+                  <button
+                    type="button"
+                    onClick={() => setShowRaiseForm(false)}
+                    className="w-1/2 py-2 border border-gray-200 rounded-xl text-xs font-bold text-gray-600 hover:bg-gray-50"
+                  >
+                    Cancel
+                  </button>
+                  <button
+                    type="submit"
+                    className="w-1/2 py-2 bg-[#0875E1] hover:bg-[#065eb8] text-white rounded-xl text-xs font-bold shadow transition-colors"
+                  >
+                    Submit Ticket
+                  </button>
+                </div>
+              </form>
+            ) : tickets.length === 0 ? (
+              <div className="text-center py-6 text-xs text-gray-400">
+                <MessageSquare className="w-8 h-8 text-gray-300 mx-auto mb-2" />
+                <p>No active support tickets found.</p>
+              </div>
+            ) : (
+              <div className="space-y-3 max-h-80 overflow-y-auto pr-1">
+                {tickets.map((tkt) => (
+                  <div
+                    key={tkt.ticket_id}
+                    onClick={() => setSelectedTicket(tkt)}
+                    className={`p-3.5 rounded-xl border cursor-pointer transition-all ${
+                      selectedTicket?.ticket_id === tkt.ticket_id
+                        ? 'border-[#0875E1] bg-blue-50/50'
+                        : 'border-gray-100 hover:border-gray-200 bg-white'
+                    }`}
+                  >
+                    <div className="flex justify-between items-center text-xs font-bold">
+                      <span className="text-[#0B2A55]">#{tkt.ticket_id.slice(-6)}</span>
+                      <span className={`px-2 py-0.5 rounded-full text-[10px] uppercase ${
+                        tkt.status === 'RESOLVED' ? 'bg-emerald-100 text-emerald-700' : 'bg-amber-100 text-amber-700'
+                      }`}>{tkt.status}</span>
                     </div>
-                  ) : (
-                    <form onSubmit={handleRaiseTicketSubmit} className="space-y-4">
-                      <div>
-                        <label className="block text-xs uppercase font-bold text-slate-400 mb-1">Issue Category</label>
-                        <select
-                          value={category}
-                          onChange={(e) => setCategory(e.target.value)}
-                          className="w-full bg-slate-800 text-slate-100 px-3 py-2.5 rounded-lg border border-slate-700 focus:outline-none focus:border-blue-500 font-medium"
-                        >
-                          <option value="ORDERS">Orders & Delivery</option>
-                          <option value="PAYMENTS">Payments</option>
-                          <option value="RETURNS">Returns</option>
-                          <option value="REFUNDS">Refunds</option>
-                          <option value="ACCOUNT">Account Settings</option>
-                          <option value="TECHNICAL">Technical Issue</option>
-                          <option value="OTHER">Other Issues</option>
-                        </select>
-                      </div>
-
-                      <div className="grid grid-cols-2 gap-4">
-                        <div>
-                          <label className="block text-xs uppercase font-bold text-slate-400 mb-1">Priority</label>
-                          <select
-                            value={priority}
-                            onChange={(e) => setPriority(e.target.value)}
-                            className="w-full bg-slate-800 text-slate-100 px-3 py-2.5 rounded-lg border border-slate-700 focus:outline-none"
-                          >
-                            <option value="LOW">Low</option>
-                            <option value="MEDIUM">Medium</option>
-                            <option value="HIGH">High</option>
-                          </select>
-                        </div>
-                        <div>
-                          <label className="block text-xs uppercase font-bold text-slate-400 mb-1">Order ID (Optional)</label>
-                          <input
-                            type="text"
-                            placeholder="ORD..."
-                            value={selectedOrderId}
-                            onChange={(e) => setSelectedOrderId(e.target.value)}
-                            className="w-full bg-slate-800 text-slate-100 px-3 py-2.5 rounded-lg border border-slate-700 focus:outline-none"
-                          />
-                        </div>
-                      </div>
-
-                      <div>
-                        <label className="block text-xs uppercase font-bold text-slate-400 mb-1">Subject</label>
-                        <input
-                          type="text"
-                          required
-                          placeholder="Brief summary of issue"
-                          value={subject}
-                          onChange={(e) => setSubject(e.target.value)}
-                          className="w-full bg-slate-800 text-slate-100 px-3 py-2.5 rounded-lg border border-slate-700 focus:outline-none"
-                        />
-                      </div>
-
-                      <div>
-                        <label className="block text-xs uppercase font-bold text-slate-400 mb-1">Description</label>
-                        <textarea
-                          required
-                          rows={4}
-                          placeholder="Provide details about your query..."
-                          value={description}
-                          onChange={(e) => setDescription(e.target.value)}
-                          className="w-full bg-slate-800 text-slate-100 px-3 py-2 rounded-lg border border-slate-700 focus:outline-none"
-                        />
-                      </div>
-
-                      <div className="flex space-x-3 pt-2">
-                        <button
-                          type="button"
-                          onClick={() => setShowRaiseForm(false)}
-                          className="flex-1 bg-slate-800 hover:bg-slate-750 text-slate-300 font-bold py-2.5 rounded-lg border border-slate-750 transition-colors"
-                        >
-                          Cancel
-                        </button>
-                        <button
-                          type="submit"
-                          className="flex-1 bg-blue-600 hover:bg-blue-500 text-white font-bold py-2.5 rounded-lg transition-colors shadow-lg shadow-blue-500/20"
-                        >
-                          Submit Ticket
-                        </button>
-                      </div>
-                    </form>
-                  )}
-                </motion.div>
+                    <p className="text-xs font-semibold text-gray-800 mt-1 line-clamp-1">{tkt.subject}</p>
+                  </div>
+                ))}
               </div>
             )}
+          </div>
 
-            {/* Tickets list */}
-            <div className="space-y-3 max-h-[400px] overflow-y-auto scrollbar-thin">
-              {tickets.length === 0 ? (
-                <div className="text-center py-8 text-slate-500 text-sm">
-                  <MessageSquare className="w-8 h-8 mx-auto mb-2 text-slate-600" />
-                  <p>You have no support tickets yet.</p>
-                </div>
-              ) : (
-                tickets.map((t) => (
-                  <div
-                    key={t.ticket_id}
-                    onClick={() => setSelectedTicket(t)}
-                    className={`p-4 rounded-xl border transition-all cursor-pointer ${
-                      selectedTicket?.ticket_id === t.ticket_id
-                        ? 'bg-slate-800 border-blue-500/40'
-                        : 'bg-slate-800/40 border-slate-700/30 hover:border-slate-750 hover:bg-slate-800/60'
-                    }`}
-                  >
-                    <div className="flex items-center justify-between">
-                      <span className="text-[10px] uppercase font-bold text-slate-400">#{t.ticket_id}</span>
-                      <span className={`text-[10px] uppercase font-bold px-2 py-0.5 rounded-full ${
-                        t.status === 'RESOLVED' || t.status === 'CLOSED'
-                          ? 'bg-emerald-950 text-emerald-400 border border-emerald-900/30'
-                          : 'bg-amber-950 text-amber-400 border border-amber-900/30'
-                      }`}>
-                        {t.status}
-                      </span>
-                    </div>
-                    <h4 className="font-bold text-white mt-1.5 truncate">{t.subject}</h4>
-                    <p className="text-xs text-slate-400 truncate mt-1">{t.description}</p>
-                  </div>
-                ))
-              )}
-            </div>
-          </section>
-
-          {/* Ticket Messages conversation thread view */}
+          {/* Ticket Messages View */}
           {selectedTicket && (
-            <section className="bg-slate-850 border border-slate-800 rounded-2xl p-6 space-y-4 shadow-xl flex flex-col h-[450px]">
-              <div className="flex items-center justify-between border-b border-slate-800 pb-3 flex-shrink-0">
-                <div>
-                  <h3 className="font-bold text-white truncate max-w-[200px]">{selectedTicket.subject}</h3>
-                  <p className="text-xs text-slate-400">Ticket #{selectedTicket.ticket_id}</p>
-                </div>
-                <button
-                  onClick={() => setSelectedTicket(null)}
-                  className="text-xs font-semibold text-slate-400 hover:text-white"
-                >
-                  Close Chat
-                </button>
+            <div className="bg-white p-6 rounded-2xl border border-gray-100 shadow-sm space-y-4">
+              <div className="flex justify-between items-center border-b border-gray-100 pb-3">
+                <h4 className="text-xs font-bold text-[#0B2A55] uppercase">Ticket Chat #{selectedTicket.ticket_id.slice(-6)}</h4>
+                <button onClick={() => setSelectedTicket(null)} className="text-xs text-gray-400 hover:text-gray-600 font-bold">Close</button>
               </div>
-
-              {/* Chat Thread Container */}
-              <div className="flex-grow overflow-y-auto space-y-4 pr-1 scrollbar-thin">
-                <div className="bg-slate-800/60 p-3.5 rounded-xl border border-slate-750 text-xs text-slate-300">
-                  <div className="font-bold text-white uppercase text-[10px] tracking-wide mb-1">Description:</div>
-                  {selectedTicket.description}
-                </div>
-
-                {selectedTicket.messages?.map((msg) => (
-                  <div
-                    key={msg.message_id}
-                    className={`flex flex-col max-w-[85%] ${
-                      msg.sender_type === 'CUSTOMER' ? 'ml-auto items-end' : 'mr-auto items-start'
-                    }`}
-                  >
-                    <div className={`p-3 rounded-2xl text-sm ${
-                      msg.sender_type === 'CUSTOMER'
-                        ? 'bg-blue-600 text-white rounded-br-none'
-                        : 'bg-slate-850 text-slate-100 rounded-bl-none border border-slate-700/50'
+              
+              <div className="space-y-3 max-h-60 overflow-y-auto pr-1">
+                {(selectedTicket.messages || []).map((msg) => (
+                  <div key={msg.message_id} className={`flex flex-col ${msg.sender_type === 'CUSTOMER' ? 'items-end' : 'items-start'}`}>
+                    <div className={`p-3 rounded-2xl max-w-[85%] text-xs ${
+                      msg.sender_type === 'CUSTOMER' ? 'bg-[#0875E1] text-white' : 'bg-gray-100 text-gray-800'
                     }`}>
                       {msg.message}
                     </div>
-                    <span className="text-[10px] text-slate-500 mt-1 px-1">
-                      {new Date(msg.created_at).toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit' })}
-                    </span>
                   </div>
                 ))}
               </div>
 
-              {/* Chat Reply Form */}
               {selectedTicket.status !== 'CLOSED' && (
-                <form onSubmit={handleSendMessageSubmit} className="relative flex-shrink-0 pt-2 border-t border-slate-800">
+                <form onSubmit={handleSendMessageSubmit} className="flex gap-2 pt-2">
                   <input
                     type="text"
-                    placeholder="Type support reply..."
+                    placeholder="Write a message..."
                     value={newMessage}
                     onChange={(e) => setNewMessage(e.target.value)}
-                    className="w-full bg-slate-800 text-slate-100 placeholder-slate-500 pl-4 pr-12 py-3 rounded-xl border border-slate-700 focus:outline-none focus:border-blue-500"
+                    className="flex-grow px-3 py-2 rounded-xl border border-gray-200 text-xs font-medium text-gray-800"
                   />
-                  <button
-                    type="submit"
-                    className="absolute right-2 top-1/2 -translate-y-1/2 p-2 bg-blue-600 hover:bg-blue-500 text-white rounded-lg transition-colors"
-                  >
+                  <button type="submit" className="bg-[#0875E1] hover:bg-[#065eb8] text-white p-2 rounded-xl">
                     <Send className="w-4 h-4" />
                   </button>
                 </form>
               )}
-            </section>
+            </div>
           )}
         </div>
+
       </main>
+
+      <Footer />
     </div>
   );
 }
 
-// Sub-component for Collapsible FAQ Article Cards
-function FAQCollapseCard({ article }: { article: HelpArticle }) {
-  const [isOpen, setIsOpen] = useState<boolean>(false);
-
-  return (
-    <div className="bg-slate-800/40 border border-slate-700/30 rounded-xl overflow-hidden transition-all hover:border-slate-700/60">
-      <button
-        onClick={() => setIsOpen(!isOpen)}
-        className="w-full text-left px-6 py-4 flex items-center justify-between bg-slate-800/10 hover:bg-slate-800/30 transition-colors"
-      >
-        <span className="font-bold text-white text-base md:text-lg tracking-tight pr-4">{article.title}</span>
-        {isOpen ? (
-          <ChevronUp className="w-5 h-5 text-slate-500" />
-        ) : (
-          <ChevronDown className="w-5 h-5 text-slate-500" />
-        )}
-      </button>
-
-      {isOpen && (
-        <div className="px-6 py-4 border-t border-slate-750 bg-slate-800/10 text-slate-350 leading-relaxed text-sm">
-          {article.content}
-        </div>
-      )}
-    </div>
-  );
-}
+export default HelpSupportPage;

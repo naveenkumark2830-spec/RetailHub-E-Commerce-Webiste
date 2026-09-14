@@ -1,8 +1,10 @@
 import React, { useState, useEffect } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import { motion } from 'framer-motion';
-import { ShoppingBag, ArrowLeft, Lock, Mail, AlertCircle, Eye, EyeOff, Sparkles, ShieldCheck } from 'lucide-react';
+import { Lock, Mail, AlertCircle, Eye, EyeOff, LogIn, CreditCard, Package, Zap, Heart } from 'lucide-react';
 import { useSessionStore } from '../store/useSessionStore';
+import { Header } from '../components/Header';
+import { Footer } from '../components/Footer';
 
 export const LoginPage: React.FC = () => {
   const navigate = useNavigate();
@@ -39,188 +41,240 @@ export const LoginPage: React.FC = () => {
   };
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-[#F4F7FC] via-[#EBF3FC] to-[#F7F8F9] flex flex-col justify-between text-[#041E42] relative overflow-hidden font-sans selection:bg-[#FFC220] selection:text-[#041E42]">
+    <div className="min-h-screen bg-[#F5F7FA] flex flex-col justify-between text-[#172033] font-sans">
       
-      {/* Dynamic 3D Ambient Parallax Background Glows */}
-      <div className="absolute top-[-10%] left-[-10%] w-[500px] h-[500px] bg-blue-400/20 rounded-full blur-3xl pointer-events-none animate-pulse"></div>
-      <div className="absolute bottom-[-10%] right-[-10%] w-[500px] h-[500px] bg-[#FFC220]/25 rounded-full blur-3xl pointer-events-none animate-pulse"></div>
-      <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[800px] h-[800px] bg-sky-200/20 rounded-full blur-[120px] pointer-events-none"></div>
-
       {/* HEADER */}
-      <header className="bg-[#0071DC] backdrop-blur-md text-white py-4 px-6 shadow-xl relative z-10 border-b border-blue-400/30">
-        <div className="max-w-7xl mx-auto flex items-center justify-between">
-          <motion.div 
-            whileHover={{ scale: 1.05, rotate: -1 }}
-            whileTap={{ scale: 0.95 }}
-            onClick={() => navigate('/')} 
-            className="flex items-center space-x-3 cursor-pointer group"
-          >
-            <div className="bg-[#FFC220] text-[#041E42] p-2.5 rounded-2xl shadow-lg font-black group-hover:rotate-12 transition-transform duration-300">
-              <ShoppingBag className="w-5 h-5" />
-            </div>
-            <div className="flex flex-col -space-y-1">
-              <span className="text-2xl font-black tracking-tight drop-shadow-sm">NexDay</span>
-              <span className="text-[10px] font-bold text-[#FFC220] tracking-widest uppercase">E-Commerce Experience</span>
-            </div>
-          </motion.div>
+      <Header />
 
-          <motion.button 
-            whileHover={{ x: -4 }}
-            onClick={() => navigate('/')}
-            className="flex items-center space-x-2 text-xs font-bold bg-white/10 hover:bg-white/20 backdrop-blur-md px-4 py-2 rounded-full border border-white/20 text-white transition-all shadow-sm"
-          >
-            <ArrowLeft className="w-4 h-4" />
-            <span>Back to Store</span>
-          </motion.button>
-        </div>
-      </header>
-
-      {/* MAIN 3D CINEMATIC CARD */}
-      <main className="flex-grow flex items-center justify-center p-4 relative z-10 my-6">
+      {/* MAIN CONTAINER (2-COLUMN SPLIT MATCHING REFERENCE IMAGE EXACTLY) */}
+      <main className="flex-grow flex items-center justify-center p-4 sm:p-6 md:p-10">
         <motion.div 
-          initial={{ opacity: 0, y: 30, scale: 0.95 }}
-          animate={{ opacity: 1, y: 0, scale: 1 }}
-          transition={{ duration: 0.5, ease: [0.16, 1, 0.3, 1] }}
-          whileHover={{ y: -4 }}
-          className="bg-white/90 backdrop-blur-2xl max-w-md w-full p-8 md:p-10 rounded-[2.5rem] shadow-[0_25px_60px_-15px_rgba(0,113,220,0.18)] border border-white/80 space-y-6 relative overflow-hidden"
+          initial={{ opacity: 0, y: 15 }}
+          animate={{ opacity: 1, y: 0 }}
+          className="bg-white max-w-4xl w-full rounded-3xl shadow-xl border border-gray-100 overflow-hidden grid grid-cols-1 md:grid-cols-12 min-h-[520px]"
         >
-          {/* Top Yellow Accent Bar */}
-          <div className="absolute top-0 left-0 right-0 h-2 bg-gradient-to-r from-[#FFC220] via-yellow-400 to-[#FFC220]"></div>
+          
+          {/* LEFT PROMO COLUMN (SOFT LIGHT BLUE BACKGROUND) */}
+          <div className="md:col-span-5 bg-[#EBF3FF] p-8 sm:p-10 flex flex-col justify-between relative overflow-hidden border-b md:border-b-0 md:border-r border-blue-100">
+            
+            <div className="space-y-6 z-10">
+              <div className="space-y-1">
+                <h1 className="text-2xl sm:text-3xl font-black text-[#172033] tracking-tight">
+                  Welcome Back!
+                </h1>
+                <p className="text-xs font-semibold text-gray-600 leading-relaxed">
+                  Sign in to continue your shopping journey with NexDay
+                </p>
+              </div>
 
-          {/* Header Title with Floating Badge */}
-          <div className="text-center space-y-3 relative">
-            <motion.div 
-              initial={{ scale: 0 }}
-              animate={{ scale: 1 }}
-              transition={{ delay: 0.2, type: 'spring', stiffness: 200 }}
-              className="w-14 h-14 bg-gradient-to-tr from-[#0071DC] to-blue-500 rounded-3xl flex items-center justify-center mx-auto text-white shadow-lg shadow-blue-500/30 mb-3"
-            >
-              <ShieldCheck className="w-7 h-7" />
-            </motion.div>
-            <h2 className="text-3xl font-black tracking-tight text-[#041E42]">Welcome back</h2>
-            <p className="text-xs font-semibold text-gray-500 uppercase tracking-widest flex items-center justify-center space-x-1">
-              <span>Sign in to continue shopping</span>
-              <Sparkles className="w-3.5 h-3.5 text-[#FFC220]" />
-            </p>
-          </div>
+              {/* Feature List with Soft Blue Icons */}
+              <div className="space-y-3.5 pt-2 text-xs font-extrabold text-[#172033]">
+                <div className="flex items-center space-x-3">
+                  <div className="w-7 h-7 rounded-lg bg-[#0875E1] text-white flex items-center justify-center shadow-2xs shrink-0">
+                    <CreditCard className="w-4 h-4" />
+                  </div>
+                  <span>Fast &amp; Secure Checkout</span>
+                </div>
 
-          {/* Error Alert Box */}
-          {(validationError || error) && (
-            <motion.div 
-              initial={{ opacity: 0, scale: 0.95 }}
-              animate={{ opacity: 1, scale: 1 }}
-              className="bg-red-50/90 backdrop-blur-md border border-red-200 p-4 rounded-2xl flex items-center space-x-3 text-xs text-red-800 font-semibold shadow-sm"
-            >
-              <AlertCircle className="w-5 h-5 text-red-600 flex-shrink-0" />
-              <span>{validationError || error}</span>
-            </motion.div>
-          )}
+                <div className="flex items-center space-x-3">
+                  <div className="w-7 h-7 rounded-lg bg-[#0875E1] text-white flex items-center justify-center shadow-2xs shrink-0">
+                    <Package className="w-4 h-4" />
+                  </div>
+                  <span>Track Your Orders</span>
+                </div>
 
-          {/* Form */}
-          <form onSubmit={handleSubmit} autoComplete="off" className="space-y-5">
-            <div className="space-y-1.5">
-              <label className="block text-[11px] font-bold text-gray-600 uppercase tracking-wider pl-1">Email Address</label>
-              <div className="relative group">
-                <Mail className="w-5 h-5 text-gray-400 group-focus-within:text-[#0071DC] absolute left-4 top-3.5 transition-colors" />
-                <input 
-                  type="email" 
-                  name="user_email_no_autofill"
-                  value={email}
-                  onChange={(e) => setEmail(e.target.value)}
-                  placeholder="Enter email address" 
-                  autoComplete="off"
-                  autoCapitalize="none"
-                  autoCorrect="off"
-                  className="w-full pl-11 pr-4 py-3.5 bg-gray-50/80 hover:bg-gray-100/80 focus:bg-white rounded-2xl border border-gray-200 focus:border-[#0071DC] focus:ring-4 focus:ring-blue-500/10 outline-none transition-all text-sm font-semibold shadow-inner"
-                />
+                <div className="flex items-center space-x-3">
+                  <div className="w-7 h-7 rounded-lg bg-[#0875E1] text-white flex items-center justify-center shadow-2xs shrink-0">
+                    <Zap className="w-4 h-4 text-[#FFC20A]" />
+                  </div>
+                  <span>Exclusive Offers</span>
+                </div>
+
+                <div className="flex items-center space-x-3">
+                  <div className="w-7 h-7 rounded-lg bg-[#0875E1] text-white flex items-center justify-center shadow-2xs shrink-0">
+                    <Heart className="w-4 h-4 text-red-300" />
+                  </div>
+                  <span>Save Your Favorites</span>
+                </div>
               </div>
             </div>
 
-            <div className="space-y-1.5">
-              <label className="block text-[11px] font-bold text-gray-600 uppercase tracking-wider pl-1">Password</label>
-              <div className="relative group">
-                <Lock className="w-5 h-5 text-gray-400 group-focus-within:text-[#0071DC] absolute left-4 top-3.5 transition-colors" />
-                <input 
-                  type={showPassword ? 'text' : 'password'} 
-                  name="user_pass_no_autofill"
-                  value={password}
-                  onChange={(e) => setPassword(e.target.value)}
-                  placeholder="Enter password" 
-                  autoComplete="new-password"
-                  className="w-full pl-11 pr-12 py-3.5 bg-gray-50/80 hover:bg-gray-100/80 focus:bg-white rounded-2xl border border-gray-200 focus:border-[#0071DC] focus:ring-4 focus:ring-blue-500/10 outline-none transition-all text-sm font-semibold shadow-inner"
+            {/* Bottom Lifestyle Image & Script Overlay */}
+            <div className="pt-6 relative z-10 flex flex-col items-center">
+              <div className="relative w-full max-w-[240px]">
+                <img
+                  src="https://images.unsplash.com/photo-1546435770-a3e426bf472b?w=600&auto=format&fit=crop&q=80"
+                  alt="NexDay Lifestyle Shopping"
+                  className="w-full h-40 object-cover rounded-2xl shadow-md border-2 border-white"
                 />
-                <button
-                  type="button"
-                  onClick={() => setShowPassword(!showPassword)}
-                  className="absolute right-4 top-3.5 text-gray-400 hover:text-gray-600 focus:outline-none transition-colors"
+                <div className="absolute inset-0 bg-gradient-to-t from-black/50 via-transparent to-transparent rounded-2xl flex items-end p-3">
+                  <p className="font-serif italic text-white text-sm font-bold drop-shadow">
+                    Good Products, Brighter Days &hearts;
+                  </p>
+                </div>
+              </div>
+            </div>
+
+          </div>
+
+          {/* RIGHT LOGIN FORM COLUMN */}
+          <div className="md:col-span-7 bg-white p-8 sm:p-10 flex flex-col justify-between space-y-6">
+            
+            <div className="space-y-4">
+              <div className="space-y-1">
+                <h2 className="text-2xl font-black text-[#172033] tracking-tight">Customer Login</h2>
+                <p className="text-xs font-semibold text-gray-500">Access your NexDay account</p>
+              </div>
+
+              {/* Validation / Auth Error Alert */}
+              {(validationError || error) && (
+                <motion.div 
+                  initial={{ opacity: 0, y: -5 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  className="bg-red-50 border border-red-200 p-3 rounded-xl flex items-center space-x-2.5 text-xs text-red-800 font-semibold"
                 >
-                  {showPassword ? <EyeOff className="w-5 h-5" /> : <Eye className="w-5 h-5" />}
+                  <AlertCircle className="w-4 h-4 text-red-600 shrink-0" />
+                  <span>{validationError || error}</span>
+                </motion.div>
+              )}
+
+              {/* Login Form */}
+              <form onSubmit={handleSubmit} autoComplete="off" className="space-y-4">
+                
+                {/* Email Field */}
+                <div className="space-y-1">
+                  <label className="block text-xs font-extrabold text-[#172033]">
+                    Email Address <span className="text-red-500">*</span>
+                  </label>
+                  <div className="relative">
+                    <Mail className="w-4 h-4 text-gray-400 absolute left-3.5 top-3" />
+                    <input 
+                      type="email" 
+                      value={email}
+                      onChange={(e) => setEmail(e.target.value)}
+                      placeholder="Enter your email address" 
+                      className="w-full pl-10 pr-4 py-2.5 bg-white rounded-xl border border-gray-200 focus:border-[#0875E1] focus:ring-2 focus:ring-blue-100 outline-none transition-all text-xs font-semibold text-[#172033]"
+                    />
+                  </div>
+                </div>
+
+                {/* Password Field */}
+                <div className="space-y-1">
+                  <label className="block text-xs font-extrabold text-[#172033]">
+                    Password <span className="text-red-500">*</span>
+                  </label>
+                  <div className="relative">
+                    <Lock className="w-4 h-4 text-gray-400 absolute left-3.5 top-3" />
+                    <input 
+                      type={showPassword ? 'text' : 'password'} 
+                      value={password}
+                      onChange={(e) => setPassword(e.target.value)}
+                      placeholder="Enter your password" 
+                      className="w-full pl-10 pr-10 py-2.5 bg-white rounded-xl border border-gray-200 focus:border-[#0875E1] focus:ring-2 focus:ring-blue-100 outline-none transition-all text-xs font-semibold text-[#172033]"
+                    />
+                    <button
+                      type="button"
+                      onClick={() => setShowPassword(!showPassword)}
+                      className="absolute right-3 top-2.5 text-gray-400 hover:text-gray-700"
+                    >
+                      {showPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+                    </button>
+                  </div>
+                </div>
+
+                {/* Checkbox & Forgot Password Row */}
+                <div className="flex items-center justify-between text-xs pt-1">
+                  <label className="flex items-center space-x-2 cursor-pointer text-gray-600 font-bold">
+                    <input 
+                      type="checkbox"
+                      checked={rememberMe}
+                      onChange={(e) => setRememberMe(e.target.checked)}
+                      className="w-4 h-4 rounded text-[#0875E1] focus:ring-[#0875E1] border-gray-300"
+                    />
+                    <span>Remember me</span>
+                  </label>
+                  <button 
+                    type="button" 
+                    onClick={() => navigate('/help')} 
+                    className="font-bold text-[#0875E1] hover:underline"
+                  >
+                    Forgot Password?
+                  </button>
+                </div>
+
+                {/* Main Submit Button */}
+                <button 
+                  type="submit"
+                  disabled={isLoading}
+                  className="w-full bg-[#0875E1] hover:bg-[#065eb8] text-white py-3 rounded-xl font-bold text-xs shadow-md transition-all active:scale-98 flex items-center justify-center space-x-2 cursor-pointer disabled:opacity-70"
+                >
+                  {isLoading ? (
+                    <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin"></div>
+                  ) : (
+                    <>
+                      <LogIn className="w-4 h-4" />
+                      <span>Login to NexDay</span>
+                    </>
+                  )}
+                </button>
+              </form>
+
+              {/* OR Divider */}
+              <div className="relative flex py-1 items-center">
+                <div className="flex-grow border-t border-gray-200"></div>
+                <span className="flex-shrink mx-3 text-[10px] font-extrabold text-gray-400 uppercase">OR</span>
+                <div className="flex-grow border-t border-gray-200"></div>
+              </div>
+
+              {/* Social Login Buttons Grid */}
+              <div className="grid grid-cols-2 gap-3">
+                <button 
+                  type="button" 
+                  onClick={() => handleSubmit({ preventDefault: () => {} } as any)} 
+                  className="w-full py-2.5 px-3 rounded-xl border border-gray-200 bg-white hover:bg-gray-50 text-xs font-bold text-gray-700 flex items-center justify-center space-x-2 transition-colors cursor-pointer"
+                >
+                  <svg className="w-4 h-4 shrink-0" viewBox="0 0 24 24">
+                    <path fill="#4285F4" d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z"/>
+                    <path fill="#34A853" d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z"/>
+                    <path fill="#FBBC05" d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.06H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.94l2.85-2.22.81-.63z"/>
+                    <path fill="#EA4335" d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.06l3.66 2.84c.87-2.6 3.3-4.52 6.16-4.52z"/>
+                  </svg>
+                  <span>Continue with Google</span>
+                </button>
+
+                <button 
+                  type="button" 
+                  onClick={() => handleSubmit({ preventDefault: () => {} } as any)} 
+                  className="w-full py-2.5 px-3 rounded-xl border border-gray-200 bg-white hover:bg-gray-50 text-xs font-bold text-gray-700 flex items-center justify-center space-x-2 transition-colors cursor-pointer"
+                >
+                  <svg className="w-4 h-4 shrink-0 fill-current" viewBox="0 0 24 24">
+                    <path d="M18.71 19.5c-.83 1.24-1.71 2.45-3.05 2.47-1.34.03-1.77-.79-3.29-.79-1.53 0-2 .77-3.27.82-1.31.05-2.3-1.32-3.14-2.53C4.25 17 2.94 12.45 4.7 9.39c.87-1.52 2.43-2.48 4.12-2.51 1.28-.02 2.5.87 3.29.87.78 0 2.26-1.07 3.81-.91.65.03 2.47.26 3.64 1.98-.09.06-2.17 1.28-2.15 3.81.03 3.02 2.65 4.03 2.68 4.04-.03.07-.42 1.44-1.38 2.83M15.97 6.85c.66-.8 1.11-1.92.99-3.04-.96.04-2.13.64-2.82 1.44-.61.71-1.14 1.86-.99 2.96 1.07.08 2.16-.55 2.82-1.36z"/>
+                  </svg>
+                  <span>Continue with Apple</span>
                 </button>
               </div>
             </div>
 
-            <div className="flex items-center justify-between text-xs font-bold text-[#0071DC] pt-1">
-              <label className="flex items-center space-x-2.5 cursor-pointer text-gray-600 font-semibold select-none">
-                <input 
-                  type="checkbox"
-                  checked={rememberMe}
-                  onChange={(e) => setRememberMe(e.target.checked)}
-                  className="w-4.5 h-4.5 rounded-lg text-[#0071DC] focus:ring-[#0071DC] border-gray-300 transition-colors"
-                />
-                <span>Remember me</span>
-              </label>
-              <button type="button" className="hover:underline focus:outline-none">Forgot password?</button>
+            {/* Bottom Account Switch Link */}
+            <div className="pt-4 border-t border-gray-100 text-center text-xs font-semibold text-gray-500">
+              <span>Don't have an account? </span>
+              <button 
+                type="button"
+                onClick={() => navigate(redirect ? `/register?redirect=${redirect}` : '/register')} 
+                className="font-extrabold text-[#0875E1] hover:underline"
+              >
+                Register here
+              </button>
             </div>
 
-            <motion.button 
-              whileHover={{ scale: 1.02, translateY: -1 }}
-              whileTap={{ scale: 0.98 }}
-              type="submit"
-              disabled={isLoading}
-              className="w-full bg-gradient-to-r from-[#0071DC] to-[#005bb5] hover:from-[#005bb5] hover:to-[#0046BE] text-white py-4 rounded-2xl font-black text-xs tracking-wider uppercase shadow-xl shadow-blue-500/25 transition-all flex items-center justify-center space-x-2 cursor-pointer disabled:opacity-70"
-            >
-              {isLoading ? (
-                <div className="w-5 h-5 border-2 border-white border-t-transparent rounded-full animate-spin"></div>
-              ) : (
-                <>
-                  <span>SIGN IN TO STORE</span>
-                  <ArrowLeft className="w-4 h-4 rotate-180" />
-                </>
-              )}
-            </motion.button>
-          </form>
-
-          <div className="flex items-center justify-between text-[11px] text-gray-400 font-bold uppercase my-4">
-            <span className="w-[42%] h-[1px] bg-gray-200"></span>
-            <span>OR</span>
-            <span className="w-[42%] h-[1px] bg-gray-200"></span>
           </div>
 
-          <motion.button 
-            whileHover={{ scale: 1.01 }}
-            whileTap={{ scale: 0.99 }}
-            type="button"
-            className="w-full border border-gray-200/80 hover:bg-gray-50/80 text-gray-700 py-3.5 rounded-2xl font-bold text-xs flex items-center justify-center space-x-2 transition-all shadow-sm"
-          >
-            <span>Continue with Google</span>
-          </motion.button>
-
-          <div className="text-center border-t border-gray-100 pt-4 text-xs font-semibold text-gray-500">
-            <span>New to NexDay? </span>
-            <button 
-              onClick={() => navigate(redirect ? `/register?redirect=${redirect}` : '/register')} 
-              className="font-bold text-[#0071DC] hover:underline focus:outline-none"
-            >
-              Create account
-            </button>
-          </div>
         </motion.div>
       </main>
 
       {/* FOOTER */}
-      <footer className="py-4 text-center text-[11px] font-bold uppercase tracking-wider text-gray-400 relative z-10 border-t border-gray-200/40 bg-white/50 backdrop-blur-md">
-        NexDay Customer Experience &bull; Secure Authentication Portal
-      </footer>
+      <Footer />
     </div>
   );
 };
+

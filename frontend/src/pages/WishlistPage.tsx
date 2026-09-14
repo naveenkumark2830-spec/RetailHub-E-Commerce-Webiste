@@ -2,503 +2,752 @@ import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { motion, AnimatePresence } from 'framer-motion';
 import { 
-  ShoppingBag, ArrowLeft, User, ShoppingCart, Heart, 
-  Star, Trash2, X, Plus, Minus, Zap, LogOut
+  Heart, Trash2, ShoppingCart, Sparkles, ChevronRight, 
+  Bell, Gift, Clock, ChevronLeft, Star, Settings, X, CheckCircle
 } from 'lucide-react';
 import { useSessionStore } from '../store/useSessionStore';
 import { useCartStore } from '../store/useCartStore';
+import { Header } from '../components/Header';
+import { Footer } from '../components/Footer';
+import { getProductImage } from '../utils/productImageMap';
 
 interface WishlistItem {
   product_id: string;
-  sku: string;
+  sku?: string;
   name: string;
-  brand: string;
-  category_id: string;
-  description: string;
+  brand?: string;
+  category_id?: string;
+  description?: string;
   price: number;
-  discount: number;
-  sale_price: number;
-  rating: number;
-  review_count: number;
-  stock: number;
-  delivery_days: number;
-  warranty: string;
+  discount?: number;
+  sale_price?: number;
+  rating?: number;
+  review_count?: number;
+  stock?: number;
+  delivery_days?: number;
+  warranty?: string;
   image_url?: string;
-  wishlist_id: string;
+  wishlist_id?: string;
 }
 
 export const WishlistPage: React.FC = () => {
   const navigate = useNavigate();
-  const { session, customer, isAuthenticated, logout, terminateSession } = useSessionStore();
-  const { items: cartItems, addItemToCart, removeItemFromCart, fetchCart, getCartTotalCount, getCartTotalPrice } = useCartStore();
+  const { session, customer } = useSessionStore();
+  const { addItemToCart, fetchCart } = useCartStore();
 
   const [wishlist, setWishlist] = useState<WishlistItem[]>([]);
-  const [isCartOpen, setIsCartOpen] = useState(false);
-  const [isAccountOpen, setIsAccountOpen] = useState(false);
+  const [selectedItemIds, setSelectedItemIds] = useState<string[]>([]);
+  const [recommended, setRecommended] = useState<any[]>([]);
   const [infoMessage, setInfoMessage] = useState<string | null>(null);
+  const [sortOption, setSortOption] = useState<string>('newest');
+  const [priceDropAlerts, setPriceDropAlerts] = useState<boolean>(true);
+  const [isManageAlertsOpen, setIsManageAlertsOpen] = useState<boolean>(false);
 
-  // Fetch cart
+  // Manage Alerts Form States
+  const [alertChannels, setAlertChannels] = useState({ email: true, push: true, sms: false });
+  const [alertThreshold, setAlertThreshold] = useState<string>('any');
+
   useEffect(() => {
-    if (session) {
-      fetchCart();
-    }
-  }, [session, fetchCart]);
+    if (session) fetchCart();
+  }, [session]);
 
-  // Fetch Wishlist Items
   const fetchWishlistItems = () => {
+    let localItems: WishlistItem[] = [];
+    try {
+      localItems = JSON.parse(localStorage.getItem('wishlist') || '[]');
+    } catch (e) {}
+
+    if (localItems.length > 0) {
+      setWishlist(localItems);
+    }
+
     if (!session) return;
     const customerParam = customer ? `&customer_id=${customer.customer_id}` : '';
     fetch(`/api/wishlist?session_id=${session.session_id}${customerParam}`)
       .then(res => res.json())
       .then(data => {
-        if (data.success) {
-          setWishlist(data.wishlist);
+        if (data.success && Array.isArray(data.wishlist) && data.wishlist.length > 0) {
+          const combinedMap = new Map<string, WishlistItem>();
+          localItems.forEach(item => combinedMap.set(item.product_id, item));
+          data.wishlist.forEach((item: WishlistItem) => combinedMap.set(item.product_id, item));
+          const merged = Array.from(combinedMap.values());
+          setWishlist(merged);
+          localStorage.setItem('wishlist', JSON.stringify(merged));
+          window.dispatchEvent(new Event('storage'));
         }
       })
-      .catch(err => console.error('[Wishlist API error]', err));
+      .catch(() => {});
   };
 
   useEffect(() => {
     fetchWishlistItems();
-    // Log wishlist_view clickstream telemetry
-    logTelemetryEvent('wishlist_view');
+
+    // Recommended items fallback
+    fetch('/api/products/trending')
+      .then(r => r.json())
+      .then(d => {
+        if (d.success && d.products) {
+          setRecommended(d.products.slice(0, 5));
+        }
+      })
+      .catch(() => {});
   }, [session, customer]);
 
-  const logTelemetryEvent = async (eventType: string, metadata: any = {}) => {
-    if (!session) return;
-    try {
-      await fetch('/api/events', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          event_type: eventType,
-          session_id: session.session_id,
-          customer_id: customer?.customer_id || null,
-          page: 'wishlist',
-          device: 'desktop',
-          browser: 'Chrome',
-          metadata
-        })
-      });
-    } catch (e) {
-      console.warn('[Telemetry Event Logging failed]', e);
-    }
+  const showAlert = (msg: string) => {
+    setInfoMessage(msg);
+    setTimeout(() => setInfoMessage(null), 3000);
   };
 
-  // Remove from Wishlist
   const handleRemove = async (productId: string) => {
-    if (!session) return;
-    const customerParam = customer ? `&customer_id=${customer.customer_id}` : '';
     try {
-      const response = await fetch(`/api/wishlist/${productId}?session_id=${session.session_id}${customerParam}`, {
+      const stored = JSON.parse(localStorage.getItem('wishlist') || '[]');
+      const updated = stored.filter((item: any) => item.product_id !== productId);
+      localStorage.setItem('wishlist', JSON.stringify(updated));
+      setWishlist(prev => prev.filter(item => item.product_id !== productId));
+      setSelectedItemIds(prev => prev.filter(id => id !== productId));
+      window.dispatchEvent(new Event('storage'));
+    } catch (e) {}
+
+    // Sync removal with savedItems in CartStore
+    try {
+      await useCartStore.getState().removeSavedItem(productId);
+    } catch (e) {}
+
+    if (session) {
+      const customerParam = customer ? `&customer_id=${customer.customer_id}` : '';
+      fetch(`/api/wishlist/${productId}?session_id=${session.session_id}${customerParam}`, {
         method: 'DELETE'
-      });
-      const data = await response.json();
-      if (data.success) {
-        setWishlist(prev => prev.filter(item => item.product_id !== productId));
-        showTemporaryAlert('Item removed from your wishlist.');
-      }
-    } catch (err) {
-      console.error(err);
+      }).catch(() => {});
     }
   };
 
-  // Add Wishlist Item to Cart
   const handleAddToCart = async (item: WishlistItem) => {
-    // 1. Add item to cart using existing Cart API specifying source as 'wishlist'
     await addItemToCart({
       product_id: item.product_id,
       name: item.name,
-      brand: item.brand,
+      brand: item.brand || 'RetailHub',
       price: item.price,
-      discount: item.discount,
-      sale_price: item.sale_price
+      discount: item.discount || 0,
+      sale_price: item.sale_price || item.price,
     }, 1, 'wishlist');
-
-    showTemporaryAlert(`Added ${item.name} to cart!`);
-    setIsCartOpen(true);
+    await handleRemove(item.product_id);
+    showAlert(`Added ${item.name} to cart and removed from wishlist!`);
   };
 
-  const showTemporaryAlert = (msg: string) => {
-    setInfoMessage(msg);
-    setTimeout(() => {
-      setInfoMessage(null);
-    }, 3000);
-  };
+  const handleAddAllToCart = async () => {
+    if (wishlist.length === 0) return;
+    const itemsToAdd = [...wishlist];
 
-  const handleExitSession = async () => {
-    if (isAuthenticated) {
-      await logout();
-    } else {
-      await terminateSession();
+    for (const item of itemsToAdd) {
+      await addItemToCart({
+        product_id: item.product_id,
+        name: item.name,
+        brand: item.brand || 'RetailHub',
+        price: item.price,
+        discount: item.discount || 0,
+        sale_price: item.sale_price || item.price,
+      }, 1, 'wishlist');
     }
-    navigate('/');
+
+    const addedIds = new Set(itemsToAdd.map(i => i.product_id));
+    try {
+      const stored = JSON.parse(localStorage.getItem('wishlist') || '[]');
+      const updated = stored.filter((item: any) => !addedIds.has(item.product_id));
+      localStorage.setItem('wishlist', JSON.stringify(updated));
+      window.dispatchEvent(new Event('storage'));
+    } catch (e) {}
+
+    setWishlist(prev => prev.filter(item => !addedIds.has(item.product_id)));
+    setSelectedItemIds([]);
+
+    for (const item of itemsToAdd) {
+      if (session) {
+        const customerParam = customer ? `&customer_id=${customer.customer_id}` : '';
+        fetch(`/api/wishlist/${item.product_id}?session_id=${session.session_id}${customerParam}`, {
+          method: 'DELETE'
+        }).catch(() => {});
+      }
+    }
+
+    await fetchCart();
+    showAlert(`Added all ${itemsToAdd.length} items to cart!`);
   };
+
+  const handleToggleSelect = (productId: string) => {
+    setSelectedItemIds(prev => 
+      prev.includes(productId) ? prev.filter(id => id !== productId) : [...prev, productId]
+    );
+  };
+
+  const handleSelectAll = () => {
+    if (selectedItemIds.length === wishlist.length) {
+      setSelectedItemIds([]);
+    } else {
+      setSelectedItemIds(wishlist.map(i => i.product_id));
+    }
+  };
+
+  const handleAddSelectedToCart = async () => {
+    const itemsToAdd = wishlist.filter(i => selectedItemIds.includes(i.product_id));
+    if (itemsToAdd.length === 0) return;
+
+    for (const item of itemsToAdd) {
+      await addItemToCart({
+        product_id: item.product_id,
+        name: item.name,
+        brand: item.brand || 'RetailHub',
+        price: item.price,
+        discount: item.discount || 0,
+        sale_price: item.sale_price || item.price,
+      }, 1, 'wishlist');
+    }
+
+    const addedIds = new Set(itemsToAdd.map(i => i.product_id));
+    try {
+      const stored = JSON.parse(localStorage.getItem('wishlist') || '[]');
+      const updated = stored.filter((item: any) => !addedIds.has(item.product_id));
+      localStorage.setItem('wishlist', JSON.stringify(updated));
+      window.dispatchEvent(new Event('storage'));
+    } catch (e) {}
+
+    setWishlist(prev => prev.filter(item => !addedIds.has(item.product_id)));
+    setSelectedItemIds([]);
+
+    for (const item of itemsToAdd) {
+      if (session) {
+        const customerParam = customer ? `&customer_id=${customer.customer_id}` : '';
+        fetch(`/api/wishlist/${item.product_id}?session_id=${session.session_id}${customerParam}`, {
+          method: 'DELETE'
+        }).catch(() => {});
+      }
+    }
+
+    await fetchCart();
+    showAlert(`Added ${itemsToAdd.length} selected items to cart!`);
+  };
+
+  const handleRemoveSelected = () => {
+    if (selectedItemIds.length === 0) return;
+    selectedItemIds.forEach(id => handleRemove(id));
+  };
+
+  // Calculate totals
+  const totalWishlistValue = wishlist.reduce((acc, item) => acc + (item.sale_price || item.price), 0);
+
+  // Sorting wishlist
+  const sortedWishlist = [...wishlist].sort((a, b) => {
+    if (sortOption === 'price_low') return (a.sale_price || a.price) - (b.sale_price || b.price);
+    if (sortOption === 'price_high') return (b.sale_price || b.price) - (a.sale_price || a.price);
+    if (sortOption === 'rating') return (b.rating || 0) - (a.rating || 0);
+    return 0;
+  });
+
+  // Demo Recently Viewed Items
+  const recentlyViewed = [
+    { product_id: 'P-RV1', name: 'MacBook Air M2', price: 89990, img: 'https://images.unsplash.com/photo-1517336714731-489689fd1ca8?w=300&auto=format&fit=crop' },
+    { product_id: 'P-RV2', name: 'iPad 10th Gen', price: 34900, img: 'https://images.unsplash.com/photo-1544244015-0df4b3ffc6b0?w=300&auto=format&fit=crop' },
+    { product_id: 'P-RV3', name: 'Adidas Ultraboost', price: 12999, img: 'https://images.unsplash.com/photo-1584735935682-2f2b69dff9d2?w=300&auto=format&fit=crop' },
+    { product_id: 'P-RV4', name: 'Sony WH-1000XM5', price: 29990, img: 'https://images.unsplash.com/photo-1505740420928-5e560c06d30e?w=300&auto=format&fit=crop' },
+    { product_id: 'P-RV5', name: 'Samsung Galaxy S24', price: 74999, img: 'https://images.unsplash.com/photo-1610945265064-0e34e5519bbf?w=300&auto=format&fit=crop' },
+  ];
 
   return (
-    <div className="min-h-screen bg-[#F7F8F9] flex flex-col justify-between text-[#041E42] font-sans">
+    <div className="min-h-screen bg-[#F5F7FA] text-[#172033] flex flex-col justify-between font-sans relative selection:bg-[#0875E1] selection:text-white">
       
-      {/* ALERTS */}
-      <AnimatePresence>
-        {infoMessage && (
-          <motion.div 
-            initial={{ opacity: 0, y: -20, x: '-50%' }}
-            animate={{ opacity: 1, y: 0, x: '-50%' }}
-            exit={{ opacity: 0, y: -20, x: '-50%' }}
-            className="fixed top-20 left-1/2 -translate-x-1/2 bg-[#0071DC] text-white px-5 py-3 rounded-2xl shadow-2xl z-50 flex items-center space-x-2 text-xs font-bold font-mono border border-white/20"
-          >
-            <Zap className="w-4 h-4 text-[#FFC220] fill-[#FFC220]" />
-            <span>{infoMessage}</span>
-          </motion.div>
-        )}
-      </AnimatePresence>
+      {/* HEADER */}
+      <Header />
 
-      {/* NAVBAR */}
-      <header className="bg-[#0071DC] text-white sticky top-0 z-40 shadow-md">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-3.5 flex items-center justify-between gap-4">
-          <div 
-            onClick={() => navigate('/home')} 
-            className="flex items-center space-x-2 cursor-pointer flex-shrink-0"
-          >
-            <div className="bg-[#FFC220] text-[#041E42] p-2 rounded-full font-bold">
-              <ShoppingBag className="w-5 h-5" />
-            </div>
-            <span className="text-2xl font-black tracking-tight">NexDay</span>
-          </div>
-
-          <div className="flex items-center space-x-4">
-            <button 
-              onClick={() => navigate('/home')}
-              className="flex items-center space-x-1 text-xs font-bold text-blue-100 hover:text-white bg-white/10 px-3 py-1.5 rounded-full transition-colors"
-            >
-              <ArrowLeft className="w-3.5 h-3.5" />
-              <span>Back Home</span>
-            </button>
-
-            <div className="relative">
-              <button 
-                onClick={() => setIsAccountOpen(!isAccountOpen)}
-                className="flex items-center space-x-1.5 hover:bg-white/10 px-3 py-2 rounded-full transition-colors text-sm font-bold focus:outline-none"
-              >
-                <User className="w-4 h-4" />
-                <span>{isAuthenticated && customer ? `Hi, ${customer.first_name}` : 'Account'}</span>
-              </button>
-
-              <AnimatePresence>
-                {isAccountOpen && (
-                  <motion.div 
-                    initial={{ opacity: 0, y: 10 }}
-                    animate={{ opacity: 1, y: 0 }}
-                    exit={{ opacity: 0, y: 10 }}
-                    className="absolute right-0 mt-2 w-56 bg-white rounded-2xl shadow-2xl border border-gray-100 p-4 text-[#041E42] z-50 text-xs space-y-3"
-                  >
-                    <div className="border-b pb-2">
-                      <p className="font-bold text-gray-500 uppercase tracking-wider text-[10px]">Session ID</p>
-                      <p className="font-mono text-[#0071DC] font-bold overflow-hidden text-ellipsis">{session?.session_id}</p>
-                    </div>
-
-                    {isAuthenticated && customer ? (
-                      <div className="space-y-1">
-                        <p className="font-medium text-gray-700">User: <span className="font-bold">{customer.first_name}</span></p>
-                        <p className="font-medium text-gray-700">Level: <span className="font-bold uppercase text-[#FFC220]">{customer.membership}</span></p>
-                      </div>
-                    ) : (
-                      <button 
-                        onClick={() => { setIsAccountOpen(false); navigate('/login'); }}
-                        className="w-full bg-[#0071DC] hover:bg-[#0046BE] text-white py-2 rounded-full font-bold transition-colors"
-                      >
-                        Sign In
-                      </button>
-                    )}
-
-                    <button 
-                      onClick={handleExitSession}
-                      className="w-full border border-red-200 hover:bg-red-50 text-red-600 py-2 rounded-full font-bold transition-colors flex items-center justify-center space-x-1"
-                    >
-                      <LogOut className="w-3.5 h-3.5" />
-                      <span>{isAuthenticated ? 'Logout' : 'Exit Session'}</span>
-                    </button>
-                  </motion.div>
-                )}
-              </AnimatePresence>
-            </div>
-
-            <button 
-              onClick={() => setIsCartOpen(true)}
-              className="flex items-center space-x-2 bg-[#FFC220] hover:bg-[#E5AC12] text-[#041E42] px-4 py-2 rounded-full transition-colors text-sm font-bold shadow-md relative"
-            >
-              <ShoppingCart className="w-4 h-4" />
-              <span>Cart</span>
-              {getCartTotalCount() > 0 && (
-                <span className="absolute -top-1.5 -right-1.5 bg-red-600 text-white font-black text-[10px] w-5 h-5 rounded-full flex items-center justify-center border border-white">
-                  {getCartTotalCount()}
-                </span>
-              )}
-            </button>
-          </div>
+      {/* ALERT NOTIFICATION */}
+      {infoMessage && (
+        <div className="fixed bottom-6 right-6 z-50 bg-[#0B2A55] text-white px-5 py-3 rounded-2xl shadow-2xl text-xs font-bold flex items-center space-x-2 border border-blue-400">
+          <Sparkles className="w-4 h-4 text-[#FFC20A]" />
+          <span>{infoMessage}</span>
         </div>
-      </header>
+      )}
 
-      {/* HEADER SECTION */}
-      <section className="bg-white border-b py-6 px-6 shadow-sm">
-        <div className="max-w-7xl mx-auto flex items-baseline justify-between">
-          <div className="space-y-1">
-            <h1 className="text-3xl font-black tracking-tight text-[#041E42]">My Wishlist</h1>
-            <p className="text-xs text-gray-400 font-bold uppercase tracking-wider">
-              {wishlist.length} {wishlist.length === 1 ? 'item' : 'items'} saved
-            </p>
+      {/* MAIN CONTENT AREA */}
+      <main className="flex-grow w-full max-w-[1400px] mx-auto px-4 sm:px-6 md:px-8 py-5 space-y-5">
+        
+        {/* BREADCRUMBS */}
+        <nav className="flex items-center space-x-1.5 text-xs text-gray-500 font-semibold">
+          <button onClick={() => navigate('/home')} className="hover:text-[#0875E1]">Home</button>
+          <ChevronRight className="w-3.5 h-3.5 text-gray-400" />
+          <span className="text-[#0875E1] font-bold">My Wishlist</span>
+        </nav>
+
+        {/* TOP BANNER & TITLE AREA MATCHING REFERENCE IMAGE 100% */}
+        <div className="grid grid-cols-1 lg:grid-cols-12 gap-4 items-center">
+          
+          {/* Left Title Column */}
+          <div className="lg:col-span-8 flex items-start space-x-3.5">
+            <div className="p-3.5 bg-red-100/70 text-red-500 rounded-2xl shrink-0 shadow-2xs">
+              <Heart className="w-7 h-7 fill-red-500" />
+            </div>
+            <div className="space-y-1">
+              <h1 className="text-2xl sm:text-3xl font-black text-[#172033] tracking-tight">My Wishlist</h1>
+              <p className="text-xs font-extrabold text-gray-500">{wishlist.length} {wishlist.length === 1 ? 'item' : 'items'} saved</p>
+              <p className="text-xs text-gray-500 font-medium">Keep track of your favorite products. Prices may change, so grab them soon!</p>
+            </div>
           </div>
-          <span className="text-xs font-mono text-gray-400 bg-gray-50 border px-3 py-1 rounded-xl">
-            {isAuthenticated ? 'Authenticated Wishlist' : 'Temporary Guest Session'}
-          </span>
+
+          {/* Right Top Promo Card */}
+          <div className="lg:col-span-4 bg-gradient-to-r from-blue-50 to-indigo-50 border border-blue-100 rounded-2xl p-3.5 flex items-center justify-between shadow-2xs">
+            <div className="space-y-0.5">
+              <h4 className="text-xs font-black text-[#0875E1]">Save what you love</h4>
+              <p className="text-[11px] font-semibold text-gray-600">Shop when you're ready!</p>
+            </div>
+            <div className="w-10 h-10 bg-white rounded-xl shadow-xs flex items-center justify-center text-[#0875E1] shrink-0">
+              <Gift className="w-5 h-5 text-[#0875E1]" />
+            </div>
+          </div>
+
         </div>
-      </section>
 
-      {/* MAIN CONTENT */}
-      <main className="max-w-7xl w-full mx-auto px-4 sm:px-6 lg:px-8 py-8 flex-grow">
-        {wishlist.length > 0 ? (
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
-            {wishlist.map((item) => {
-              const priceDifference = item.price - item.sale_price;
-              const hasPriceDrop = item.discount > 0 && priceDifference > 0;
+        {/* MAIN SPLIT LAYOUT (WISHLIST ITEMS + ACTION SIDEBAR) */}
+        <div className="grid grid-cols-1 lg:grid-cols-12 gap-5 items-start">
+          
+          {/* LEFT COLUMN: ACTION BAR + PRODUCT CARDS GRID (COL 8/9) */}
+          <div className="lg:col-span-8 space-y-4">
+            
+            {/* ACTION BAR (SELECT ALL + BULK ACTIONS + SORT) */}
+            <div className="bg-white p-3.5 rounded-2xl border border-gray-200/80 shadow-2xs flex flex-wrap items-center justify-between gap-3">
+              
+              <div className="flex items-center space-x-3 text-xs font-bold">
+                {/* Select All Checkbox */}
+                <label className="flex items-center space-x-2 cursor-pointer select-none text-gray-700">
+                  <input
+                    type="checkbox"
+                    checked={wishlist.length > 0 && selectedItemIds.length === wishlist.length}
+                    onChange={handleSelectAll}
+                    className="w-4 h-4 rounded text-[#0875E1] focus:ring-[#0875E1] border-gray-300 cursor-pointer"
+                  />
+                  <span>Select All</span>
+                </label>
 
-              return (
-                <div 
-                  key={item.product_id}
-                  className="bg-white p-5 rounded-3xl border border-gray-100 hover:shadow-xl transition-all flex flex-col justify-between space-y-4 group relative"
+                {/* Bulk Action Buttons */}
+                <button
+                  disabled={selectedItemIds.length === 0}
+                  onClick={handleAddSelectedToCart}
+                  className="px-3 py-1.5 bg-white hover:bg-blue-50 text-[#0875E1] border border-[#0875E1]/40 hover:border-[#0875E1] rounded-xl font-bold transition-all disabled:opacity-40 disabled:hover:bg-white flex items-center space-x-1.5 cursor-pointer shadow-2xs"
                 >
-                  {/* Remove cross action button */}
-                  <button 
-                    onClick={() => handleRemove(item.product_id)}
-                    className="absolute top-4 right-4 bg-gray-50 hover:bg-red-50 text-gray-400 hover:text-red-600 p-2 rounded-full transition-colors z-20"
-                    title="Remove item"
-                  >
-                    <Trash2 className="w-4 h-4" />
-                  </button>
+                  <ShoppingCart className="w-3.5 h-3.5" />
+                  <span>Add Selected to Cart</span>
+                </button>
 
-                  <div className="relative cursor-pointer" onClick={() => navigate(`/product/${item.product_id}`)}>
-                    {hasPriceDrop && (
-                      <span className="absolute top-0 left-0 bg-[#0071DC] text-white text-[9px] font-black px-2 py-0.5 rounded-md uppercase z-10">
-                        Price Drop!
-                      </span>
-                    )}
+                <button
+                  disabled={selectedItemIds.length === 0}
+                  onClick={handleRemoveSelected}
+                  className="px-3 py-1.5 bg-white hover:bg-red-50 text-gray-600 hover:text-red-600 border border-gray-200 hover:border-red-200 rounded-xl font-bold transition-all disabled:opacity-40 flex items-center space-x-1.5 cursor-pointer shadow-2xs"
+                >
+                  <Trash2 className="w-3.5 h-3.5" />
+                  <span>Remove Selected</span>
+                </button>
+              </div>
 
-                    {/* Image Block */}
-                    <div className="bg-gray-50 h-40 rounded-2xl flex items-center justify-center text-center relative overflow-hidden p-2">
-                      {item.image_url ? (
-                        <img 
-                          src={item.image_url} 
-                          alt={item.name} 
-                          className="w-full h-full object-contain mix-blend-multiply group-hover:scale-105 transition-transform duration-300" 
-                        />
-                      ) : (
-                        <span className="text-sm font-black uppercase text-gray-300 tracking-widest">{item.brand}</span>
-                      )}
-                    </div>
-                  </div>
+              {/* Right Sort Dropdown */}
+              <div className="flex items-center space-x-2 text-xs font-bold text-gray-600">
+                <span className="text-gray-400">Sort by:</span>
+                <select
+                  value={sortOption}
+                  onChange={(e) => setSortOption(e.target.value)}
+                  className="bg-gray-50 border border-gray-200 text-[#172033] px-3 py-1.5 rounded-xl focus:outline-none focus:ring-2 focus:ring-[#0875E1] cursor-pointer font-bold"
+                >
+                  <option value="newest">Date Added (Newest)</option>
+                  <option value="price_low">Price: Low to High</option>
+                  <option value="price_high">Price: High to Low</option>
+                  <option value="rating">Highest Rating</option>
+                </select>
+              </div>
 
-                  <div className="space-y-1.5 flex-grow">
-                    <p className="text-[10px] text-gray-400 font-bold uppercase">{item.brand}</p>
-                    <h3 
-                      onClick={() => navigate(`/product/${item.product_id}`)}
-                      className="text-xs font-extrabold text-gray-800 line-clamp-2 leading-tight cursor-pointer hover:text-[#0071DC] transition-colors"
+            </div>
+
+            {/* PRODUCT CARDS GRID (4 COLUMNS MATCHING REFERENCE IMAGE EXACTLY) */}
+            {sortedWishlist.length > 0 ? (
+              <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-3 items-stretch">
+                {sortedWishlist.map((item) => {
+                  const imgUrl = getProductImage(item);
+                  const currentPrice = item.sale_price || item.price;
+                  const originalPrice = item.sale_price ? item.price : Math.round(currentPrice * 1.2);
+                  const discountPercent = item.discount || Math.round(((originalPrice - currentPrice) / originalPrice) * 100);
+                  const isSelected = selectedItemIds.includes(item.product_id);
+
+                  return (
+                    <motion.div
+                      key={item.product_id}
+                      whileHover={{ y: -3 }}
+                      className={`bg-white rounded-2xl border ${isSelected ? 'border-[#0875E1] ring-1 ring-blue-200' : 'border-gray-200/80'} shadow-2xs p-3.5 flex flex-col justify-between space-y-2.5 relative group transition-all`}
                     >
-                      {item.name}
-                    </h3>
-                    
-                    <div className="flex items-center space-x-1.5 text-amber-500 text-[10px] font-bold">
-                      <Star className="w-3.5 h-3.5 fill-amber-500" />
-                      <span className="text-gray-700">{item.rating}</span>
-                      <span className="text-gray-400">({item.review_count})</span>
-                    </div>
+                      {/* Checkbox Top Left */}
+                      <input
+                        type="checkbox"
+                        checked={isSelected}
+                        onChange={() => handleToggleSelect(item.product_id)}
+                        className="absolute top-3 left-3 w-4 h-4 rounded text-[#0875E1] focus:ring-[#0875E1] border-gray-300 z-20 cursor-pointer"
+                      />
 
-                    <div className="pt-1.5 space-y-1">
-                      <div className="flex items-baseline space-x-2">
-                        <span className="text-base font-black text-[#041E42]">₹{item.sale_price.toLocaleString()}</span>
-                        {item.discount > 0 && (
-                          <span className="text-xs text-gray-400 line-through">₹{item.price.toLocaleString()}</span>
-                        )}
+                      {/* Heart Delete Button Top Right */}
+                      <button
+                        onClick={() => handleRemove(item.product_id)}
+                        className="absolute top-3 right-3 w-7 h-7 rounded-full bg-white/90 shadow-2xs border border-gray-100 flex items-center justify-center text-red-500 hover:scale-110 transition-transform z-20 cursor-pointer"
+                        title="Remove from Wishlist"
+                      >
+                        <Heart className="w-4 h-4 fill-red-500 text-red-500" />
+                      </button>
+
+                      {/* Image Stage Container */}
+                      <div 
+                        onClick={() => navigate(`/product/${item.product_id}`)}
+                        className="w-full aspect-square bg-[#FAF5EE]/30 rounded-xl p-3 flex items-center justify-center cursor-pointer overflow-hidden group"
+                      >
+                        <img 
+                          src={imgUrl} 
+                          alt={item.name} 
+                          className="w-full h-full object-contain group-hover:scale-105 transition-transform duration-300" 
+                        />
                       </div>
-                      
-                      {hasPriceDrop && (
-                        <p className="text-[9px] font-black text-emerald-600 bg-emerald-50 px-2 py-0.5 rounded w-fit">
-                          Price dropped by ₹{priceDifference.toLocaleString()}!
-                        </p>
-                      )}
-                    </div>
 
-                    {/* Stock & Delivery details */}
-                    <div className="text-[10px] font-bold text-gray-500 pt-2 space-y-0.5">
-                      <p className={item.stock > 0 ? 'text-emerald-600' : 'text-red-600'}>
-                        {item.stock > 0 ? `✓ In Stock (${item.stock} available)` : 'Out of Stock'}
-                      </p>
-                      <p>Estimated Delivery: {item.delivery_days <= 1 ? 'Tomorrow' : `Within ${item.delivery_days} Days`}</p>
+                      {/* Details Content Area */}
+                      <div className="space-y-1">
+                        <span className="text-[10px] font-black text-gray-400 uppercase tracking-wider block">
+                          {item.brand || 'BRAND'}
+                        </span>
+                        <h3 
+                          onClick={() => navigate(`/product/${item.product_id}`)}
+                          className="text-xs font-bold text-[#172033] line-clamp-1 cursor-pointer hover:text-[#0875E1] tracking-tight"
+                          title={item.name}
+                        >
+                          {item.name}
+                        </h3>
+
+                        {/* Rating Row */}
+                        <div className="flex items-center space-x-1 text-[11px] font-bold text-gray-500">
+                          <Star className="w-3 h-3 text-amber-400 fill-amber-400" />
+                          <span className="text-[#172033]">{item.rating || 4.5}</span>
+                          <span className="text-gray-400">({(item.review_count || 1240).toLocaleString()})</span>
+                        </div>
+
+                        {/* Price Row */}
+                        <div className="flex items-baseline space-x-1.5 pt-0.5">
+                          <span className="text-sm font-black text-[#172033]">₹{currentPrice.toLocaleString()}</span>
+                          {originalPrice > currentPrice && (
+                            <span className="text-[11px] font-semibold text-gray-400 line-through">₹{originalPrice.toLocaleString()}</span>
+                          )}
+                          {discountPercent > 0 && (
+                            <span className="text-[11px] font-black text-emerald-600">{discountPercent}% OFF</span>
+                          )}
+                        </div>
+
+                        {/* Stock Badge */}
+                        <div className="pt-0.5">
+                          <span className={`inline-block text-[10px] font-bold px-2 py-0.5 rounded-md ${
+                            (item.stock || 10) < 5 
+                              ? 'bg-rose-50 text-rose-600 border border-rose-200' 
+                              : 'bg-emerald-50 text-emerald-600 border border-emerald-200/60'
+                          }`}>
+                            {(item.stock || 10) < 5 ? `Only ${item.stock || 2} left` : 'In Stock'}
+                          </span>
+                        </div>
+                      </div>
+
+                      {/* Add to Cart Outline Button */}
+                      <button
+                        onClick={() => handleAddToCart(item)}
+                        className="w-full bg-white hover:bg-blue-50 text-[#0875E1] border border-[#0875E1] py-2 px-3 rounded-xl font-extrabold text-xs flex items-center justify-center space-x-1.5 transition-all shadow-2xs cursor-pointer active:scale-98"
+                      >
+                        <ShoppingCart className="w-3.5 h-3.5 stroke-[2.5]" />
+                        <span>Add to Cart</span>
+                      </button>
+                    </motion.div>
+                  );
+                })}
+              </div>
+            ) : (
+              <div className="bg-white rounded-2xl border border-gray-200 p-12 text-center space-y-4 shadow-2xs">
+                <div className="w-14 h-14 bg-blue-50 text-[#0875E1] rounded-full flex items-center justify-center mx-auto">
+                  <Heart className="w-7 h-7 text-[#0875E1]" />
+                </div>
+                <div className="space-y-1">
+                  <h3 className="text-base font-extrabold text-[#172033]">Your Wishlist is Empty</h3>
+                  <p className="text-xs text-gray-500 font-medium">Explore products and click the heart icon to save your favorites!</p>
+                </div>
+                <button
+                  onClick={() => navigate('/home')}
+                  className="bg-[#0875E1] text-white font-extrabold text-xs px-6 py-2.5 rounded-full hover:bg-[#065BB5] transition-all shadow-sm cursor-pointer"
+                >
+                  Start Shopping
+                </button>
+              </div>
+            )}
+
+          </div>
+
+          {/* RIGHT SIDEBAR (COL 4 MATCHING REFERENCE IMAGE EXACTLY) */}
+          <aside className="lg:col-span-4 space-y-4">
+            
+            {/* 1. WISHLIST SUMMARY CARD */}
+            <div className="bg-white rounded-2xl border border-gray-200/80 p-4 space-y-4 shadow-2xs">
+              <div className="flex items-center space-x-2 border-b border-gray-100 pb-3">
+                <Heart className="w-4 h-4 text-red-500 fill-red-500" />
+                <h3 className="text-xs font-black uppercase tracking-wider text-[#172033]">Wishlist Summary</h3>
+              </div>
+
+              {/* 2 Big Stat Metrics */}
+              <div className="grid grid-cols-2 gap-3 text-center bg-gray-50/80 rounded-xl p-3 border border-gray-100">
+                <div>
+                  <p className="text-lg font-black text-[#172033]">{wishlist.length}</p>
+                  <p className="text-[10px] font-bold text-gray-400 uppercase">Items Saved</p>
+                </div>
+                <div>
+                  <p className="text-lg font-black text-[#172033]">₹{totalWishlistValue.toLocaleString()}</p>
+                  <p className="text-[10px] font-bold text-gray-400 uppercase">Total Value</p>
+                </div>
+              </div>
+
+              {/* Add All to Cart Button */}
+              <button
+                disabled={wishlist.length === 0}
+                onClick={handleAddAllToCart}
+                className="w-full bg-[#0875E1] hover:bg-[#065BB5] disabled:opacity-40 text-white py-2.5 px-4 rounded-xl font-black text-xs flex items-center justify-center space-x-2 transition-all shadow-md cursor-pointer active:scale-98"
+              >
+                <ShoppingCart className="w-4 h-4 stroke-[2.5]" />
+                <span>Add All To Cart</span>
+              </button>
+            </div>
+
+            {/* 2. PRICE DROP ALERTS CARD */}
+            <div className="bg-white rounded-2xl border border-gray-200/80 p-4 space-y-3 shadow-2xs">
+              <div className="flex items-center justify-between border-b border-gray-100 pb-2.5">
+                <div className="flex items-center space-x-2">
+                  <Bell className="w-4 h-4 text-[#0875E1]" />
+                  <h3 className="text-xs font-black uppercase tracking-wider text-[#172033]">Price Drop Alerts</h3>
+                </div>
+
+                {/* Smooth Animated Toggle Switch Knob */}
+                <button
+                  onClick={() => {
+                    const next = !priceDropAlerts;
+                    setPriceDropAlerts(next);
+                    showAlert(next ? 'Price Drop Alerts turned ON' : 'Price Drop Alerts turned OFF');
+                  }}
+                  className={`w-11 h-6 flex items-center rounded-full p-1 transition-colors duration-200 cursor-pointer shadow-inner ${
+                    priceDropAlerts ? 'bg-[#0875E1]' : 'bg-gray-300'
+                  }`}
+                  title="Toggle Price Drop Alerts"
+                >
+                  <span className={`bg-white w-4 h-4 rounded-full shadow-md transform transition-transform duration-200 ${
+                    priceDropAlerts ? 'translate-x-5' : 'translate-x-0'
+                  }`} />
+                </button>
+              </div>
+
+              <p className="text-xs text-gray-500 font-medium leading-relaxed">
+                Get notified when prices drop on items in your wishlist.
+              </p>
+
+              <button
+                onClick={() => setIsManageAlertsOpen(true)}
+                className="w-full bg-gray-50 hover:bg-blue-50 hover:text-[#0875E1] hover:border-blue-200 text-gray-700 border border-gray-200 py-2 rounded-xl text-xs font-bold flex items-center justify-center space-x-1.5 transition-all cursor-pointer shadow-2xs"
+              >
+                <Settings className="w-3.5 h-3.5" />
+                <span>Manage Alerts</span>
+              </button>
+            </div>
+
+            {/* 3. YOU MAY ALSO LIKE CARD */}
+            <div className="bg-white rounded-2xl border border-gray-200/80 p-4 space-y-3 shadow-2xs">
+              <div className="flex items-center justify-between border-b border-gray-100 pb-2.5">
+                <div>
+                  <h3 className="text-xs font-black uppercase tracking-wider text-[#172033]">You may also like</h3>
+                  <p className="text-[10px] text-gray-400 font-semibold">Based on your wishlist</p>
+                </div>
+                <button onClick={() => navigate('/home')} className="text-xs font-extrabold text-[#0875E1] hover:underline">
+                  View All
+                </button>
+              </div>
+
+              {/* 3 Horizontal Recommendation Rows */}
+              <div className="space-y-3">
+                {(recommended.length > 0 ? recommended.slice(0, 3) : [
+                  { product_id: 'REC1', name: 'AirPods Pro (2nd Gen)', rating: 4.6, review_count: 9322, price: 22900, image_url: 'https://images.unsplash.com/photo-1600294037681-c80b4cb5b434?w=200&auto=format&fit=crop' },
+                  { product_id: 'REC2', name: 'Samsung T7 SSD 1TB', rating: 4.5, review_count: 4921, price: 8999, image_url: 'https://images.unsplash.com/photo-1597872200969-2b65d56bd16b?w=200&auto=format&fit=crop' },
+                  { product_id: 'REC3', name: 'Logitech MX Master 3S', rating: 4.4, review_count: 3812, price: 7495, image_url: 'https://images.unsplash.com/photo-1615663245857-ac93bb7c39e7?w=200&auto=format&fit=crop' }
+                ]).map((rec) => {
+                  const recImg = getProductImage(rec);
+                  return (
+                    <div key={rec.product_id} className="flex items-center justify-between space-x-3 p-2 bg-gray-50/70 rounded-xl border border-gray-100">
+                      <img src={recImg} alt={rec.name} className="w-10 h-10 object-contain bg-white p-1 rounded-lg border border-gray-200 shrink-0" />
+                      
+                      <div className="flex-1 min-w-0">
+                        <p className="text-xs font-bold text-[#172033] truncate">{rec.name}</p>
+                        <div className="flex items-center space-x-1 text-[10px] text-gray-500 font-semibold">
+                          <Star className="w-2.5 h-2.5 text-amber-400 fill-amber-400" />
+                          <span>{rec.rating || 4.5} ({(rec.review_count || 1200).toLocaleString()})</span>
+                        </div>
+                        <p className="text-xs font-black text-[#172033]">₹{(rec.sale_price || rec.price).toLocaleString()}</p>
+                      </div>
+
+                      <button
+                        onClick={() => handleAddToCart({ product_id: rec.product_id, name: rec.name, price: rec.price })}
+                        className="px-3 py-1 bg-white hover:bg-blue-50 text-[#0875E1] border border-[#0875E1] rounded-lg text-xs font-bold shadow-2xs shrink-0 cursor-pointer"
+                      >
+                        Add
+                      </button>
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+
+          </aside>
+
+        </div>
+
+        {/* BOTTOM RECENTLY VIEWED CAROUSEL (MATCHING REFERENCE IMAGE EXACTLY) */}
+        <div className="bg-white rounded-2xl border border-gray-200/80 p-4 space-y-3 shadow-2xs mt-6">
+          <div className="flex items-center justify-between border-b border-gray-100 pb-2.5">
+            <div className="flex items-center space-x-2">
+              <Clock className="w-4 h-4 text-[#0875E1]" />
+              <h3 className="text-xs font-black uppercase tracking-wider text-[#172033]">Recently Viewed</h3>
+            </div>
+
+            <div className="flex items-center space-x-2">
+              <button onClick={() => navigate('/home')} className="text-xs font-extrabold text-[#0875E1] hover:underline mr-2">
+                View All
+              </button>
+              <button className="w-7 h-7 rounded-full border border-gray-200 flex items-center justify-center text-gray-500 hover:bg-gray-100 cursor-pointer">
+                <ChevronLeft className="w-4 h-4" />
+              </button>
+              <button className="w-7 h-7 rounded-full border border-gray-200 flex items-center justify-center text-gray-500 hover:bg-gray-100 cursor-pointer">
+                <ChevronRight className="w-4 h-4" />
+              </button>
+            </div>
+          </div>
+
+          {/* Horizontal Scroll Pill Cards */}
+          <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-5 gap-3">
+            {recentlyViewed.map((rv) => (
+              <div 
+                key={rv.product_id}
+                onClick={() => navigate('/home')}
+                className="flex items-center space-x-2.5 p-2 rounded-xl bg-gray-50 hover:bg-blue-50/60 border border-gray-200/70 cursor-pointer transition-colors group"
+              >
+                <img src={rv.img} alt={rv.name} className="w-10 h-10 object-contain bg-white p-1 rounded-lg border border-gray-200 shrink-0 group-hover:scale-105 transition-transform" />
+                <div className="min-w-0">
+                  <p className="text-[11px] font-bold text-[#172033] truncate group-hover:text-[#0875E1]">{rv.name}</p>
+                  <p className="text-xs font-black text-[#172033]">₹{rv.price.toLocaleString()}</p>
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+
+        {/* MANAGE ALERTS MODAL POPUP */}
+        <AnimatePresence>
+          {isManageAlertsOpen && (
+            <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50 backdrop-blur-xs">
+              <motion.div
+                initial={{ opacity: 0, scale: 0.95, y: 10 }}
+                animate={{ opacity: 1, scale: 1, y: 0 }}
+                exit={{ opacity: 0, scale: 0.95, y: 10 }}
+                className="bg-white rounded-3xl max-w-md w-full p-6 shadow-2xl border border-gray-100 space-y-5 relative"
+              >
+                {/* Header */}
+                <div className="flex items-center justify-between border-b border-gray-100 pb-3">
+                  <div className="flex items-center space-x-2 text-[#172033]">
+                    <div className="p-2 bg-blue-50 text-[#0875E1] rounded-xl">
+                      <Bell className="w-5 h-5" />
+                    </div>
+                    <div>
+                      <h3 className="text-base font-black">Price Drop Alert Settings</h3>
+                      <p className="text-xs text-gray-500 font-semibold">Customize your wishlist price notifications</p>
                     </div>
                   </div>
-
-                  <button 
-                    onClick={() => handleAddToCart(item)}
-                    disabled={item.stock === 0}
-                    className="w-full bg-[#0071DC] hover:bg-[#0046BE] disabled:bg-gray-100 disabled:text-gray-400 disabled:cursor-not-allowed text-white py-2.5 rounded-xl text-xs font-bold transition-all flex items-center justify-center space-x-1.5 shadow-sm"
+                  <button
+                    onClick={() => setIsManageAlertsOpen(false)}
+                    className="w-8 h-8 rounded-full bg-gray-100 hover:bg-gray-200 text-gray-500 flex items-center justify-center cursor-pointer"
                   >
-                    <ShoppingCart className="w-3.5 h-3.5" />
-                    <span>Add to Cart</span>
+                    <X className="w-4 h-4" />
                   </button>
                 </div>
-              );
-            })}
-          </div>
-        ) : (
-          /* EMPTY STATE */
-          <div className="max-w-md mx-auto bg-white rounded-3xl border border-gray-100 shadow-md p-10 text-center space-y-6">
-            <div className="flex flex-col items-center space-y-3">
-              <div className="p-4 bg-blue-50 text-[#0071DC] rounded-full">
-                <Heart className="w-10 h-10 text-[#0071DC]" />
-              </div>
-              <h2 className="text-xl font-black text-gray-800 tracking-tight">Your Wishlist is Empty</h2>
-              <p className="text-xs text-gray-500 font-medium">Add items to your wishlist while browsing to track price drops and restock alerts!</p>
-            </div>
 
-            <div className="pt-2">
-              <button 
-                onClick={() => navigate('/home')}
-                className="bg-[#0071DC] hover:bg-[#0046BE] text-white px-6 py-2.5 rounded-full text-xs font-bold transition-all shadow-md inline-flex items-center space-x-1"
-              >
-                <span>Browse Products</span>
-              </button>
-            </div>
+                {/* 1. Notification Channels */}
+                <div className="space-y-2.5">
+                  <label className="text-xs font-black uppercase text-gray-500 tracking-wider">Notification Channels</label>
+                  <div className="space-y-2 text-xs">
+                    <label className="flex items-center justify-between p-3 bg-gray-50 rounded-xl border border-gray-200/80 cursor-pointer">
+                      <span className="font-bold text-[#172033]">Email Notifications</span>
+                      <input
+                        type="checkbox"
+                        checked={alertChannels.email}
+                        onChange={(e) => setAlertChannels({ ...alertChannels, email: e.target.checked })}
+                        className="w-4 h-4 rounded text-[#0875E1] focus:ring-[#0875E1]"
+                      />
+                    </label>
+                    <label className="flex items-center justify-between p-3 bg-gray-50 rounded-xl border border-gray-200/80 cursor-pointer">
+                      <span className="font-bold text-[#172033]">App Push Notifications</span>
+                      <input
+                        type="checkbox"
+                        checked={alertChannels.push}
+                        onChange={(e) => setAlertChannels({ ...alertChannels, push: e.target.checked })}
+                        className="w-4 h-4 rounded text-[#0875E1] focus:ring-[#0875E1]"
+                      />
+                    </label>
+                    <label className="flex items-center justify-between p-3 bg-gray-50 rounded-xl border border-gray-200/80 cursor-pointer">
+                      <span className="font-bold text-[#172033]">SMS Alerts</span>
+                      <input
+                        type="checkbox"
+                        checked={alertChannels.sms}
+                        onChange={(e) => setAlertChannels({ ...alertChannels, sms: e.target.checked })}
+                        className="w-4 h-4 rounded text-[#0875E1] focus:ring-[#0875E1]"
+                      />
+                    </label>
+                  </div>
+                </div>
 
-            <div className="border-t pt-5 space-y-3 text-left">
-              <h3 className="text-[10px] font-black uppercase text-gray-400 tracking-wider">Popular categories:</h3>
-              <div className="flex flex-wrap gap-2 text-[10px] font-bold text-[#0071DC]">
-                {['electronics', 'fashion', 'home-furniture', 'grocery'].map(slug => (
-                  <span 
-                    key={slug} 
-                    onClick={() => navigate(`/category/${slug}`)}
-                    className="bg-blue-50 hover:bg-blue-100 px-3 py-1.5 rounded-xl cursor-pointer transition-colors capitalize"
+                {/* 2. Alert Threshold */}
+                <div className="space-y-2">
+                  <label className="text-xs font-black uppercase text-gray-500 tracking-wider">Price Drop Threshold</label>
+                  <select
+                    value={alertThreshold}
+                    onChange={(e) => setAlertThreshold(e.target.value)}
+                    className="w-full bg-gray-50 border border-gray-200 text-xs font-bold text-[#172033] p-3 rounded-xl focus:outline-none focus:ring-2 focus:ring-[#0875E1]"
                   >
-                    {slug.replace('-', ' ')}
-                  </span>
-                ))}
-              </div>
+                    <option value="any">Notify on Any Price Drop</option>
+                    <option value="5">Notify when Price Drops by 5% or more</option>
+                    <option value="10">Notify when Price Drops by 10% or more</option>
+                    <option value="20">Notify when Price Drops by 20% or more</option>
+                  </select>
+                </div>
+
+                {/* Buttons */}
+                <div className="flex items-center space-x-3 pt-2">
+                  <button
+                    onClick={() => setIsManageAlertsOpen(false)}
+                    className="w-1/2 bg-gray-100 hover:bg-gray-200 text-gray-700 font-bold text-xs py-2.5 rounded-xl cursor-pointer"
+                  >
+                    Cancel
+                  </button>
+                  <button
+                    onClick={() => {
+                      setIsManageAlertsOpen(false);
+                      showAlert('Price Drop Alert preferences updated successfully!');
+                    }}
+                    className="w-1/2 bg-[#0875E1] hover:bg-[#065BB5] text-white font-extrabold text-xs py-2.5 rounded-xl shadow-md cursor-pointer flex items-center justify-center space-x-1.5"
+                  >
+                    <CheckCircle className="w-4 h-4" />
+                    <span>Save Preferences</span>
+                  </button>
+                </div>
+
+              </motion.div>
             </div>
-          </div>
-        )}
+          )}
+        </AnimatePresence>
+
       </main>
 
       {/* FOOTER */}
-      <footer className="bg-[#041E42] text-white py-12 px-6">
-        <div className="max-w-7xl mx-auto grid grid-cols-1 md:grid-cols-3 gap-8 text-sm">
-          <div className="space-y-3">
-            <h4 className="font-extrabold text-[#FFC220]">NexDay Store Front</h4>
-            <p className="text-gray-300 text-xs">Authoritative product catalog data and specifications served securely by MySQL operational database.</p>
-          </div>
-          <div className="space-y-2">
-            <h4 className="font-bold text-[#FFC220]">Telemetry Status</h4>
-            <div className="bg-white/5 p-3 rounded-xl border border-white/10 text-[10px] font-mono">
-              <p>Active Session: {session?.session_id}</p>
-              <p>User Authenticated: {customer ? `${customer.first_name}` : 'Guest'}</p>
-            </div>
-          </div>
-          <div className="space-y-2 text-right">
-            <p className="text-xs text-gray-400">NexDay details &bull; Real Images Catalog</p>
-          </div>
-        </div>
-      </footer>
-
-      {/* SLIDING SIDE CART DRAWER */}
-      <AnimatePresence>
-        {isCartOpen && (
-          <>
-            <motion.div 
-              initial={{ opacity: 0 }}
-              animate={{ opacity: 0.5 }}
-              exit={{ opacity: 0 }}
-              onClick={() => setIsCartOpen(false)}
-              className="fixed inset-0 bg-black z-50 cursor-pointer"
-            />
-            <motion.div 
-              initial={{ x: '100%' }}
-              animate={{ x: 0 }}
-              exit={{ x: '100%' }}
-              transition={{ type: 'tween', duration: 0.3 }}
-              className="fixed right-0 top-0 bottom-0 w-full sm:w-96 bg-white shadow-2xl z-50 flex flex-col justify-between text-[#041E42]"
-            >
-              <div className="p-6 border-b flex items-center justify-between">
-                <div className="flex items-center space-x-2">
-                  <ShoppingCart className="w-5 h-5 text-[#0071DC]" />
-                  <h3 className="font-black text-lg">Your Shopping Cart</h3>
-                </div>
-                <button onClick={() => setIsCartOpen(false)} className="p-1 rounded-full hover:bg-gray-100 text-gray-500">
-                  <X className="w-5 h-5" />
-                </button>
-              </div>
-
-              <div className="flex-grow overflow-y-auto p-6 space-y-4">
-                {cartItems.length > 0 ? (
-                  cartItems.map((item) => (
-                    <div key={item.product_id} className="flex items-start justify-between border-b pb-4 space-x-3">
-                      <div className="bg-gray-50 w-16 h-16 rounded-xl flex items-center justify-center flex-shrink-0">
-                        <span className="text-[8px] font-black uppercase text-gray-400">{item.brand}</span>
-                      </div>
-                      
-                      <div className="flex-grow space-y-1">
-                        <h4 className="text-xs font-extrabold text-gray-800 line-clamp-2 leading-tight">{item.name}</h4>
-                        <div className="flex items-center space-x-2 text-[10px] text-gray-400">
-                          <span>₹{item.sale_price.toLocaleString()}</span>
-                          <span>&bull;</span>
-                          <span>Qty: {item.quantity}</span>
-                        </div>
-                        <div className="flex items-center space-x-2 pt-1">
-                          <button onClick={() => addItemToCart(item, 1)} className="bg-gray-100 hover:bg-gray-200 p-1 rounded-md text-gray-600">
-                            <Plus className="w-3.5 h-3.5" />
-                          </button>
-                          <button onClick={() => removeItemFromCart(item.product_id)} className="bg-gray-100 hover:bg-gray-200 p-1 rounded-md text-gray-600">
-                            <Minus className="w-3.5 h-3.5" />
-                          </button>
-                        </div>
-                      </div>
-
-                      <div className="text-right space-y-2">
-                        <p className="text-xs font-black">₹{(item.sale_price * item.quantity).toLocaleString()}</p>
-                        <button onClick={() => removeItemFromCart(item.product_id)} className="text-red-500 hover:text-red-700">
-                          <Trash2 className="w-4 h-4" />
-                        </button>
-                      </div>
-                    </div>
-                  ))
-                ) : (
-                  <div className="text-center py-20 text-gray-400 font-bold text-sm">Your cart is empty.</div>
-                )}
-              </div>
-
-              <div className="p-6 border-t bg-[#F7F8F9] space-y-4">
-                <div className="flex items-center justify-between text-sm font-bold">
-                  <span>Subtotal ({getCartTotalCount()} items)</span>
-                  <span className="text-lg font-black text-[#041E42]">₹{getCartTotalPrice().toLocaleString()}</span>
-                </div>
-                
-                <button 
-                  onClick={() => {
-                    setIsCartOpen(false);
-                    if (!isAuthenticated) {
-                      showTemporaryAlert('Checkout requires an account. Redirecting to Login...');
-                      setTimeout(() => navigate('/login?redirect=checkout'), 800);
-                    } else {
-                      navigate('/checkout');
-                    }
-                  }}
-                  disabled={cartItems.length === 0}
-                  className="w-full bg-[#FFC220] hover:bg-[#E5AC12] disabled:bg-gray-300 disabled:text-gray-400 disabled:cursor-not-allowed text-[#041E42] py-3.5 rounded-full font-black text-xs transition-colors shadow-md"
-                >
-                  Proceed to Checkout
-                </button>
-              </div>
-            </motion.div>
-          </>
-        )}
-      </AnimatePresence>
-
+      <Footer />
     </div>
   );
 };

@@ -8,15 +8,16 @@ export default {
     extend: {
       colors: {
         retail: {
-          blue: '#0071DC',       // Walmart signature primary blue
-          navy: '#0046BE',       // Deep enterprise navy
-          dark: '#041E42',       // Dark retail header accent
-          yellow: '#FFC220',     // Walmart spark yellow accent
-          yellowHover: '#E5AC12',
-          lightBg: '#F2F8FD',    // Clean soft retail slate-blue tint
-          grayBg: '#F7F8F9',
+          navyDark: '#0B2A55',   // Deep/Navy Blue
+          blue: '#0875E1',       // Retail Blue
+          navy: '#065BB5',       // Medium Navy Blue
+          yellow: '#FFC20A',     // Accent Yellow
+          yellowHover: '#E5AD00',// Darker Yellow Hover
+          bg: '#F5F7FA',         // Page Background
           card: '#FFFFFF',
-          border: '#E1E6EB',
+          text: '#172033',       // Primary Text
+          muted: '#667085',      // Muted Text
+          border: '#E2E8F0',
         }
       },
       fontFamily: {
