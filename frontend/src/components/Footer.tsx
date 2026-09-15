@@ -10,8 +10,22 @@ export const Footer: React.FC = () => {
         
 
 
+        {/* FOOTER BRAND HEADER */}
+        <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 pb-6 border-b border-blue-900/50">
+          <div className="flex items-center cursor-pointer" onClick={() => navigate('/home')}>
+            <img 
+              src="/nexday-logo.png" 
+              alt="NexDay™ - Brand New Day. Brand New Products." 
+              className="h-11 w-auto object-contain bg-white rounded-xl px-2.5 py-1 shadow-sm hover:scale-105 transition-transform duration-200" 
+            />
+          </div>
+          <p className="text-xs text-blue-200 font-medium max-w-md">
+            India's premier online retail store delivering authentic products, lightning fast shipping, and unmatched customer support.
+          </p>
+        </div>
+
         {/* FOOTER LINKS GRID */}
-        <div className="grid grid-cols-2 md:grid-cols-5 gap-8 text-blue-100 pt-4 border-t border-blue-900/40">
+        <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-5 gap-6 sm:gap-8 text-blue-100 pt-2">
           
           <div className="space-y-3">
             <p className="text-white font-black text-xs uppercase tracking-wider">Shop Categories</p>
@@ -55,7 +69,7 @@ export const Footer: React.FC = () => {
             </ul>
           </div>
 
-          <div className="col-span-2 md:col-span-1 space-y-3">
+          <div className="col-span-1 sm:col-span-2 md:col-span-1 space-y-3">
             <p className="text-white font-black text-xs uppercase tracking-wider">NexDay Plus</p>
             <p className="text-[11px] text-blue-100 leading-relaxed font-semibold">
               Join NexDay Plus for exclusive member benefits, free express delivery on all orders & early access to sale events.
@@ -71,14 +85,14 @@ export const Footer: React.FC = () => {
         </div>
 
         {/* COPYRIGHT & BOTTOM CREDS */}
-        <div className="pt-6 border-t border-blue-900/60 flex flex-col sm:flex-row items-center justify-between gap-4 text-[11px] text-blue-200 font-semibold">
-          <p>&copy; {new Date().getFullYear()} NexDay Retail Hub. Built with passion by Naveen, Ashwin, Manish, & Prithvish.</p>
-          <div className="flex items-center space-x-4">
-            <a href="#privacy" onClick={(e) => { e.preventDefault(); navigate('/help'); }} className="hover:text-white transition-colors">Privacy Policy</a>
+        <div className="pt-6 border-t border-blue-900/60 flex flex-col sm:flex-row items-center justify-between gap-4 text-[11px] font-semibold">
+          <p className="text-[#FFC20A] font-bold">&copy; {new Date().getFullYear()} NexDay™ Retail. Brand New Day. Brand New Products.</p>
+          <div className="flex items-center space-x-4 text-blue-200">
+            <a href="#privacy" onClick={(e) => { e.preventDefault(); navigate('/help'); }} className="hover:text-[#FFC20A] transition-colors">Privacy Policy</a>
             <span>&bull;</span>
-            <a href="#terms" onClick={(e) => { e.preventDefault(); navigate('/help'); }} className="hover:text-white transition-colors">Terms of Use</a>
+            <a href="#terms" onClick={(e) => { e.preventDefault(); navigate('/help'); }} className="hover:text-[#FFC20A] transition-colors">Terms of Use</a>
             <span>&bull;</span>
-            <a href="#security" onClick={(e) => { e.preventDefault(); navigate('/help'); }} className="hover:text-white transition-colors">Security</a>
+            <a href="#security" onClick={(e) => { e.preventDefault(); navigate('/help'); }} className="hover:text-[#FFC20A] transition-colors">Security</a>
           </div>
         </div>
 

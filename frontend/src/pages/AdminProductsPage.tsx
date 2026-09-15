@@ -12,6 +12,9 @@ import {
   X,
   CheckCircle,
   AlertCircle,
+  AlertTriangle,
+  RotateCcw,
+  Check,
   Image as ImageIcon
 } from 'lucide-react';
 import AdminSidebar from '../components/AdminSidebar';
@@ -100,12 +103,15 @@ export default function AdminProductsPage() {
   const [deliveryDays, setDeliveryDays] = useState<string>('3');
   const [imageUrl, setImageUrl] = useState<string>('');
   const [galleryImages, setGalleryImages] = useState<string[]>([]);
+  const [brokenImages, setBrokenImages] = useState<Record<number, boolean>>({});
   const [uploadingImage, setUploadingImage] = useState<boolean>(false);
   const [status, setStatus] = useState<string>('ACTIVE');
 
   const handleSlotImageFileUpload = async (e: React.ChangeEvent<HTMLInputElement>, slotIndex: number) => {
     const file = e.target.files?.[0];
     if (!file) return;
+
+    setBrokenImages(prev => ({ ...prev, [slotIndex]: false }));
 
     const reader = new FileReader();
     reader.onload = async () => {
@@ -148,6 +154,7 @@ export default function AdminProductsPage() {
   };
 
   const handleSlotUrlChange = (url: string, slotIndex: number) => {
+    setBrokenImages(prev => ({ ...prev, [slotIndex]: false }));
     setGalleryImages(prev => {
       const updated = [...prev];
       while (updated.length <= slotIndex) updated.push('');
@@ -163,13 +170,19 @@ export default function AdminProductsPage() {
 
   const removePhotoSlot = (slotIndex: number) => {
     setGalleryImages(prev => {
-      const updated = prev.filter((_, i) => i !== slotIndex);
-      if (slotIndex === 0 && updated.length > 0) {
-        setImageUrl(updated[0]);
-      } else if (updated.length === 0) {
+      let updated = prev.filter((_, i) => i !== slotIndex);
+      if (updated.length === 0) {
+        updated = [''];
         setImageUrl('');
+      } else if (slotIndex === 0) {
+        setImageUrl(updated[0] || '');
       }
       return updated;
+    });
+    setBrokenImages(prev => {
+      const next = { ...prev };
+      delete next[slotIndex];
+      return next;
     });
   };
 
@@ -178,6 +191,7 @@ export default function AdminProductsPage() {
       const updated = [...prev];
       if (updated.length < count) {
         while (updated.length < count) updated.push('');
+        return updated;
       } else if (updated.length > count) {
         return updated.slice(0, count);
       }
@@ -275,7 +289,8 @@ export default function AdminProductsPage() {
     setCountry('India');
     setDeliveryDays('3');
     setImageUrl('');
-    setGalleryImages([]);
+    setGalleryImages(['']);
+    setBrokenImages({});
     setStatus('ACTIVE');
     setError('');
     setSuccess('');
@@ -301,7 +316,11 @@ export default function AdminProductsPage() {
     setCountry(product.country || 'India');
     setDeliveryDays(product.delivery_days?.toString() || '3');
     setImageUrl(product.image_url || '');
-    setGalleryImages((product as any).gallery_images || [product.image_url].filter(Boolean));
+    const initialGallery = (product as any).gallery_images && (product as any).gallery_images.length > 0
+      ? (product as any).gallery_images
+      : [product.image_url].filter(Boolean);
+    setGalleryImages(initialGallery.length > 0 ? initialGallery : ['']);
+    setBrokenImages({});
     setStatus(product.status);
     setError('');
     setSuccess('');
@@ -322,7 +341,7 @@ export default function AdminProductsPage() {
     }
 
     const cleanGalleryImages = galleryImages.filter(img => img && img.trim().length > 0);
-    const primaryCover = cleanGalleryImages[0] || imageUrl || 'https://images.unsplash.com/photo-1523275335684-37898b6baf30?w=800&auto=format&fit=crop';
+    const primaryCover = cleanGalleryImages[0] || imageUrl || '';
 
     const productPayload = {
       name,
@@ -420,14 +439,15 @@ export default function AdminProductsPage() {
       
       {/* HEADER NAVBAR */}
       <header className="bg-[#0071DC] text-white shadow-md px-6 py-3 flex items-center justify-between sticky top-0 z-40">
-        <div className="flex items-center space-x-3">
-          <div className="bg-[#FFC220] text-[#041E42] p-2 rounded-full font-bold">
-            <ShoppingBag className="w-5 h-5" />
-          </div>
-          <div className="flex flex-col -space-y-1">
-            <span className="text-2xl font-black tracking-tight">NexDay</span>
-            <span className="text-[9px] font-bold tracking-widest text-[#FFC220] uppercase font-mono pl-0.5">Admin Portal</span>
-          </div>
+        <div className="flex items-center space-x-3 cursor-pointer" onClick={() => navigate('/admin/products')}>
+          <img 
+            src="/nexday-logo.png" 
+            alt="NexDay™ Admin Portal" 
+            className="h-10 w-auto object-contain bg-white rounded-xl px-2.5 py-1 shadow-sm hover:scale-105 transition-transform duration-200" 
+          />
+          <span className="text-[10px] font-black tracking-widest bg-[#FFC20A] text-[#0B2A55] uppercase px-2 py-0.5 rounded-md shadow-sm">
+            Admin Portal
+          </span>
         </div>
 
         <div className="flex items-center space-x-3">
@@ -449,12 +469,12 @@ export default function AdminProductsPage() {
         </div>
       </header>
 
-      <div className="flex-grow flex">
+      <div className="flex-grow flex flex-col lg:flex-row min-w-0 w-full overflow-x-hidden">
         {/* SIDEBAR NAVIGATION */}
         <AdminSidebar />
 
         {/* MAIN BODY AREA */}
-        <main className="flex-grow p-8 space-y-6 overflow-y-auto">
+        <main className="flex-grow p-4 sm:p-6 lg:p-8 space-y-6 overflow-y-auto w-full min-w-0">
           
           {/* Header Panel */}
           <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4">
@@ -892,15 +912,26 @@ export default function AdminProductsPage() {
                             </span>
                             {slotIdx === 0 ? 'Photo #1 (Primary Cover Image)' : `Photo #${slotIdx + 1}`}
                           </span>
-                          {slotIdx > 0 && (
-                            <button
-                              type="button"
-                              onClick={() => removePhotoSlot(slotIdx)}
-                              className="text-red-500 hover:text-red-700 text-[10px] font-bold flex items-center gap-0.5"
-                            >
-                              <X className="w-3.5 h-3.5" /> Remove Slot
-                            </button>
-                          )}
+                          <div className="flex items-center gap-2">
+                            {url ? (
+                              <button
+                                type="button"
+                                onClick={() => handleSlotUrlChange('', slotIdx)}
+                                className="text-amber-600 hover:text-amber-800 text-[10px] font-bold flex items-center gap-0.5"
+                              >
+                                <RotateCcw className="w-3.5 h-3.5" /> Clear Photo
+                              </button>
+                            ) : null}
+                            {galleryImages.length > 1 && (
+                              <button
+                                type="button"
+                                onClick={() => removePhotoSlot(slotIdx)}
+                                className="text-red-500 hover:text-red-700 text-[10px] font-bold flex items-center gap-0.5"
+                              >
+                                <X className="w-3.5 h-3.5" /> Remove Slot
+                              </button>
+                            )}
+                          </div>
                         </div>
 
                         <div className="flex items-center space-x-2">
@@ -909,7 +940,9 @@ export default function AdminProductsPage() {
                             placeholder={slotIdx === 0 ? "https://... or /uploads/products/sample.png" : `Paste URL for photo #${slotIdx + 1}...`}
                             value={url}
                             onChange={(e) => handleSlotUrlChange(e.target.value, slotIdx)}
-                            className="flex-grow bg-white text-[#041E42] pl-3 pr-3 py-2 rounded-xl border border-gray-250 focus:border-[#0071DC] focus:outline-none font-medium text-xs shadow-sm"
+                            className={`flex-grow bg-white text-[#041E42] pl-3 pr-3 py-2 rounded-xl border focus:outline-none font-medium text-xs shadow-sm ${
+                              brokenImages[slotIdx] ? 'border-red-400 focus:border-red-500' : 'border-gray-250 focus:border-[#0071DC]'
+                            }`}
                           />
                           <label className="cursor-pointer bg-[#FFC220] hover:bg-[#E5AC12] text-[#041E42] text-[10px] font-bold px-3 py-2 rounded-xl flex items-center space-x-1 flex-shrink-0 transition-all shadow-sm">
                             <ImageIcon className="w-3.5 h-3.5" />
@@ -924,8 +957,31 @@ export default function AdminProductsPage() {
                         </div>
 
                         {url && (
-                          <div className="mt-1 relative w-16 h-16 rounded-xl border border-gray-250 overflow-hidden bg-white shadow-inner">
-                            <img src={url} alt={`Preview ${slotIdx + 1}`} className="w-full h-full object-cover" />
+                          <div className="mt-1 flex items-center gap-3">
+                            <div className="relative w-14 h-14 rounded-xl border border-gray-250 overflow-hidden bg-white shadow-inner flex-shrink-0">
+                              {brokenImages[slotIdx] ? (
+                                <div className="w-full h-full bg-red-50 flex flex-col items-center justify-center p-1 text-center">
+                                  <AlertTriangle className="w-4 h-4 text-red-500 mb-0.5" />
+                                  <span className="text-[8px] font-bold text-red-600 leading-tight">Broken</span>
+                                </div>
+                              ) : (
+                                <img
+                                  src={url}
+                                  alt={`Preview ${slotIdx + 1}`}
+                                  className="w-full h-full object-cover"
+                                  onError={() => setBrokenImages(prev => ({ ...prev, [slotIdx]: true }))}
+                                />
+                              )}
+                            </div>
+                            {brokenImages[slotIdx] ? (
+                              <span className="text-[10px] font-bold text-red-600 bg-red-50 border border-red-200 px-2.5 py-1 rounded-lg">
+                                ⚠️ Image failed to load or URL is invalid. Please double-check URL or upload a file.
+                              </span>
+                            ) : (
+                              <span className="text-[10px] font-bold text-emerald-700 bg-emerald-50 border border-emerald-200 px-2.5 py-1 rounded-lg flex items-center gap-1">
+                                <Check className="w-3 h-3 text-emerald-600" /> Image verified & ready
+                              </span>
+                            )}
                           </div>
                         )}
                       </div>

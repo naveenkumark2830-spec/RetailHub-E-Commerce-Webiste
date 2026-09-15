@@ -5,7 +5,6 @@ import {
   LogOut, 
   ShoppingBag,
   X,
-  Terminal,
   RefreshCw,
   AlertTriangle,
   Clock,
@@ -154,14 +153,15 @@ export default function AdminEventsPage() {
       
       {/* HEADER */}
       <header className="bg-[#0071DC] text-white shadow-md px-6 py-3 flex items-center justify-between sticky top-0 z-45">
-        <div className="flex items-center space-x-3">
-          <div className="bg-[#FFC220] text-[#041E42] p-2 rounded-full font-bold">
-            <Terminal className="w-5 h-5 animate-pulse" />
-          </div>
-          <div className="flex flex-col -space-y-1">
-            <span className="text-2xl font-black tracking-tight">NexDay</span>
-            <span className="text-[9px] font-bold tracking-widest text-[#FFC220] uppercase font-mono pl-0.5">Admin Portal</span>
-          </div>
+        <div className="flex items-center space-x-3 cursor-pointer" onClick={() => navigate('/admin/products')}>
+          <img 
+            src="/nexday-logo.png" 
+            alt="NexDay™ Admin Portal" 
+            className="h-10 w-auto object-contain bg-white rounded-xl px-2.5 py-1 shadow-sm hover:scale-105 transition-transform duration-200" 
+          />
+          <span className="text-[10px] font-black tracking-widest bg-[#FFC20A] text-[#0B2A55] uppercase px-2 py-0.5 rounded-md shadow-sm">
+            Admin Portal
+          </span>
         </div>
 
         <div className="flex items-center space-x-3">
@@ -183,12 +183,12 @@ export default function AdminEventsPage() {
         </div>
       </header>
 
-      <div className="flex-grow flex">
+      <div className="flex-grow flex flex-col lg:flex-row min-w-0 w-full overflow-x-hidden">
         {/* SIDEBAR */}
         <AdminSidebar />
 
         {/* CONTENT */}
-        <main className="flex-grow p-8 space-y-6 overflow-y-auto">
+        <main className="flex-grow p-4 sm:p-6 lg:p-8 space-y-6 overflow-y-auto w-full min-w-0">
           <div className="flex justify-between items-center">
             <div>
               <h2 className="text-2xl font-black text-[#041E42] uppercase tracking-tight">Telemetry Event Monitor</h2>

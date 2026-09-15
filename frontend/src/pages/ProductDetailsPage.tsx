@@ -51,6 +51,7 @@ interface ProductDetails {
   size?: string;
   warranty?: string;
   delivery_days?: number;
+  image_url?: string;
 }
 
 export const ProductDetailsPage: React.FC = () => {
@@ -93,11 +94,13 @@ export const ProductDetailsPage: React.FC = () => {
       .then(d => {
         if (d.success && d.product) {
           setProduct(d.product);
-          setImages(d.images || []);
+          const rawImages: ProductImage[] = d.images || [];
+          setImages(rawImages);
           setSpecifications(d.specifications || []);
           setReviews(d.reviews || []);
 
-          const primaryUrl = getProductImage(d.product);
+          const firstApiImg = rawImages.find(img => img.image_url && img.image_url.trim().length > 0)?.image_url;
+          const primaryUrl = firstApiImg || d.product.image_url || getProductImage(d.product);
           setActiveImage(primaryUrl);
 
           fetch(`/api/products?category_id=${d.product.category_id}&limit=5`)
@@ -258,17 +261,17 @@ export const ProductDetailsPage: React.FC = () => {
   const originalPrice = product.sale_price ? product.price : Math.round(currentPrice * 1.15);
   const discountPercent = product.discount || Math.round(((originalPrice - currentPrice) / originalPrice) * 100);
 
-  // Gallery image list (main + extra thumbnails)
+  // Gallery image list (strictly product images without hardcoded fallbacks)
   const apiImages = images.map((img) => img.image_url).filter(Boolean);
-  const galleryImages = [
-    getProductImage(product),
-    ...(apiImages.length > 0 ? apiImages : [
-      'https://images.unsplash.com/photo-1546435770-a3e426bf472b?w=800&auto=format&fit=crop',
-      'https://images.unsplash.com/photo-1583394838336-acd977736f90?w=800&auto=format&fit=crop',
-      'https://images.unsplash.com/photo-1484704849700-f032a568e944?w=800&auto=format&fit=crop',
-      'https://images.unsplash.com/photo-1505740420928-5e560c06d30e?w=800&auto=format&fit=crop',
-    ])
-  ];
+  let galleryImages: string[] = [];
+
+  if (apiImages.length > 0) {
+    galleryImages = Array.from(new Set(apiImages));
+  } else if (product.image_url && product.image_url.trim().length > 0) {
+    galleryImages = [product.image_url.trim()];
+  } else {
+    galleryImages = [getProductImage(product)];
+  }
 
   // Bundle calculations
   let bundleTotal = currentPrice;
@@ -375,8 +378,10 @@ export const ProductDetailsPage: React.FC = () => {
                 {product.name}
               </h1>
 
-              <p className="text-xs font-semibold text-gray-600">
-                Industry-leading noise cancellation | 30-hour battery | Pure sound
+              <p className="text-xs font-semibold text-gray-600 line-clamp-2">
+                {product.description 
+                  ? (product.description.length > 150 ? product.description.slice(0, 150) + '...' : product.description)
+                  : `${product.brand || 'RetailHub'} - Premium Quality Product`}
               </p>
 
               {/* Rating & Sales Row */}
@@ -394,7 +399,7 @@ export const ProductDetailsPage: React.FC = () => {
               <div className="pt-1">
                 <span className="inline-flex items-center space-x-1 bg-amber-50 border border-amber-200 text-amber-900 text-[11px] font-black px-2.5 py-0.5 rounded-md">
                   <span className="bg-[#E67E22] text-white text-[9px] px-1 rounded mr-1">#1 Best Seller</span>
-                  <span>in Over-Ear Headphones</span>
+                  <span>in {product.brand || 'Featured Catalog'}</span>
                 </span>
               </div>
             </div>
@@ -704,14 +709,18 @@ export const ProductDetailsPage: React.FC = () => {
                 {/* Left: About this item */}
                 <div className="md:col-span-7 space-y-3">
                   <h3 className="text-sm font-black text-[#172033]">About this item</h3>
-                  <ul className="text-xs text-gray-600 space-y-2 font-medium list-disc pl-4 leading-relaxed">
-                    <li>Industry-leading noise cancellation with Dual Noise Sensor technology</li>
-                    <li>Crystal clear calls with 4 beamforming microphones</li>
-                    <li>Up to 30 hours of battery life (USB-C fast charging)</li>
-                    <li>Premium sound quality with 30mm driver units</li>
-                    <li>Lightweight and comfortable design for all-day wear</li>
-                    <li>Connect to multiple devices with Bluetooth multipoint</li>
-                  </ul>
+                  {product.description ? (
+                    <div className="text-xs text-gray-700 leading-relaxed font-medium space-y-2">
+                      {product.description.split('\n').filter(line => line.trim().length > 0).map((paragraph, idx) => (
+                        <p key={idx} className="flex items-start gap-2">
+                          <span className="text-[#0875E1] font-bold">•</span>
+                          <span>{paragraph.replace(/^[-•*]\s*/, '')}</span>
+                        </p>
+                      ))}
+                    </div>
+                  ) : (
+                    <p className="text-xs text-gray-500 font-medium italic">No detailed description available for this product.</p>
+                  )}
                 </div>
 
                 {/* Right: Key Specifications Table */}
@@ -721,35 +730,31 @@ export const ProductDetailsPage: React.FC = () => {
                   <div className="space-y-2 text-xs">
                     <div className="flex justify-between py-1 border-b border-gray-200/60">
                       <span className="text-gray-500 font-semibold">Brand</span>
-                      <span className="font-bold text-[#172033]">{product.brand || 'Sony'}</span>
+                      <span className="font-bold text-[#172033]">{product.brand || 'N/A'}</span>
                     </div>
                     <div className="flex justify-between py-1 border-b border-gray-200/60">
-                      <span className="text-gray-500 font-semibold">Model</span>
-                      <span className="font-bold text-[#172033]">WH-1000XM5</span>
+                      <span className="text-gray-500 font-semibold">SKU / Model</span>
+                      <span className="font-bold text-[#172033]">{product.sku || product.product_id}</span>
                     </div>
+                    {product.color && (
+                      <div className="flex justify-between py-1 border-b border-gray-200/60">
+                        <span className="text-gray-500 font-semibold">Color</span>
+                        <span className="font-bold text-[#172033]">{product.color}</span>
+                      </div>
+                    )}
+                    {product.size && (
+                      <div className="flex justify-between py-1 border-b border-gray-200/60">
+                        <span className="text-gray-500 font-semibold">Size</span>
+                        <span className="font-bold text-[#172033]">{product.size}</span>
+                      </div>
+                    )}
                     <div className="flex justify-between py-1 border-b border-gray-200/60">
-                      <span className="text-gray-500 font-semibold">Type</span>
-                      <span className="font-bold text-[#172033]">Wireless Over-Ear Headphones</span>
-                    </div>
-                    <div className="flex justify-between py-1 border-b border-gray-200/60">
-                      <span className="text-gray-500 font-semibold">Noise Cancellation</span>
-                      <span className="font-bold text-[#172033]">Yes (Industry Leading)</span>
-                    </div>
-                    <div className="flex justify-between py-1 border-b border-gray-200/60">
-                      <span className="text-gray-500 font-semibold">Battery Life</span>
-                      <span className="font-bold text-[#172033]">Up to 30 hours</span>
-                    </div>
-                    <div className="flex justify-between py-1 border-b border-gray-200/60">
-                      <span className="text-gray-500 font-semibold">Charging Port</span>
-                      <span className="font-bold text-[#172033]">USB Type-C</span>
-                    </div>
-                    <div className="flex justify-between py-1 border-b border-gray-200/60">
-                      <span className="text-gray-500 font-semibold">Weight</span>
-                      <span className="font-bold text-[#172033]">250 grams</span>
+                      <span className="text-gray-500 font-semibold">Delivery</span>
+                      <span className="font-bold text-[#172033]">{product.delivery_days ? `Estimated ${product.delivery_days} Business Days` : 'Fast Standard Delivery'}</span>
                     </div>
                     <div className="flex justify-between py-1 border-b border-gray-200/60">
                       <span className="text-gray-500 font-semibold">Warranty</span>
-                      <span className="font-bold text-[#172033]">{product.warranty || '1 Year Brand Warranty'}</span>
+                      <span className="font-bold text-[#172033]">{product.warranty || 'Standard Guarantee'}</span>
                     </div>
                   </div>
                 </div>

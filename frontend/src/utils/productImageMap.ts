@@ -71,6 +71,10 @@ export function getProductImage(product: {
   category_id?: string;
   image_url?: string;
 }): string {
+  if (product.image_url && product.image_url.trim().length > 0) {
+    return product.image_url.trim();
+  }
+
   const nameLower = (product.name || "").toLowerCase();
   for (const [key, url] of Object.entries(SPECIFIC_PRODUCT_IMAGES)) {
     if (nameLower.includes(key)) {
@@ -103,8 +107,8 @@ export function getCategoryIconImage(categorySlugOrId: string): string {
     sports: "https://images.unsplash.com/photo-1601925260368-ae2f83cf8b7f?w=200&auto=format&fit=crop&q=80",
     "sports-fitness": "https://images.unsplash.com/photo-1601925260368-ae2f83cf8b7f?w=200&auto=format&fit=crop&q=80",
     books: "https://images.unsplash.com/photo-1544716278-ca5e3f4abd8c?w=200&auto=format&fit=crop&q=80",
-    toys: "https://images.unsplash.com/photo-1558060370-d644479be6e7?w=200&auto=format&fit=crop&q=80",
-    "toys-games": "https://images.unsplash.com/photo-1558060370-d644479be6e7?w=200&auto=format&fit=crop&q=80",
+    toys: "https://images.unsplash.com/photo-1566576912321-d58ddd7a6088?w=200&auto=format&fit=crop&q=80",
+    "toys-games": "https://images.unsplash.com/photo-1566576912321-d58ddd7a6088?w=200&auto=format&fit=crop&q=80",
     automotive: "https://images.unsplash.com/photo-1578844251758-2f71da64c96f?w=200&auto=format&fit=crop&q=80",
     offers: "https://images.unsplash.com/photo-1607082348824-0a96f2a4b9da?w=200&auto=format&fit=crop&q=80",
   };

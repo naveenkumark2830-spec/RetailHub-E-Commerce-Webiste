@@ -296,16 +296,17 @@ export default function AdminCouponsPage() {
       <header className="bg-[#0071DC] text-white px-6 py-2.5 shadow-md flex items-center justify-between space-x-4 sticky top-0 z-50">
         {/* Left Brand Logo */}
         <div 
-          onClick={() => navigate('/')}
-          className="flex items-center space-x-2.5 cursor-pointer flex-shrink-0"
+          onClick={() => navigate('/admin/products')}
+          className="flex items-center space-x-3 cursor-pointer flex-shrink-0"
         >
-          <div className="bg-[#FFC20A] text-[#041E42] w-8 h-8 rounded-xl flex items-center justify-center shadow-xs font-black">
-            <ShoppingBag className="w-4.5 h-4.5" />
-          </div>
-          <div className="flex flex-col leading-tight">
-            <span className="text-lg font-black tracking-tight text-white">NexDay</span>
-            <span className="text-[9px] font-bold text-blue-200 uppercase tracking-wider">ADMIN PORTAL</span>
-          </div>
+          <img 
+            src="/nexday-logo.png" 
+            alt="NexDay™ Admin Portal" 
+            className="h-10 w-auto object-contain bg-white rounded-xl px-2.5 py-1 shadow-sm hover:scale-105 transition-transform duration-200" 
+          />
+          <span className="text-[10px] font-black tracking-widest bg-[#FFC20A] text-[#0B2A55] uppercase px-2 py-0.5 rounded-md shadow-sm">
+            Admin Portal
+          </span>
         </div>
 
         {/* Center Search Bar */}
@@ -353,13 +354,13 @@ export default function AdminCouponsPage() {
       </header>
 
       {/* 2. MAIN THREE-COLUMN LAYOUT */}
-      <div className="flex-grow flex overflow-hidden">
+      <div className="flex-grow flex flex-col lg:flex-row min-w-0 w-full overflow-x-hidden">
         
         {/* LEFT SIDEBAR NAVIGATION */}
         <AdminSidebar />
 
         {/* CENTER MAIN COLUMN (METRICS, FILTERS, TABLE) */}
-        <main className="flex-1 min-w-0 p-4 lg:p-6 space-y-6 overflow-y-auto">
+        <main className="flex-1 min-w-0 p-4 sm:p-6 lg:p-8 space-y-6 overflow-y-auto w-full">
           
           {/* Header Title */}
           <div className="space-y-1">

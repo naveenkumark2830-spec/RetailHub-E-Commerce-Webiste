@@ -255,7 +255,7 @@ export default function NotificationsPage() {
               </div>
 
               {/* Sidebar Links */}
-              <nav className="space-y-1 text-xs font-semibold text-[#475569]">
+              <nav className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-1 gap-1.5 text-xs font-semibold text-[#475569]">
                 <button 
                   onClick={() => navigate('/profile')}
                   className="w-full flex items-center space-x-3 px-3.5 py-2.5 rounded-xl hover:bg-gray-50 transition-colors"

@@ -84,15 +84,13 @@ export default function AdminLoginPage() {
         {/* Brand Logo */}
         <div 
           onClick={() => navigate('/')}
-          className="flex items-center space-x-2.5 cursor-pointer flex-shrink-0"
+          className="flex items-center cursor-pointer flex-shrink-0"
         >
-          <div className="bg-[#FFC20A] text-[#041E42] w-9 h-9 rounded-xl flex items-center justify-center shadow-sm font-black">
-            <ShoppingBag className="w-5 h-5" />
-          </div>
-          <div className="flex flex-col leading-tight">
-            <span className="text-xl font-black tracking-tight text-white">NexDay</span>
-            <span className="text-[10px] font-semibold text-blue-100">Shop More, Live Better</span>
-          </div>
+          <img 
+            src="/nexday-logo.png" 
+            alt="NexDay™ - Brand New Day. Brand New Products." 
+            className="h-10 w-auto object-contain bg-white rounded-xl px-2.5 py-1 shadow-sm hover:scale-105 transition-transform duration-200" 
+          />
         </div>
 
         {/* Center Search Bar */}

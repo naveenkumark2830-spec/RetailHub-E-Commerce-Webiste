@@ -2,7 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { motion } from 'framer-motion';
 import { 
-  Zap, ArrowRight, Clock
+  Zap, ArrowRight, Clock, ChevronLeft, ChevronRight
 } from 'lucide-react';
 import { useSessionStore } from '../store/useSessionStore';
 import { useCartStore } from '../store/useCartStore';
@@ -35,6 +35,64 @@ export const HomePage: React.FC = () => {
 
   const [flashDeals, setFlashDeals] = useState<Product[]>([]);
   const [allProducts, setAllProducts] = useState<Product[]>([]);
+  const [activeSlideIndex, setActiveSlideIndex] = useState<number>(0);
+
+  // 3D Hero Showcase Banner Slides
+  const heroSlides = [
+    {
+      id: 'laptops',
+      tag: 'WORK | CREATE | GAME',
+      titleLine1: 'Power Your',
+      titleLine2: 'Next Big Idea',
+      subtext: 'Latest Laptops | Top Brands | Best Prices',
+      buttonText: 'Shop Laptops',
+      categorySlug: 'electronics',
+      image: 'https://images.unsplash.com/photo-1611186871348-b1ce696e52c9?w=1000&auto=format&fit=crop&q=80',
+      badge1: '✨ M3 Max Power',
+      badge2: '🚀 Guaranteed Next-Day',
+      dealTitle: 'Up to 40% OFF',
+      dealSubtext: 'On Laptops & Accessories',
+      brands: ['APPLE', 'DELL', 'HP', 'ASUS']
+    },
+    {
+      id: 'audio',
+      tag: 'SOUND | SPATIAL | IMMERSIVE',
+      titleLine1: 'Elevate Your',
+      titleLine2: 'Audio Experience',
+      subtext: 'Premium Wireless Headphones | Active Noise Cancellation',
+      buttonText: 'Shop Audio',
+      categorySlug: 'electronics',
+      image: 'https://images.unsplash.com/photo-1505740420928-5e560c06d30e?w=1000&auto=format&fit=crop&q=80',
+      badge1: '🎧 Spatial Audio 3D',
+      badge2: '🔋 40-Hour Battery',
+      dealTitle: 'Flat 50% OFF',
+      dealSubtext: 'On Top Audio Gear',
+      brands: ['SONY', 'BOSE', 'BOAT', 'JBL']
+    },
+    {
+      id: 'wearables',
+      tag: 'FITNESS | STYLE | CONNECTED',
+      titleLine1: 'Track Every',
+      titleLine2: 'Second in Style',
+      subtext: 'Next-Gen Smartwatches & Wearable Tech',
+      buttonText: 'Shop Watches',
+      categorySlug: 'electronics',
+      image: 'https://images.unsplash.com/photo-1523275335684-37898b6baf30?w=1000&auto=format&fit=crop&q=80',
+      badge1: '⌚ AMOLED Retina',
+      badge2: '❤️ Heart & SpO2 Sync',
+      dealTitle: 'Up to 35% OFF',
+      dealSubtext: 'On Fitness Wearables',
+      brands: ['APPLE', 'SAMSUNG', 'NOISE', 'BOAT']
+    }
+  ];
+
+  // Auto rotation for 3D Hero Carousel (4 seconds)
+  useEffect(() => {
+    const slideTimer = setInterval(() => {
+      setActiveSlideIndex((prev) => (prev + 1) % heroSlides.length);
+    }, 4500);
+    return () => clearInterval(slideTimer);
+  }, [heroSlides.length]);
 
   // Flash Deal countdown timer state (HH MM SS)
   const [timeLeft, setTimeLeft] = useState({ hours: 6, minutes: 14, seconds: 23 });
@@ -104,76 +162,162 @@ export const HomePage: React.FC = () => {
       {/* MAIN BODY (100% FULL BLEED VIEWPORT WIDTH) */}
       <main className="flex-grow w-full px-4 sm:px-8 md:px-10 py-6 space-y-6">
         
-        {/* 1. HERO BANNER SECTION (LESSER HEIGHT WITH HIGH RES DISPLAY & INTERACTIVE BUTTON) */}
-        <div className="relative bg-[#FAF5EE] rounded-3xl border border-amber-900/10 shadow-sm overflow-hidden h-[190px] sm:h-[220px] flex items-center">
-          
-          <div className="w-full grid grid-cols-1 md:grid-cols-12 items-center px-6 sm:px-12 gap-4">
-            
-            {/* Left Column: Text Content */}
-            <div className="md:col-span-5 space-y-2 text-left z-10">
-              <p className="text-[10px] font-extrabold uppercase tracking-widest text-gray-500">
-                WORK &nbsp;|&nbsp; CREATE &nbsp;|&nbsp; GAME
-              </p>
-              <h1 className="text-2xl sm:text-4xl font-black text-[#172033] tracking-tight leading-tight">
-                Power Your <br />
-                Next Big Idea
-              </h1>
-              <p className="text-[11px] sm:text-xs font-semibold text-gray-600">
-                Latest Laptops | Top Brands | Best Prices
-              </p>
+        {/* 1. 3D HERO SHOWCASE BANNER SECTION */}
+        {(() => {
+          const currentSlide = heroSlides[activeSlideIndex];
+          return (
+            <div className="relative bg-gradient-to-r from-[#FAF5EE] via-[#F4F8FE] to-[#FAF5EE] rounded-3xl border border-amber-900/10 shadow-md overflow-hidden min-h-[200px] sm:min-h-[225px] flex items-center group">
+              
+              {/* Navigation Arrows */}
+              <button 
+                onClick={() => setActiveSlideIndex((prev) => (prev === 0 ? heroSlides.length - 1 : prev - 1))}
+                className="absolute left-3 top-1/2 -translate-y-1/2 z-30 w-8 h-8 rounded-full bg-white/90 shadow-md flex items-center justify-center text-[#0B2A55] hover:bg-white hover:scale-110 transition-all cursor-pointer"
+                aria-label="Previous Slide"
+              >
+                <ChevronLeft className="w-4 h-4 stroke-[2.5]" />
+              </button>
+              <button 
+                onClick={() => setActiveSlideIndex((prev) => (prev + 1) % heroSlides.length)}
+                className="absolute right-3 top-1/2 -translate-y-1/2 z-30 w-8 h-8 rounded-full bg-white/90 shadow-md flex items-center justify-center text-[#0B2A55] hover:bg-white hover:scale-110 transition-all cursor-pointer"
+                aria-label="Next Slide"
+              >
+                <ChevronRight className="w-4 h-4 stroke-[2.5]" />
+              </button>
 
-              <div className="pt-1 flex items-center space-x-3">
-                <button
-                  onClick={() => navigate('/category/electronics')}
-                  className="bg-[#0875E1] hover:bg-[#065eb8] text-white px-5 py-2 rounded-full font-extrabold text-xs shadow-md flex items-center space-x-1.5 transition-all duration-200 hover:scale-105 active:scale-95 cursor-pointer z-20"
-                >
-                  <span>Shop Laptops</span>
-                  <ArrowRight className="w-3.5 h-3.5 stroke-[2.5]" />
-                </button>
+              <div className="w-full grid grid-cols-1 md:grid-cols-12 items-center px-6 sm:px-10 py-2.5 gap-2 sm:gap-4 h-full">
+                
+                {/* Left Column: Headline, Action & Micro Badges (Equal Height) */}
+                <div className="md:col-span-4 h-full flex flex-col justify-center space-y-2 text-left z-10">
+                  <p className="text-[10px] font-extrabold uppercase tracking-widest text-[#0875E1]">
+                    {currentSlide.tag}
+                  </p>
+                  <h1 className="text-xl sm:text-2xl lg:text-3xl font-black text-[#172033] tracking-tight leading-tight">
+                    {currentSlide.titleLine1} <br />
+                    <span className="text-[#0071DC]">{currentSlide.titleLine2}</span>
+                  </h1>
+                  <p className="text-[10px] sm:text-[11px] font-semibold text-gray-600 line-clamp-1">
+                    {currentSlide.subtext}
+                  </p>
+
+                  {/* Action Button & Micro Feature Badges */}
+                  <div className="pt-1 flex flex-wrap items-center gap-2">
+                    <button
+                      onClick={() => navigate(`/category/${currentSlide.categorySlug}`)}
+                      className="bg-[#0875E1] hover:bg-[#065eb8] text-white px-4 py-1.5 rounded-full font-extrabold text-xs shadow-md flex items-center space-x-1.5 transition-all duration-200 hover:scale-105 active:scale-95 cursor-pointer shrink-0"
+                    >
+                      <span>{currentSlide.buttonText}</span>
+                      <ArrowRight className="w-3.5 h-3.5 stroke-[2.5]" />
+                    </button>
+                    <span className="bg-blue-50 text-[#0071DC] border border-blue-200/80 px-2 py-0.5 rounded-full text-[9px] font-bold">
+                      ⚡ Next-Day
+                    </span>
+                    <span className="bg-amber-50 text-amber-700 border border-amber-200/80 px-2 py-0.5 rounded-full text-[9px] font-bold hidden xl:inline">
+                      🛡️ 1-Yr Warranty
+                    </span>
+                  </div>
+                </div>
+
+                {/* Center Column: 3D Product Showcase (Fills Empty Gap & Equal Height) */}
+                <div className="md:col-span-5 h-full flex flex-col items-center justify-center relative z-10 py-1">
+                  
+                  {/* Glowing Ambient Backdrop Aura */}
+                  <div className="absolute inset-0 bg-gradient-to-r from-blue-400/15 via-[#FFC20A]/20 to-amber-400/15 rounded-full blur-xl opacity-75 -z-10 animate-pulse"></div>
+
+                  <div className="relative flex items-center justify-center w-full max-w-[320px] h-[145px] sm:h-[160px]">
+                    
+                    {/* Primary 3D Product Photo */}
+                    <motion.img
+                      key={currentSlide.id}
+                      initial={{ opacity: 0, scale: 0.95, y: 6 }}
+                      animate={{ opacity: 1, scale: 1, y: 0 }}
+                      transition={{ duration: 0.4, ease: "easeOut" }}
+                      src={currentSlide.image}
+                      alt={currentSlide.titleLine2}
+                      className="max-h-[145px] sm:max-h-[160px] max-w-full w-auto object-contain drop-shadow-[0_12px_24px_rgba(0,0,0,0.25)] rounded-2xl group-hover:scale-105 transition-transform duration-500"
+                    />
+
+                    {/* Floating Feature Badge 1 (Top Right) */}
+                    <motion.div
+                      animate={{ y: [2, -2, 2] }}
+                      transition={{ duration: 3.5, repeat: Infinity, ease: "easeInOut" }}
+                      className="absolute top-0 -right-1 bg-[#0B2A55] text-white rounded-full px-2.5 py-0.5 shadow-md border border-blue-400/30 text-[9px] font-extrabold flex items-center space-x-1 z-20"
+                    >
+                      <span>{currentSlide.badge1}</span>
+                    </motion.div>
+
+                    {/* Floating Feature Badge 2 (Top Left) */}
+                    <motion.div
+                      animate={{ y: [-2, 2, -2] }}
+                      transition={{ duration: 3.8, repeat: Infinity, ease: "easeInOut" }}
+                      className="absolute top-0 -left-1 bg-[#FFC20A] text-[#0B2A55] rounded-full px-2.5 py-0.5 shadow-md text-[9px] font-black z-20"
+                    >
+                      <span>{currentSlide.badge2}</span>
+                    </motion.div>
+
+                    {/* Neatly Aligned NexDay Brand Logo Pill (Bottom Center) */}
+                    <motion.div
+                      animate={{ y: [1.5, -1.5, 1.5] }}
+                      transition={{ duration: 3, repeat: Infinity, ease: "easeInOut" }}
+                      onClick={() => navigate('/home')}
+                      className="absolute -bottom-1 bg-white/95 backdrop-blur-md border border-amber-300/80 rounded-full px-3 py-0.5 shadow-md flex items-center space-x-1.5 z-20 cursor-pointer hover:scale-105 transition-transform"
+                    >
+                      <img 
+                        src="/nexday-logo.png" 
+                        alt="NexDay™" 
+                        className="h-3.5 max-h-[14px] w-auto object-contain" 
+                      />
+                      <span className="text-[9px] font-black text-[#0B2A55] tracking-wider uppercase">Express</span>
+                    </motion.div>
+
+                  </div>
+                </div>
+
+                {/* Right Column: Deal of the Week Promo Card (Equal Height) */}
+                <div className="md:col-span-3 h-full flex flex-col justify-center space-y-1 text-left border-l border-amber-900/10 pl-4 z-10 hidden md:flex">
+                  <span className="bg-[#0B2A55] text-white text-[9px] font-black uppercase px-2 py-0.5 rounded-md tracking-wider w-fit">
+                    Deal of the Week
+                  </span>
+                  <div className="space-y-0.5 pt-0.5">
+                    <p className="text-[10px] font-extrabold text-gray-700">Up to</p>
+                    <h2 className="text-xl sm:text-2xl font-black text-[#0B2A55] leading-none">{currentSlide.dealTitle}</h2>
+                    <p className="text-[10px] font-bold text-gray-700 line-clamp-1">{currentSlide.dealSubtext}</p>
+                  </div>
+
+                  <div className="pt-0.5 text-[8px] sm:text-[9px] font-black tracking-widest text-gray-500 uppercase flex items-center space-x-1">
+                    {currentSlide.brands.map((b, i) => (
+                      <React.Fragment key={b}>
+                        <span>{b}</span>
+                        {i < currentSlide.brands.length - 1 && <span>&bull;</span>}
+                      </React.Fragment>
+                    ))}
+                  </div>
+
+                  {/* Script Cursive Text with Yellow Underline Swoosh */}
+                  <div className="relative inline-block pt-0.5">
+                    <p className="font-serif italic text-base sm:text-lg font-black text-[#172033]">
+                      Better Everyday.
+                    </p>
+                    <div className="w-full h-1 bg-[#FFC20A] rounded-full -rotate-2 mt-0.5"></div>
+                  </div>
+                </div>
+
               </div>
+
+              {/* Dots Pagination Indicator */}
+              <div className="absolute bottom-2 left-1/2 -translate-x-1/2 flex items-center space-x-1.5 z-30">
+                {heroSlides.map((_, idx) => (
+                  <button
+                    key={idx}
+                    onClick={() => setActiveSlideIndex(idx)}
+                    className={`h-1.5 rounded-full transition-all cursor-pointer ${idx === activeSlideIndex ? 'w-5 bg-[#0875E1]' : 'w-1.5 bg-gray-300 hover:bg-gray-400'}`}
+                    aria-label={`Slide ${idx + 1}`}
+                  />
+                ))}
+              </div>
+
             </div>
-
-            {/* Center Column: High-Res Laptop Image */}
-            <div className="md:col-span-4 flex items-center justify-center relative z-10">
-              <img
-                src="https://images.unsplash.com/photo-1517336714731-489689fd1ca8?w=1000&auto=format&fit=crop&q=80"
-                alt="NexDay Laptop Promo"
-                className="w-full max-w-[320px] max-h-[170px] object-contain drop-shadow-2xl hover:scale-105 transition-transform duration-500"
-              />
-            </div>
-
-            {/* Right Column: Deal of the Week Promo Card */}
-            <div className="md:col-span-3 space-y-1.5 text-left border-l border-amber-900/10 pl-5 z-10 hidden md:block">
-              <span className="bg-[#0B2A55] text-white text-[9px] font-black uppercase px-2 py-0.5 rounded-md tracking-wider">
-                Deal of the Week
-              </span>
-              <div className="space-y-0.5 pt-0.5">
-                <p className="text-[11px] font-extrabold text-gray-700">Up to</p>
-                <h2 className="text-2xl sm:text-3xl font-black text-[#0B2A55] leading-none">40% OFF</h2>
-                <p className="text-[11px] font-bold text-gray-700">On Laptops & Accessories</p>
-              </div>
-
-              <div className="pt-1 text-[9px] font-black tracking-widest text-gray-500 uppercase flex items-center space-x-1.5">
-                <span>DELL</span>
-                <span>&bull;</span>
-                <span>HP</span>
-                <span>&bull;</span>
-                <span>ASUS</span>
-                <span>&bull;</span>
-                <span>LENOVO</span>
-              </div>
-
-              {/* Script Cursive Text with Yellow Underline Swoosh */}
-              <div className="relative inline-block pt-1">
-                <p className="font-serif italic text-xl font-black text-[#172033]">
-                  Better Everyday.
-                </p>
-                <div className="w-full h-1 bg-[#FFC20A] rounded-full -rotate-2 mt-0.5"></div>
-              </div>
-            </div>
-
-          </div>
-        </div>
+          );
+        })()}
 
         {/* 2. CATEGORY ICONS SECTION */}
         <div className="space-y-4 pt-2">
@@ -182,7 +326,7 @@ export const HomePage: React.FC = () => {
             <button onClick={() => navigate('/category/electronics')} className="text-xs font-bold text-[#0875E1] hover:underline">View All &rarr;</button>
           </div>
 
-          <div className="grid grid-cols-5 sm:grid-cols-5 md:grid-cols-10 gap-3">
+          <div className="grid grid-cols-3 sm:grid-cols-5 md:grid-cols-10 gap-3 sm:gap-4">
             {defaultCategoryList.map((cat) => {
               const iconImg = getCategoryIconImage(cat.slug);
               return (

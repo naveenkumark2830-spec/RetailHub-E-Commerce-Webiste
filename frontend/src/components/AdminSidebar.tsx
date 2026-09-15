@@ -1,6 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
-import { User } from 'lucide-react';
+import { User, Menu, X } from 'lucide-react';
 import { CANONICAL_NAV_ITEMS } from '../config/sidebarConfig';
 import { isRouteAllowed } from '../utils/rbac';
 
@@ -9,6 +9,7 @@ export const AdminSidebar: React.FC = () => {
   const location = useLocation();
   const currentPath = location.pathname;
   const [admin, setAdmin] = useState<any>(null);
+  const [mobileOpen, setMobileOpen] = useState<boolean>(false);
 
   useEffect(() => {
     const adminData = localStorage.getItem('adminUser');
@@ -19,41 +20,47 @@ export const AdminSidebar: React.FC = () => {
     }
   }, []);
 
+  // Close drawer on path change
+  useEffect(() => {
+    setMobileOpen(false);
+  }, [currentPath]);
+
   const permittedItems = CANONICAL_NAV_ITEMS.filter(item => 
     isRouteAllowed(admin?.role_id, item.path)
   );
 
-  return (
-    <aside className="w-60 bg-white border-r border-gray-200 flex flex-col justify-between flex-shrink-0 min-h-[calc(100vh-53px)] select-none">
-      <div className="p-4 space-y-4">
-        <p className="text-[10px] font-extrabold text-gray-400 uppercase tracking-widest pl-3">
-          OPERATIONS DESK
-        </p>
+  const activeItem = permittedItems.find(item => item.path === currentPath);
+
+  const navContent = (
+    <div className="flex flex-col justify-between h-full select-none">
+      <div className="p-4 space-y-4 overflow-y-auto">
+        <div className="flex items-center justify-between">
+          <p className="text-[10px] font-extrabold text-gray-400 uppercase tracking-widest pl-3">
+            OPERATIONS DESK
+          </p>
+          <button 
+            onClick={() => setMobileOpen(false)}
+            className="lg:hidden text-gray-400 hover:text-gray-600 p-1 rounded-lg min-h-[44px] min-w-[44px] flex items-center justify-center"
+          >
+            <X className="w-5 h-5" />
+          </button>
+        </div>
 
         <nav className="space-y-1">
           {permittedItems.map((item) => {
             const IconComponent = item.icon;
-            const isActive = currentPath === item.path && (
-              item.key === 'simulator' ? currentPath === '/admin/simulator' :
-              item.key === 'products' ? currentPath === '/admin/products' :
-              item.key === 'categories' ? currentPath === '/admin/categories' :
-              item.key === 'operators' ? currentPath === '/admin/operators' :
-              item.key === 'inventory' ? currentPath === '/admin/inventory' :
-              item.key === 'orders' ? currentPath === '/admin/orders' :
-              item.key === 'customers' ? currentPath === '/admin/customers' :
-              item.key === 'reviews' ? currentPath === '/admin/reviews' :
-              item.key === 'coupons' ? currentPath === '/admin/coupons' :
-              item.key === 'warehouses' ? currentPath === '/admin/warehouses' :
-              false
-            );
+            const isActive = currentPath === item.path;
 
             return (
               <button
                 key={item.key}
-                onClick={() => navigate(item.path)}
-                className={`w-full flex items-center space-x-3 px-3.5 py-2.5 rounded-xl text-xs font-bold tracking-wider cursor-pointer transition-all text-left ${
+                onClick={() => {
+                  navigate(item.path);
+                  setMobileOpen(false);
+                }}
+                className={`w-full flex items-center space-x-3 px-3.5 py-3 rounded-xl text-xs font-bold tracking-wider cursor-pointer transition-all text-left min-h-[44px] ${
                   isActive
-                    ? 'bg-[#EFF6FF] text-[#0875E1] font-black border-l-4 border-[#0875E1] rounded-l-none'
+                    ? 'bg-[#EFF6FF] text-[#0875E1] font-black border-l-4 border-[#0875E1] rounded-l-none shadow-xs'
                     : 'text-[#475569] hover:text-[#0875E1] hover:bg-gray-50'
                 }`}
               >
@@ -81,7 +88,48 @@ export const AdminSidebar: React.FC = () => {
           </div>
         </div>
       </div>
-    </aside>
+    </div>
+  );
+
+  return (
+    <>
+      {/* Mobile Top Bar (< lg) */}
+      <div className="lg:hidden w-full bg-white border-b border-gray-200 px-4 py-3 flex items-center justify-between sticky top-0 z-30 shadow-xs">
+        <div className="flex items-center space-x-3">
+          <button 
+            onClick={() => setMobileOpen(true)}
+            className="p-2 rounded-lg text-gray-600 hover:bg-gray-100 focus:outline-none min-h-[44px] min-w-[44px] flex items-center justify-center"
+            aria-label="Open Admin Menu"
+          >
+            <Menu className="w-6 h-6 text-[#041E42]" />
+          </button>
+          <span className="text-xs font-black text-[#041E42] uppercase tracking-wider">
+            {activeItem ? activeItem.name : 'Operations Desk'}
+          </span>
+        </div>
+        <span className="text-[10px] font-extrabold text-[#0875E1] bg-blue-50 border border-blue-200 px-2.5 py-1 rounded-full">
+          {admin?.role_id || 'ADMIN'}
+        </span>
+      </div>
+
+      {/* Mobile Drawer Overlay (< lg) */}
+      {mobileOpen && (
+        <div className="lg:hidden fixed inset-0 z-50 flex">
+          <div 
+            className="fixed inset-0 bg-black/50 backdrop-blur-xs transition-opacity" 
+            onClick={() => setMobileOpen(false)}
+          />
+          <div className="relative w-72 max-w-[80vw] bg-white h-full shadow-2xl flex flex-col z-10">
+            {navContent}
+          </div>
+        </div>
+      )}
+
+      {/* Desktop Sidebar (>= lg) */}
+      <aside className="hidden lg:flex w-64 bg-white border-r border-gray-200 flex-col justify-between flex-shrink-0 min-h-[calc(100vh-53px)] select-none">
+        {navContent}
+      </aside>
+    </>
   );
 };
 

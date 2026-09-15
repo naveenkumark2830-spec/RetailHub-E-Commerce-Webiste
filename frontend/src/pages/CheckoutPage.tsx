@@ -426,7 +426,7 @@ export const CheckoutPage: React.FC = () => {
           </div>
 
           {/* 4-STEP PROGRESS STEPPER */}
-          <div className="flex items-center space-x-2 sm:space-x-3 text-xs">
+          <div className="flex items-center space-x-2 sm:space-x-3 text-xs overflow-x-auto no-scrollbar py-1 shrink-0">
             {/* Step 1 */}
             <div className="flex items-center space-x-2">
               <div className="w-7 h-7 rounded-full bg-[#0875E1] text-white flex items-center justify-center font-bold text-xs shadow-sm">

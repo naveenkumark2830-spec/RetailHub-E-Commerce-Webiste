@@ -2,7 +2,7 @@ import React, { useState, useEffect, useRef } from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
 import { motion, AnimatePresence } from 'framer-motion';
 import { 
-  ShoppingBag, Search, User, Heart, ShoppingCart, MapPin, 
+  Search, User, Heart, ShoppingCart, MapPin, 
   ChevronDown, Package, LogOut, Menu, X, Star
 } from 'lucide-react';
 import { useSessionStore } from '../store/useSessionStore';
@@ -192,12 +192,12 @@ export const Header: React.FC<HeaderProps> = ({ onSearchSubmit, activeCategorySl
           </div>
 
           {/* Right Links */}
-          <div className="flex items-center space-x-3 text-blue-100 font-semibold shrink-0">
-            <button onClick={() => navigate('/help')} className="hover:text-white transition-colors">Help</button>
-            <span>|</span>
-            <button onClick={() => navigate('/orders')} className="hover:text-white transition-colors">Track Order</button>
-            <span>|</span>
-            <button onClick={() => navigate('/help')} className="hover:text-white transition-colors hidden sm:inline">Sell on NexDay</button>
+          <div className="flex items-center space-x-3 text-[#FFC20A] font-semibold shrink-0">
+            <button onClick={() => navigate('/help')} className="hover:text-[#FFE066] transition-colors">Help</button>
+            <span className="text-[#FFC20A]/60 font-mono">|</span>
+            <button onClick={() => navigate('/orders')} className="hover:text-[#FFE066] transition-colors">Track Order</button>
+            <span className="text-[#FFC20A]/60 font-mono hidden sm:inline">|</span>
+            <button onClick={() => navigate('/help')} className="hover:text-[#FFE066] transition-colors hidden sm:inline">Sell on NexDay</button>
           </div>
 
         </div>
@@ -209,24 +209,13 @@ export const Header: React.FC<HeaderProps> = ({ onSearchSubmit, activeCategorySl
         {/* LOGO AREA */}
         <div 
           onClick={() => navigate('/home')} 
-          className="flex items-center space-x-2.5 cursor-pointer group shrink-0 select-none"
+          className="flex items-center cursor-pointer group shrink-0 select-none py-0.5"
         >
-          <div className="w-10 h-10 bg-[#FFC20A] rounded-xl flex items-center justify-center shadow-md group-hover:scale-105 transition-transform duration-200">
-            <div className="relative flex items-center justify-center">
-              <ShoppingBag className="w-6 h-6 text-[#0B2A55] stroke-[2.5]" />
-              <span className="absolute font-black text-[10px] text-[#0B2A55] top-[5px]">N</span>
-            </div>
-          </div>
-          <div className="flex flex-col">
-            <div className="flex items-center space-x-1">
-              <span className="text-2xl font-black tracking-tight text-white leading-none">
-                Nex<span className="text-[#FFC20A]">Day</span>
-              </span>
-            </div>
-            <span className="text-[10px] text-blue-100 font-semibold tracking-wider">
-              Shop Better. Live Brighter.
-            </span>
-          </div>
+          <img 
+            src="/nexday-logo.png" 
+            alt="NexDay™ - Brand New Day. Brand New Products." 
+            className="h-10 sm:h-12 w-auto object-contain bg-white rounded-xl px-2.5 py-1 shadow-md group-hover:scale-105 transition-transform duration-200" 
+          />
         </div>
 
         {/* SEARCH BAR */}
