@@ -1,6 +1,7 @@
 const topicMap: Record<string, string> = {
   // USER
   login: "retail_user_events",
+  login_failed: "retail_user_events",
   logout: "retail_user_events",
   session_started: "retail_user_events",
   session_ended: "retail_user_events",
@@ -9,6 +10,11 @@ const topicMap: Record<string, string> = {
   address_added: "retail_user_events",
   address_updated: "retail_user_events",
   address_deleted: "retail_user_events",
+  password_changed: "retail_user_events",
+  email_changed: "retail_user_events",
+  phone_changed: "retail_user_events",
+  device_registered: "retail_user_events",
+  payment_method_changed: "retail_user_events",
 
   // DISCOVERY
   page_view: "retail_discovery_events",

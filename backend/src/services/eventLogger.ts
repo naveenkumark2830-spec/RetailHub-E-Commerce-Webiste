@@ -119,7 +119,7 @@ export class EventLogger {
     const userType: 'guest' | 'registered' | 'admin' = isAdminEvent ? 'admin' : (event.user_type === 'guest' ? 'guest' : 'registered');
 
     // ENTITY VS METADATA SEPARATION
-    const isSessionOnlyEvent = ['session_started', 'session_ended', 'login', 'logout'].includes(event.event_type);
+    const isSessionOnlyEvent = ['session_started', 'session_ended', 'login', 'login_failed', 'logout'].includes(event.event_type);
     const passedEntity: any = event.entity || {};
     const entityObj: EntityMap = {
       product_id: isSessionOnlyEvent ? null : (passedEntity.product_id ?? md.selected_product_id ?? md.product_id ?? null),

@@ -121,10 +121,7 @@ const CATEGORIES_LIST = [
   { id: 'CAT007', name: 'Books', slug: 'books', desc: 'Novels, biographies, academic textbooks.' },
   { id: 'CAT008', name: 'Toys & Games', slug: 'toys-games', desc: 'Board games, action figures, puzzles.' },
   { id: 'CAT009', name: 'Automotive', slug: 'automotive', desc: 'Car accessories, cleaning kits, parts.' },
-  { id: 'CAT010', name: 'Computers & Accessories', slug: 'computers-accessories', desc: 'Mice, mechanical keyboards, monitors.' },
   { id: 'CAT011', name: 'Mobile & Tablets', slug: 'mobile-tablets', desc: 'Smartphones, cases, charging bricks.' },
-  { id: 'CAT012', name: 'Appliances', slug: 'appliances', desc: 'Air conditioners, refrigerators, washers.' },
-  { id: 'CAT013', name: 'Kitchen', slug: 'kitchen', desc: 'Cookware, mixers, blenders, utensils.' },
   { id: 'CAT014', name: 'Office & Stationery', slug: 'office-stationery', desc: 'Journals, premium pens, desk organizers.' },
   { id: 'CAT015', name: 'Health & Wellness', slug: 'health-wellness', desc: 'Supplements, proteins, vitamins.' },
   { id: 'CAT016', name: 'Baby Products', slug: 'baby-products', desc: 'Pampers, baby oils, safety gear.' },
@@ -5560,6 +5557,34 @@ export async function getAdminProductsList(
   }
   query += ' GROUP BY p.product_id ORDER BY p.created_at DESC';
   const [rows]: any = await dbPool.query(query, params);
+
+  if (rows.length === 0) return [];
+
+  // Batch query all gallery images in 1 single fast query
+  const productIds = rows.map((r: any) => r.product_id);
+  const [allImages]: any = await dbPool.query(
+    'SELECT product_id, image_url FROM product_images WHERE product_id IN (?) ORDER BY display_order ASC',
+    [productIds]
+  );
+
+  const imageMap: Record<string, string[]> = {};
+  for (const img of allImages) {
+    if (!imageMap[img.product_id]) {
+      imageMap[img.product_id] = [];
+    }
+    imageMap[img.product_id].push(img.image_url);
+  }
+
+  for (const row of rows) {
+    if (imageMap[row.product_id] && imageMap[row.product_id].length > 0) {
+      row.gallery_images = imageMap[row.product_id];
+    } else if (row.image_url) {
+      row.gallery_images = [row.image_url];
+    } else {
+      row.gallery_images = [];
+    }
+  }
+
   return rows;
 }
 
@@ -5604,14 +5629,27 @@ export async function createAdminProduct(productData: any, adminId: string): Pro
     [inventoryId, productId, stock]
   );
 
-  // Insert primary image
-  const imageId = `IMG-${Math.random().toString(36).substr(2, 9).toUpperCase()}`;
-  const imageUrl = productData.image_url || 'https://via.placeholder.com/300';
-  await dbPool.query(
-    `INSERT INTO product_images (image_id, product_id, image_url, image_type, display_order, alt_text)
-     VALUES (?, ?, ?, 'primary', 1, ?)`,
-    [imageId, productId, imageUrl, productData.name]
-  );
+  // Insert gallery images into product_images
+  if (productData.gallery_images && Array.isArray(productData.gallery_images) && productData.gallery_images.length > 0) {
+    const cleanGallery = productData.gallery_images.filter((img: string) => img && img.trim().length > 0);
+    for (let idx = 0; idx < cleanGallery.length; idx++) {
+      const imgUrl = cleanGallery[idx];
+      const imgId = `IMG-${Math.random().toString(36).substr(2, 9).toUpperCase()}`;
+      await dbPool.query(
+        `INSERT INTO product_images (image_id, product_id, image_url, image_type, display_order, alt_text)
+         VALUES (?, ?, ?, ?, ?, ?)`,
+        [imgId, productId, imgUrl, idx === 0 ? 'primary' : 'alternate', idx + 1, productData.name]
+      );
+    }
+  } else {
+    const imageId = `IMG-${Math.random().toString(36).substr(2, 9).toUpperCase()}`;
+    const imageUrl = productData.image_url || '';
+    await dbPool.query(
+      `INSERT INTO product_images (image_id, product_id, image_url, image_type, display_order, alt_text)
+       VALUES (?, ?, ?, 'primary', 1, ?)`,
+      [imageId, productId, imageUrl, productData.name]
+    );
+  }
 
   // Write audit log
   await writeAdminAuditLog(adminId, 'CREATE_PRODUCT', 'PRODUCT', productId, null, JSON.stringify({ name: productData.name, price, stock }));
@@ -5674,8 +5712,22 @@ export async function updateAdminProduct(productId: string, productData: any, ad
     [stock, productId]
   );
 
-  // Update image_url
-  if (productData.image_url) {
+  // Update gallery_images in product_images table
+  if (productData.gallery_images && Array.isArray(productData.gallery_images) && productData.gallery_images.length > 0) {
+    const cleanGallery = productData.gallery_images.filter((img: string) => img && img.trim().length > 0);
+    if (cleanGallery.length > 0) {
+      await dbPool.query(`DELETE FROM product_images WHERE product_id = ?`, [productId]);
+      for (let idx = 0; idx < cleanGallery.length; idx++) {
+        const imgUrl = cleanGallery[idx];
+        const imgId = `IMG-${Math.random().toString(36).substr(2, 9).toUpperCase()}`;
+        await dbPool.query(
+          `INSERT INTO product_images (image_id, product_id, image_url, image_type, display_order, alt_text)
+           VALUES (?, ?, ?, ?, ?, ?)`,
+          [imgId, productId, imgUrl, idx === 0 ? 'primary' : 'alternate', idx + 1, productData.name]
+        );
+      }
+    }
+  } else if (productData.image_url) {
     await dbPool.query(
       `UPDATE product_images SET image_url = ? WHERE product_id = ? AND image_type = 'primary'`,
       [productData.image_url, productId]
