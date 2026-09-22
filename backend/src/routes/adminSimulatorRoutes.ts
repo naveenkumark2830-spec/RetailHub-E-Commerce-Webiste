@@ -17,7 +17,8 @@ router.post('/start', adminAuth, async (req: any, res) => {
       mode,
       fraudIpsCount,
       fraudIngredients,
-      fraudRatio
+      fraudRatio,
+      selectedFraudScenario
     } = req.body;
 
     let parsedMode: 'CLEAN' | 'DIRTY' | 'FRAUD' = 'CLEAN';
@@ -33,7 +34,8 @@ router.post('/start', adminAuth, async (req: any, res) => {
       mode: parsedMode,
       fraudIpsCount: fraudIpsCount ? parseInt(fraudIpsCount) : undefined,
       fraudIngredients,
-      fraudRatio: fraudRatio ? parseFloat(fraudRatio) : undefined
+      fraudRatio: fraudRatio !== undefined ? parseFloat(fraudRatio) : undefined,
+      selectedFraudScenario
     });
     res.json({ success: true, message: 'Simulator started successfully.', status: simulatorService.getStatus() });
   } catch (error: any) {
@@ -104,6 +106,37 @@ router.post('/test-coverage', adminAuth, async (req: any, res) => {
 router.get('/coverage-report', adminAuth, async (req: any, res) => {
   try {
     res.json(simulatorService.getCoverageReport());
+  } catch (error: any) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// POST /api/admin/simulator/test-deterministic
+router.post('/test-deterministic', adminAuth, async (req: any, res) => {
+  try {
+    const { scenario, seed } = req.body;
+    const validScenarios = [
+      'NORMAL_CUSTOMER',
+      'BRUTE_FORCE_LOGIN',
+      'MULTI_IP_LOGIN',
+      'ACCOUNT_TAKEOVER',
+      'PAYMENT_FRAUD',
+      'HIGH_VALUE_TRANSACTION',
+      'HIGH_VALUE_VELOCITY',
+      'MULTI_ACCOUNT_DEVICE',
+      'MULTI_ACCOUNT_IP',
+      'COUPON_ABUSE',
+      'REFUND_ABUSE',
+      'CHECKOUT_VELOCITY',
+      'BOT_SCRAPER',
+      'DDOS_FLOOD',
+      'SUSPICIOUS_LOCATION_CHANGE',
+      'REPEATED_FRAUD_ESCALATION'
+    ];
+    const parsedScenario: any = validScenarios.includes(scenario) ? scenario : (validScenarios.includes(scenario?.toUpperCase()) ? scenario.toUpperCase() : 'BRUTE_FORCE_LOGIN');
+    const parsedSeed = seed ? parseInt(seed) : 42;
+    const events = await simulatorService.runDeterministicTest(parsedScenario, parsedSeed);
+    res.json({ success: true, scenario: parsedScenario, seed: parsedSeed, event_count: events.length, events });
   } catch (error: any) {
     res.status(500).json({ error: error.message });
   }
