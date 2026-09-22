@@ -8,6 +8,7 @@ import {
 import { useSessionStore } from '../store/useSessionStore';
 import { useCartStore } from '../store/useCartStore';
 import { useProfilePhoto } from '../hooks/useProfilePhoto';
+import { CANONICAL_CATEGORIES, fetchCategoryList, CategoryItem } from '../utils/categoryData';
 
 interface HeaderProps {
   onSearchSubmit?: (query: string) => void;
@@ -140,18 +141,13 @@ export const Header: React.FC<HeaderProps> = ({ onSearchSubmit, activeCategorySl
     navigate(`/search?q=${encodeURIComponent(titleText)}`);
   };
 
-  const categories = [
-    { name: 'Electronics', slug: 'electronics' },
-    { name: 'Fashion', slug: 'fashion' },
-    { name: 'Home & Living', slug: 'home-living' },
-    { name: 'Groceries', slug: 'groceries' },
-    { name: 'Beauty', slug: 'beauty' },
-    { name: 'Sports & Fitness', slug: 'sports-fitness' },
-    { name: 'Books', slug: 'books' },
-    { name: 'Toys & Games', slug: 'toys-games' },
-    { name: 'Automotive', slug: 'automotive' },
-    { name: 'Offers', slug: 'offers', isOffer: true },
-  ];
+  const [categories, setCategories] = useState<CategoryItem[]>(CANONICAL_CATEGORIES);
+
+  useEffect(() => {
+    fetchCategoryList().then(list => {
+      if (list && list.length > 0) setCategories(list);
+    });
+  }, []);
 
   return (
     <header className="w-full bg-[#0875E1] text-white sticky top-0 z-50 shadow-md">

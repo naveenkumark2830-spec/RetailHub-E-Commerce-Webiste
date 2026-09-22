@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { motion } from 'framer-motion';
 import { 
@@ -12,6 +12,7 @@ import { ProductCard } from '../components/ProductCard';
 import { TrustBar } from '../components/TrustBar';
 import { NexDayPlusBanner } from '../components/NexDayPlusBanner';
 import { getCategoryIconImage } from '../utils/productImageMap';
+import { CANONICAL_CATEGORIES, fetchCategoryList, CategoryItem } from '../utils/categoryData';
 
 interface Product {
   product_id: string;
@@ -36,6 +37,44 @@ export const HomePage: React.FC = () => {
   const [flashDeals, setFlashDeals] = useState<Product[]>([]);
   const [allProducts, setAllProducts] = useState<Product[]>([]);
   const [activeSlideIndex, setActiveSlideIndex] = useState<number>(0);
+  const [categoryList, setCategoryList] = useState<CategoryItem[]>(CANONICAL_CATEGORIES);
+
+  // Category Slider Scroll Control
+  const categoryScrollRef = useRef<HTMLDivElement>(null);
+  const [canScrollLeft, setCanScrollLeft] = useState(false);
+  const [canScrollRight, setCanScrollRight] = useState(true);
+
+  const checkCategoryScroll = () => {
+    if (categoryScrollRef.current) {
+      const { scrollLeft, scrollWidth, clientWidth } = categoryScrollRef.current;
+      setCanScrollLeft(scrollLeft > 5);
+      setCanScrollRight(scrollLeft + clientWidth < scrollWidth - 5);
+    }
+  };
+
+  useEffect(() => {
+    fetchCategoryList().then(list => {
+      if (list && list.length > 0) setCategoryList(list);
+    });
+  }, []);
+
+  useEffect(() => {
+    checkCategoryScroll();
+    window.addEventListener('resize', checkCategoryScroll);
+    return () => window.removeEventListener('resize', checkCategoryScroll);
+  }, [categoryList]);
+
+  const slideCategoriesLeft = () => {
+    if (categoryScrollRef.current) {
+      categoryScrollRef.current.scrollBy({ left: -320, behavior: 'smooth' });
+    }
+  };
+
+  const slideCategoriesRight = () => {
+    if (categoryScrollRef.current) {
+      categoryScrollRef.current.scrollBy({ left: 320, behavior: 'smooth' });
+    }
+  };
 
   // 3D Hero Showcase Banner Slides
   const heroSlides = [
@@ -139,19 +178,6 @@ export const HomePage: React.FC = () => {
       })
       .catch(() => {});
   }, []);
-
-  const defaultCategoryList = [
-    { name: 'Electronics', slug: 'electronics', catId: 'CAT001' },
-    { name: 'Fashion', slug: 'fashion', catId: 'CAT002' },
-    { name: 'Home & Living', slug: 'home-living', catId: 'CAT003' },
-    { name: 'Groceries', slug: 'groceries', catId: 'CAT004' },
-    { name: 'Beauty', slug: 'beauty', catId: 'CAT005' },
-    { name: 'Sports', slug: 'sports-fitness', catId: 'CAT006' },
-    { name: 'Books', slug: 'books', catId: 'CAT007' },
-    { name: 'Toys & Games', slug: 'toys-games', catId: 'CAT008' },
-    { name: 'Automotive', slug: 'automotive', catId: 'CAT009' },
-    { name: 'Offers', slug: 'offers', catId: 'CAT010', isOffer: true },
-  ];
 
   return (
     <div className="min-h-screen bg-[#F5F7FA] text-[#172033] flex flex-col justify-between font-sans">
@@ -319,36 +345,66 @@ export const HomePage: React.FC = () => {
           );
         })()}
 
-        {/* 2. CATEGORY ICONS SECTION */}
-        <div className="space-y-4 pt-2">
+        {/* 2. CATEGORY ICONS SECTION (HORIZONTAL SLIDER WITH DESKTOP ARROW NAVIGATION) */}
+        <div className="space-y-3 pt-2 relative">
           <div className="flex items-center justify-between">
             <h2 className="text-lg font-black text-[#172033] tracking-tight">Top Categories</h2>
             <button onClick={() => navigate('/category/electronics')} className="text-xs font-bold text-[#0875E1] hover:underline">View All &rarr;</button>
           </div>
 
-          <div className="grid grid-cols-3 sm:grid-cols-5 md:grid-cols-10 gap-3 sm:gap-4">
-            {defaultCategoryList.map((cat) => {
-              const iconImg = getCategoryIconImage(cat.slug);
-              return (
-                <motion.div
-                  key={cat.slug}
-                  whileHover={{ y: -4, scale: 1.05 }}
-                  onClick={() => navigate(`/category/${cat.slug}`)}
-                  className="flex flex-col items-center space-y-2 cursor-pointer group select-none"
-                >
-                  <div className={`w-16 h-16 sm:w-20 sm:h-20 rounded-full p-1 bg-white shadow-md border-2 transition-all flex items-center justify-center overflow-hidden ${cat.isOffer ? 'border-red-500' : 'border-blue-100 group-hover:border-[#0875E1]'}`}>
-                    <img 
-                      src={iconImg} 
-                      alt={cat.name}
-                      className="w-full h-full object-cover rounded-full group-hover:scale-110 transition-transform duration-300"
-                    />
-                  </div>
-                  <span className={`text-[11px] text-center font-bold line-clamp-1 ${cat.isOffer ? 'text-red-600 font-extrabold' : 'text-gray-700 group-hover:text-[#0875E1]'}`}>
-                    {cat.name}
-                  </span>
-                </motion.div>
-              );
-            })}
+          <div className="relative group/slider">
+            {/* Desktop Left Arrow Button */}
+            {canScrollLeft && (
+              <button 
+                onClick={slideCategoriesLeft}
+                className="absolute -left-3 top-1/2 -translate-y-1/2 z-30 w-8 h-8 rounded-full bg-white shadow-md border border-gray-200/80 flex items-center justify-center text-[#0B2A55] hover:bg-gray-50 hover:scale-110 transition-all cursor-pointer hidden md:flex"
+                aria-label="Scroll Left Categories"
+              >
+                <ChevronLeft className="w-4 h-4 stroke-[2.5]" />
+              </button>
+            )}
+
+            {/* Desktop Right Arrow Button */}
+            {canScrollRight && (
+              <button 
+                onClick={slideCategoriesRight}
+                className="absolute -right-3 top-1/2 -translate-y-1/2 z-30 w-8 h-8 rounded-full bg-white shadow-md border border-gray-200/80 flex items-center justify-center text-[#0B2A55] hover:bg-gray-50 hover:scale-110 transition-all cursor-pointer hidden md:flex"
+                aria-label="Scroll Right Categories"
+              >
+                <ChevronRight className="w-4 h-4 stroke-[2.5]" />
+              </button>
+            )}
+
+            {/* Horizontal Scroll Track */}
+            <div 
+              ref={categoryScrollRef}
+              onScroll={checkCategoryScroll}
+              tabIndex={0}
+              className="flex items-center space-x-4 sm:space-x-6 overflow-x-auto scroll-smooth snap-x snap-mandatory no-scrollbar py-2 px-1 focus:outline-none focus:ring-1 focus:ring-[#0875E1]/30 rounded-2xl"
+            >
+              {categoryList.map((cat) => {
+                const iconImg = getCategoryIconImage(cat.slug);
+                return (
+                  <motion.div
+                    key={cat.slug}
+                    whileHover={{ y: -4, scale: 1.05 }}
+                    onClick={() => navigate(`/category/${cat.slug}`)}
+                    className="flex flex-col items-center space-y-2 cursor-pointer group/cat select-none shrink-0 snap-start"
+                  >
+                    <div className={`w-16 h-16 sm:w-20 sm:h-20 rounded-full p-1 bg-white shadow-md border-2 transition-all flex items-center justify-center overflow-hidden ${cat.isOffer ? 'border-red-500' : 'border-blue-100 group-hover/cat:border-[#FFC20A]'}`}>
+                      <img 
+                        src={iconImg} 
+                        alt={cat.name}
+                        className="w-full h-full object-cover rounded-full group-hover/cat:scale-110 transition-transform duration-300"
+                      />
+                    </div>
+                    <span className={`text-[11px] text-center font-bold line-clamp-1 w-20 sm:w-24 px-0.5 ${cat.isOffer ? 'text-red-600 font-extrabold' : 'text-gray-700 group-hover/cat:text-[#D99B00]'}`}>
+                      {cat.name}
+                    </span>
+                  </motion.div>
+                );
+              })}
+            </div>
           </div>
         </div>
 

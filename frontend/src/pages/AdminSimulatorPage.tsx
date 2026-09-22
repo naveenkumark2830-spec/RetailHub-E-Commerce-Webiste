@@ -51,10 +51,11 @@ export default function AdminSimulatorPage() {
   const [duration, setDuration] = useState<string>('5 min');
   const [customDuration, setCustomDuration] = useState<string>('');
   const [trafficProfile, setTrafficProfile] = useState<string>('Mixed / Realistic');
-  const [mode, setMode] = useState<'CLEAN' | 'DIRTY' | 'FRAUD'>('CLEAN');
-  const [fraudIpsCount, setFraudIpsCount] = useState<string>('5');
-  const [fraudIngredients, setFraudIngredients] = useState<'DDOS' | 'SCRAPER' | 'BOTH'>('BOTH');
-  const [fraudRatio, setFraudRatio] = useState<string>('0.10');
+  const [mode, setMode] = useState<'CLEAN' | 'DIRTY' | 'FRAUD'>('FRAUD');
+  const [fraudIpsCount] = useState<string>('5');
+  const [fraudIngredients] = useState<'DDOS' | 'SCRAPER' | 'BOTH'>('BOTH');
+  const [fraudRatio, setFraudRatio] = useState<string>('0.80');
+  const [liveFraudScenario, setLiveFraudScenario] = useState<string>('ALL');
 
   // Live Metrics & Status
   const [running, setRunning] = useState<boolean>(false);
@@ -208,7 +209,8 @@ export default function AdminSimulatorPage() {
           mode,
           fraudIpsCount: parseInt(fraudIpsCount) || 5,
           fraudIngredients,
-          fraudRatio: parseFloat(fraudRatio) || 0.10
+          fraudRatio: parseFloat(fraudRatio) !== undefined ? parseFloat(fraudRatio) : 0.80,
+          selectedFraudScenario: liveFraudScenario || 'ALL'
         })
       });
       const data = await res.json();
@@ -284,7 +286,39 @@ export default function AdminSimulatorPage() {
         fetchHistory();
       }
     } catch (err) {
-      showToast('Failed to stop simulator.', 'error');
+    }
+  };
+
+  // FraudGuard Deterministic Controls State
+  const [selectedScenario, setSelectedScenario] = useState<string>('NORMAL_CUSTOMER');
+  const [deterministicSeed, setDeterministicSeed] = useState<number>(42);
+  const [deterministicResult, setDeterministicResult] = useState<any>(null);
+  const [deterministicLoading, setDeterministicLoading] = useState<boolean>(false);
+
+  const handleTriggerDeterministicTest = async () => {
+    const token = getAdminToken();
+    try {
+      setDeterministicLoading(true);
+      showToast(`Executing deterministic test for [${selectedScenario}]...`);
+      const res = await fetch('/api/admin/simulator/test-deterministic', {
+        method: 'POST',
+        headers: { 
+          'Content-Type': 'application/json',
+          'Authorization': token 
+        },
+        body: JSON.stringify({ scenario: selectedScenario, seed: deterministicSeed })
+      });
+      const data = await res.json();
+      if (res.ok && data.success) {
+        setDeterministicResult(data);
+        showToast(`Generated ${data.event_count} dry-run events for ${data.scenario}! Saved to test sink.`);
+      } else {
+        showToast(data.error || 'Deterministic test execution failed.', 'error');
+      }
+    } catch (err: any) {
+      showToast(err.message || 'Error executing deterministic test.', 'error');
+    } finally {
+      setDeterministicLoading(false);
     }
   };
 
@@ -546,38 +580,38 @@ export default function AdminSimulatorPage() {
               </div>
 
               {/* Inline Fraud Pattern Controls Panel */}
-              {mode === 'FRAUD' && (
+              {(mode === 'FRAUD' || mode === 'DIRTY') && (
                 <div className="col-span-full bg-amber-50/90 border border-amber-300/80 rounded-2xl p-4 space-y-3">
                   <div className="flex items-center space-x-2 text-amber-900 font-black text-xs uppercase tracking-wider">
                     <ShieldAlert className="w-4 h-4 text-amber-600" />
-                    <span>Spark Fraud Test Parameters (Layered on Clean Generator)</span>
+                    <span>RetailHub FraudGuard — Target Scenario & Interleave Configuration</span>
                   </div>
 
-                  <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                     <div className="flex flex-col space-y-1">
-                      <label className="text-[10px] font-bold text-gray-600 uppercase tracking-wide">Number of Fraud IPs</label>
-                      <input
-                        type="number"
-                        min="1"
-                        max="50"
-                        value={fraudIpsCount}
-                        onChange={(e) => setFraudIpsCount(e.target.value)}
-                        disabled={running}
-                        className="bg-white border border-gray-250 rounded-xl px-3 py-2 text-xs font-bold text-[#041E42] focus:outline-none focus:border-[#0071DC] disabled:opacity-50"
-                      />
-                    </div>
-
-                    <div className="flex flex-col space-y-1">
-                      <label className="text-[10px] font-bold text-gray-600 uppercase tracking-wide">Fraud Ingredients</label>
+                      <label className="text-[10px] font-bold text-gray-600 uppercase tracking-wide">Target Fraud Scenario</label>
                       <select
-                        value={fraudIngredients}
-                        onChange={(e) => setFraudIngredients(e.target.value as any)}
+                        value={liveFraudScenario}
+                        onChange={(e) => setLiveFraudScenario(e.target.value)}
                         disabled={running}
                         className="bg-white border border-gray-250 rounded-xl px-3 py-2 text-xs font-bold text-[#041E42] focus:outline-none focus:border-[#0071DC] disabled:opacity-50"
                       >
-                        <option value="BOTH">Both DDoS & Cookie-Clearing Scraper</option>
-                        <option value="DDOS">DDoS Attack (&gt;30 events / 10s)</option>
-                        <option value="SCRAPER">Cookie-Clearing Scraper (&gt;3 sessions / 10s)</option>
+                        <option value="ALL">All 15 Fraud Scenarios (Randomly Interleaved)</option>
+                        <option value="BRUTE_FORCE_LOGIN">1. Brute-force login (login_failed x5+ -&gt; login_success)</option>
+                        <option value="MULTI_IP_LOGIN">2. Multi-IP login attack (Failed logins from 3+ IPs -&gt; login)</option>
+                        <option value="ACCOUNT_TAKEOVER">3. Account takeover (login_failed -&gt; login -&gt; new_device -&gt; profile -&gt; order)</option>
+                        <option value="PAYMENT_FRAUD">4. Payment fraud / card testing (payment_initiated -&gt; multiple failed -&gt; success)</option>
+                        <option value="HIGH_VALUE_TRANSACTION">5. High-value transaction anomaly (product_view -&gt; high value checkout -&gt; order)</option>
+                        <option value="HIGH_VALUE_VELOCITY">6. High-value velocity burst (3+ high-value orders in rapid succession)</option>
+                        <option value="MULTI_ACCOUNT_DEVICE">7. Multi-account device sharing (Same device_id -&gt; 5+ customer accounts)</option>
+                        <option value="MULTI_ACCOUNT_IP">8. Multi-account IP sharing (Same ip_address -&gt; 5+ customer accounts)</option>
+                        <option value="COUPON_ABUSE">9. Promo coupon abuse (Same promo code across 5+ customer accounts)</option>
+                        <option value="REFUND_ABUSE">10. Refund &amp; return abuse (order -&gt; delivered -&gt; return -&gt; refund cycle)</option>
+                        <option value="CHECKOUT_VELOCITY">11. Rapid checkout velocity (Rapidly repeating checkout -&gt; payment_initiated)</option>
+                        <option value="BOT_SCRAPER">12. Automated bot scraper (High volume product_view / impression without cart/checkout)</option>
+                        <option value="DDOS_FLOOD">13. DDoS volumetric flood (&gt;50 events/sec from single IP)</option>
+                        <option value="SUSPICIOUS_LOCATION_CHANGE">14. Impossible travel location jump (New country/IP -&gt; password_changed / order)</option>
+                        <option value="REPEATED_FRAUD_ESCALATION">15. Escalating multi-incident fraud chain (Escalating fraud activity)</option>
                       </select>
                     </div>
 
@@ -589,10 +623,11 @@ export default function AdminSimulatorPage() {
                         disabled={running}
                         className="bg-white border border-gray-250 rounded-xl px-3 py-2 text-xs font-bold text-[#041E42] focus:outline-none focus:border-[#0071DC] disabled:opacity-50"
                       >
-                        <option value="0.05">5% Fraud / 95% Clean Background</option>
                         <option value="0.10">10% Fraud / 90% Clean Background</option>
                         <option value="0.25">25% Fraud / 75% Clean Background</option>
                         <option value="0.50">50% Fraud / 50% Clean Background</option>
+                        <option value="0.80">80% Fraud / 20% Clean Background (Default)</option>
+                        <option value="1.00">100% Fraud / 0% Clean Background</option>
                       </select>
                     </div>
                   </div>
@@ -650,6 +685,92 @@ export default function AdminSimulatorPage() {
                 <span>Run Event Coverage Test</span>
               </button>
             </div>
+          </div>
+
+          {/* RETAILHUB FRAUDGUARD — DETERMINISTIC SCENARIO TEST PANEL */}
+          <div className="bg-white border border-gray-200 rounded-3xl p-6 shadow-sm space-y-4">
+            <div className="flex items-center justify-between">
+              <div>
+                <h3 className="text-xs font-black text-[#041E42] uppercase tracking-widest flex items-center gap-2">
+                  <ShieldAlert className="w-4 h-4 text-[#0071DC]" />
+                  <span>RetailHub FraudGuard — Controlled Fraud Scenario Generator (15 Scenarios)</span>
+                </h3>
+                <p className="text-[10px] text-gray-500 font-medium mt-0.5">
+                  Generate seed-deterministic synthetic fraud sequences into test sink (backend/event_logs/test_runs/deterministic_events.jsonl).
+                </p>
+              </div>
+              <span className="text-[10px] font-bold bg-amber-100 text-amber-900 px-3 py-1 rounded-full uppercase tracking-wider">
+                Dry-Run Test Sink
+              </span>
+            </div>
+
+            <div className="grid grid-cols-1 md:grid-cols-4 gap-4 items-end">
+              <div className="flex flex-col space-y-1.5 md:col-span-2">
+                <label className="text-[10px] font-bold text-gray-600 uppercase tracking-wide">Select Scenario</label>
+                <select
+                  value={selectedScenario}
+                  onChange={(e) => setSelectedScenario(e.target.value)}
+                  className="bg-gray-50 border border-gray-250 rounded-xl px-3.5 py-2.5 text-xs font-bold text-[#041E42] focus:outline-none focus:border-[#0071DC]"
+                >
+                  <option value="BRUTE_FORCE_LOGIN">1. BRUTE_FORCE_LOGIN — Brute-Force Login Attack</option>
+                  <option value="MULTI_IP_LOGIN">2. MULTI_IP_LOGIN — Multi-IP Login Attack</option>
+                  <option value="ACCOUNT_TAKEOVER">3. ACCOUNT_TAKEOVER — Credential Stuffing & Takeover</option>
+                  <option value="PAYMENT_FRAUD">4. PAYMENT_FRAUD — Card Swapping & Payment Retry Burst</option>
+                  <option value="HIGH_VALUE_TRANSACTION">5. HIGH_VALUE_TRANSACTION — High Value Spike Order (&gt;15x Baseline)</option>
+                  <option value="HIGH_VALUE_VELOCITY">6. HIGH_VALUE_VELOCITY — High Value Velocity Burst</option>
+                  <option value="MULTI_ACCOUNT_DEVICE">7. MULTI_ACCOUNT_DEVICE — Device Sharing across 5+ Accounts</option>
+                  <option value="MULTI_ACCOUNT_IP">8. MULTI_ACCOUNT_IP — IP Sharing across 5+ Accounts</option>
+                  <option value="COUPON_ABUSE">9. COUPON_ABUSE — Serial Promo Code Abuse across Accounts</option>
+                  <option value="REFUND_ABUSE">10. REFUND_ABUSE — Instant Return & Refund Cycle</option>
+                  <option value="CHECKOUT_VELOCITY">11. CHECKOUT_VELOCITY — Rapid Checkout Velocity Burst</option>
+                  <option value="BOT_SCRAPER">12. BOT_SCRAPER — High-Volume Scraping without Cart/Purchase</option>
+                  <option value="DDOS_FLOOD">13. DDOS_FLOOD — Volumetric DDoS Traffic Flood (&gt;50 ev/sec)</option>
+                  <option value="SUSPICIOUS_LOCATION_CHANGE">14. SUSPICIOUS_LOCATION_CHANGE — Impossible Travel Location Jump</option>
+                  <option value="REPEATED_FRAUD_ESCALATION">15. REPEATED_FRAUD_ESCALATION — Escalating Multi-Incident Chain</option>
+                </select>
+              </div>
+
+              <div className="flex flex-col space-y-1.5">
+                <label className="text-[10px] font-bold text-gray-600 uppercase tracking-wide">PRNG Seed</label>
+                <input
+                  type="number"
+                  value={deterministicSeed}
+                  onChange={(e) => setDeterministicSeed(parseInt(e.target.value) || 42)}
+                  className="bg-gray-50 border border-gray-250 rounded-xl px-3.5 py-2.5 text-xs font-bold text-[#041E42] focus:outline-none focus:border-[#0071DC]"
+                />
+              </div>
+
+              <button
+                onClick={handleTriggerDeterministicTest}
+                disabled={deterministicLoading}
+                className="flex items-center justify-center space-x-2 bg-[#0071DC] hover:bg-[#0046BE] text-white text-xs font-black uppercase tracking-wider px-5 py-2.5 rounded-xl shadow-xs transition-all disabled:opacity-50"
+              >
+                <Activity className="w-4 h-4" />
+                <span>{deterministicLoading ? 'Generating...' : 'Run Scenario Test'}</span>
+              </button>
+            </div>
+
+            {deterministicResult && (
+              <div className="bg-slate-900 text-slate-100 p-4 rounded-2xl font-mono text-xs space-y-2 border border-slate-700">
+                <div className="flex items-center justify-between border-b border-slate-700 pb-2 text-emerald-400 font-bold">
+                  <span>Scenario: {deterministicResult.scenario} (Seed: {deterministicResult.seed})</span>
+                  <span>Events Generated: {deterministicResult.event_count}</span>
+                </div>
+                <p className="text-[11px] text-slate-400">
+                  Output Sink: <code className="text-amber-300">backend/event_logs/test_runs/deterministic_events.jsonl</code>
+                </p>
+                <div className="max-h-40 overflow-y-auto space-y-1 text-[10px] pt-1">
+                  {deterministicResult.events?.slice(0, 5).map((evt: any, i: number) => (
+                    <div key={i} className="text-slate-300 truncate">
+                      <span className="text-blue-400">[{evt.event_time}]</span> <span className="text-emerald-300">{evt.event_type}</span> — <span className="text-slate-400">cust: {evt.customer_id}, session: {evt.session_id}</span>
+                    </div>
+                  ))}
+                  {deterministicResult.events?.length > 5 && (
+                    <div className="text-slate-500 italic pt-1">... + {deterministicResult.events.length - 5} more events in sink</div>
+                  )}
+                </div>
+              </div>
+            )}
           </div>
 
           {/* LIVE KPIs GRID */}

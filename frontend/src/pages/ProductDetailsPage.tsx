@@ -320,11 +320,12 @@ export const ProductDetailsPage: React.FC = () => {
                 <button
                   key={idx}
                   onClick={() => setActiveImage(url)}
+                  onMouseEnter={() => setActiveImage(url)}
                   className={`w-14 h-14 rounded-xl border-2 overflow-hidden bg-white p-1 transition-all cursor-pointer shadow-2xs ${
                     (activeImage || galleryImages[0]) === url ? 'border-[#0875E1] ring-2 ring-blue-100' : 'border-gray-200 hover:border-blue-300'
                   }`}
                 >
-                  <img src={url} alt="thumbnail" className="w-full h-full object-contain" />
+                  <img src={url} alt={`thumbnail-${idx}`} className="w-full h-full object-contain" />
                 </button>
               ))}
               <button className="w-14 h-8 bg-gray-100 hover:bg-gray-200 text-gray-600 rounded-xl flex items-center justify-center shrink-0 hidden sm:flex">
@@ -426,8 +427,8 @@ export const ProductDetailsPage: React.FC = () => {
 
             {/* Bank Offer Box (Matching Reference Image) */}
             <div className="bg-[#E8F8F0] border border-emerald-200 rounded-2xl p-3 flex items-start space-x-2.5 text-xs">
-              <div className="p-1 bg-emerald-600 text-white rounded-lg shrink-0 mt-0.5">
-                <span className="text-[10px] font-black">%</span>
+              <div className="p-1 bg-emerald-600 text-[#0071DC] rounded-lg shrink-0 mt-0.5">
+                <span className="text-[10px] font-black text-white">%</span>
               </div>
               <div className="flex-grow space-y-0.5">
                 <p className="font-extrabold text-emerald-950">Bank Offer</p>
@@ -440,28 +441,38 @@ export const ProductDetailsPage: React.FC = () => {
               </button>
             </div>
 
-            {/* Color Swatch Selection */}
+            {/* Color Swatch Selection (Allocates ONLY slots for actual uploaded images) */}
             <div className="space-y-2">
               <span className="text-xs font-extrabold text-[#172033]">
                 Color: <strong className="text-[#0875E1]">{selectedColor}</strong>
               </span>
 
               <div className="flex items-center space-x-3">
-                {[
-                  { name: 'Black', img: galleryImages[0] },
-                  { name: 'Silver', img: galleryImages[1] },
-                  { name: 'Navy', img: galleryImages[2] },
-                ].map((color) => (
-                  <button
-                    key={color.name}
-                    onClick={() => setSelectedColor(color.name)}
-                    className={`w-12 h-12 rounded-xl border-2 p-1 bg-white flex items-center justify-center transition-all cursor-pointer ${
-                      selectedColor === color.name ? 'border-[#0875E1] ring-2 ring-blue-100 shadow-2xs' : 'border-gray-200 hover:border-gray-300'
-                    }`}
-                  >
-                    <img src={color.img} alt={color.name} className="w-full h-full object-contain" />
-                  </button>
-                ))}
+                {galleryImages
+                  .filter(img => img && img.trim().length > 0)
+                  .map((url, idx) => {
+                    const defaultNames = ['Black', 'Silver', 'Navy', 'White', 'Gold', 'Blue'];
+                    const swatchName = (idx === 0 && product.color) ? product.color : (defaultNames[idx] || `Option ${idx + 1}`);
+                    const isActive = (activeImage || galleryImages[0]) === url;
+                    return (
+                      <button
+                        key={idx}
+                        onClick={() => {
+                          setSelectedColor(swatchName);
+                          setActiveImage(url);
+                        }}
+                        onMouseEnter={() => {
+                          setSelectedColor(swatchName);
+                          setActiveImage(url);
+                        }}
+                        className={`w-12 h-12 rounded-xl border-2 p-1 bg-white flex items-center justify-center transition-all cursor-pointer ${
+                          isActive ? 'border-[#0875E1] ring-2 ring-blue-100 shadow-2xs' : 'border-gray-200 hover:border-gray-300'
+                        }`}
+                      >
+                        <img src={url} alt={swatchName} className="w-full h-full object-contain" />
+                      </button>
+                    );
+                  })}
               </div>
             </div>
 

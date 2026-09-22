@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { 
-  Star, ChevronRight, Sliders, RotateCcw, LayoutGrid, List, ChevronDown, Check
+  Star, ChevronRight, Sliders, RotateCcw, LayoutGrid, List, Check
 } from 'lucide-react';
 import { useSessionStore } from '../store/useSessionStore';
 import { useCartStore } from '../store/useCartStore';
@@ -41,7 +41,6 @@ export const CategoryPage: React.FC = () => {
   const { fetchCart } = useCartStore();
 
   const [activeCategory, setActiveCategory] = useState<Category | null>(null);
-  const [subcategories, setSubcategories] = useState<any[]>([]);
 
   const [products, setProducts] = useState<Product[]>([]);
   const [availableBrands, setAvailableBrands] = useState<string[]>([]);
@@ -69,7 +68,7 @@ export const CategoryPage: React.FC = () => {
     setCurrentPage(1);
   }, [slug]);
 
-  // Fetch Category metadata & subcategories
+  // Fetch Category metadata
   useEffect(() => {
     if (!slug) return;
     fetch('/api/categories')
@@ -84,17 +83,6 @@ export const CategoryPage: React.FC = () => {
       .catch(() => {
         setActiveCategory({ category_id: 'CAT001', name: slug.replace(/-/g, ' ').toUpperCase(), slug, description: 'Explore top brands and quality products.' });
       });
-
-    fetch(`/api/categories/${slug}/subcategories`)
-      .then(r => r.json())
-      .then(d => {
-        if (d.success && d.subcategories) {
-          setSubcategories(d.subcategories);
-        } else {
-          setSubcategories([]);
-        }
-      })
-      .catch(() => setSubcategories([]));
   }, [slug]);
 
   // Fetch cart
@@ -262,42 +250,6 @@ export const CategoryPage: React.FC = () => {
             </div>
 
           </div>
-        </div>
-
-        {/* SUBCATEGORY PILLS BAR (MATCHING REFERENCE IMAGE EXACTLY) */}
-        <div className="flex items-center space-x-2 overflow-x-auto py-1 no-scrollbar">
-          <button
-            onClick={() => navigate(`/category/${slug}`)}
-            className={`px-4 py-1.5 rounded-full text-xs font-bold transition-all shrink-0 cursor-pointer ${
-              !subSlug ? 'bg-[#0875E1] text-white shadow-xs' : 'bg-white text-gray-700 hover:bg-gray-100 border border-gray-200'
-            }`}
-          >
-            All {categoryTitle}
-          </button>
-
-          {subcategories.map((sub: any) => {
-            const isSubActive = subSlug === sub.slug;
-            return (
-              <button
-                key={sub.slug}
-                onClick={() => navigate(`/category/${slug}/${sub.slug}`)}
-                className={`px-4 py-1.5 rounded-full text-xs font-bold transition-all shrink-0 cursor-pointer ${
-                  isSubActive 
-                    ? 'bg-[#0875E1] text-white shadow-xs' 
-                    : 'bg-[#F0F4F8] hover:bg-[#E2E8F0] text-[#172033] border border-gray-200/60'
-                }`}
-              >
-                {sub.name}
-              </button>
-            );
-          })}
-
-          {subcategories.length > 5 && (
-            <button className="px-3 py-1.5 rounded-full text-xs font-bold bg-[#F0F4F8] hover:bg-[#E2E8F0] text-gray-700 border border-gray-200/60 flex items-center space-x-1 shrink-0">
-              <span>More</span>
-              <ChevronDown className="w-3.5 h-3.5" />
-            </button>
-          )}
         </div>
 
         {/* MAIN FILTER + PRODUCTS LISTING SPLIT LAYOUT */}

@@ -54,10 +54,7 @@ const CATEGORIES = [
   { id: 'CAT007', name: 'Books' },
   { id: 'CAT008', name: 'Toys & Games' },
   { id: 'CAT009', name: 'Automotive' },
-  { id: 'CAT010', name: 'Computers & Accessories' },
   { id: 'CAT011', name: 'Mobile & Tablets' },
-  { id: 'CAT012', name: 'Home Appliances' },
-  { id: 'CAT013', name: 'Kitchen & Dining' },
   { id: 'CAT014', name: 'Office Stationery' },
   { id: 'CAT015', name: 'Health & Wellness' },
   { id: 'CAT016', name: 'Baby Care' },
@@ -78,6 +75,8 @@ export default function AdminProductsPage() {
   const [search, setSearch] = useState<string>('');
   const [categoryFilter, setCategoryFilter] = useState<string>('');
   const [statusFilter, setStatusFilter] = useState<string>('');
+  const [currentPage, setCurrentPage] = useState<number>(1);
+  const pageSize = 20;
 
   // Form / Modal states
   const [isModalOpen, setIsModalOpen] = useState<boolean>(false);
@@ -205,6 +204,7 @@ export default function AdminProductsPage() {
 
     try {
       setLoading(true);
+      setCurrentPage(1);
       const queryParams = new URLSearchParams({
         search,
         category: categoryFilter,
@@ -568,71 +568,79 @@ export default function AdminProductsPage() {
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-gray-100 font-medium">
-                  {products.map((prod) => (
-                    <tr key={prod.product_id} className="hover:bg-gray-50/60 transition-colors">
-                      <td className="py-3.5 pl-2">
-                        <span className="block font-bold text-gray-500 font-mono">{prod.sku}</span>
-                        <span className="text-[10px] text-gray-400 font-mono">{prod.product_id}</span>
-                      </td>
-                      <td className="py-3.5">
-                        {prod.image_url ? (
-                          <img 
-                            src={prod.image_url} 
-                            alt={prod.name} 
-                            className="w-10 h-10 object-cover rounded-xl border border-gray-150"
-                          />
-                        ) : (
-                          <div className="w-10 h-10 bg-gray-50 rounded-xl flex items-center justify-center border border-gray-150">
-                            <ImageIcon className="w-5 h-5 text-gray-300" />
-                          </div>
-                        )}
-                      </td>
-                      <td className="py-3.5 text-[#041E42] font-semibold max-w-xs truncate" title={prod.name}>
-                        {prod.name}
-                      </td>
-                      <td className="py-3.5 text-gray-600">{prod.brand}</td>
-                      <td className="py-3.5">
-                        <span className="block font-bold text-[#041E42]">₹{prod.sale_price.toLocaleString()}</span>
-                        {prod.discount > 0 && (
-                          <span className="text-[10px] text-gray-400 line-through">₹{prod.price.toLocaleString()}</span>
-                        )}
-                      </td>
-                      <td className="py-3.5">
-                        <span className={`font-mono font-bold ${prod.stock < 20 ? 'text-red-500' : 'text-gray-600'}`}>
-                          {prod.stock}
-                        </span>
-                      </td>
-                      <td className="py-3.5">
-                        <span className={`text-[9px] font-bold uppercase tracking-wider px-2.5 py-0.5 rounded-full border ${
-                          prod.status === 'ACTIVE'
-                            ? 'bg-green-50 text-green-700 border-green-200'
-                            : 'bg-red-50 text-red-700 border-red-200'
-                        }`}>
-                          {prod.status}
-                        </span>
-                      </td>
-                      <td className="py-3.5 text-right pr-2 space-x-1">
-                        {hasUpdatePermission && (
-                          <button
-                            onClick={() => handleOpenEditModal(prod)}
-                            className="text-gray-500 hover:text-[#0071DC] p-1.5 rounded-full hover:bg-blue-50 transition-all inline-block"
-                            title="Edit details"
-                          >
-                            <Edit2 className="w-3.5 h-3.5" />
-                          </button>
-                        )}
-                        {hasDeletePermission && prod.status === 'ACTIVE' && (
-                          <button
-                            onClick={() => handleDeactivate(prod.product_id)}
-                            className="text-red-500 hover:text-red-700 p-1.5 rounded-full hover:bg-red-50 transition-all inline-block"
-                            title="Deactivate product"
-                          >
-                            <Trash2 className="w-3.5 h-3.5" />
-                          </button>
-                        )}
-                      </td>
-                    </tr>
-                  ))}
+                  {(() => {
+                    const paginatedProducts = products.slice((currentPage - 1) * pageSize, currentPage * pageSize);
+                    
+                    return (
+                      <>
+                        {paginatedProducts.map((prod) => (
+                          <tr key={prod.product_id} className="hover:bg-gray-50/60 transition-colors">
+                            <td className="py-3.5 pl-2">
+                              <span className="block font-bold text-gray-500 font-mono">{prod.sku}</span>
+                              <span className="text-[10px] text-gray-400 font-mono">{prod.product_id}</span>
+                            </td>
+                            <td className="py-3.5">
+                              {prod.image_url ? (
+                                <img 
+                                  src={prod.image_url} 
+                                  alt={prod.name} 
+                                  className="w-10 h-10 object-cover rounded-xl border border-gray-150"
+                                />
+                              ) : (
+                                <div className="w-10 h-10 bg-gray-50 rounded-xl flex items-center justify-center border border-gray-150">
+                                  <ImageIcon className="w-5 h-5 text-gray-300" />
+                                </div>
+                              )}
+                            </td>
+                            <td className="py-3.5 text-[#041E42] font-semibold max-w-xs truncate" title={prod.name}>
+                              {prod.name}
+                            </td>
+                            <td className="py-3.5 text-gray-600">{prod.brand}</td>
+                            <td className="py-3.5">
+                              <span className="block font-bold text-[#041E42]">₹{prod.sale_price.toLocaleString()}</span>
+                              {prod.discount > 0 && (
+                                <span className="text-[10px] text-gray-400 line-through">₹{prod.price.toLocaleString()}</span>
+                              )}
+                            </td>
+                            <td className="py-3.5">
+                              <span className={`font-mono font-bold ${prod.stock < 20 ? 'text-red-500' : 'text-gray-600'}`}>
+                                {prod.stock}
+                              </span>
+                            </td>
+                            <td className="py-3.5">
+                              <span className={`text-[9px] font-bold uppercase tracking-wider px-2.5 py-0.5 rounded-full border ${
+                                prod.status === 'ACTIVE'
+                                  ? 'bg-green-50 text-green-700 border-green-200'
+                                  : 'bg-red-50 text-red-700 border-red-200'
+                              }`}>
+                                {prod.status}
+                              </span>
+                            </td>
+                            <td className="py-3.5 text-right pr-2 space-x-1">
+                              {hasUpdatePermission && (
+                                <button
+                                  onClick={() => handleOpenEditModal(prod)}
+                                  className="text-gray-500 hover:text-[#0071DC] p-1.5 rounded-full hover:bg-blue-50 transition-all inline-block"
+                                  title="Edit details"
+                                >
+                                  <Edit2 className="w-3.5 h-3.5" />
+                                </button>
+                              )}
+                              {hasDeletePermission && prod.status === 'ACTIVE' && (
+                                <button
+                                  onClick={() => handleDeactivate(prod.product_id)}
+                                  className="text-red-500 hover:text-red-700 p-1.5 rounded-full hover:bg-red-50 transition-all inline-block"
+                                  title="Deactivate product"
+                                >
+                                  <Trash2 className="w-3.5 h-3.5" />
+                                </button>
+                              )}
+                            </td>
+                          </tr>
+                        ))}
+                      </>
+                    );
+                  })()}
                   {products.length === 0 && !loading && (
                     <tr>
                       <td colSpan={8} className="text-center py-8 text-gray-500 font-bold uppercase tracking-wider">
@@ -643,6 +651,39 @@ export default function AdminProductsPage() {
                 </tbody>
               </table>
             </div>
+
+            {/* PAGINATION FOOTER */}
+            {products.length > 0 && (
+              <div className="flex flex-col sm:flex-row items-center justify-between gap-3 pt-4 border-t border-gray-150 text-xs font-semibold text-gray-600">
+                <div>
+                  Showing <span className="font-bold text-[#041E42]">{Math.min((currentPage - 1) * pageSize + 1, products.length)}</span> to{' '}
+                  <span className="font-bold text-[#041E42]">{Math.min(currentPage * pageSize, products.length)}</span> of{' '}
+                  <span className="font-bold text-[#041E42]">{products.length}</span> products
+                </div>
+
+                <div className="flex items-center space-x-1.5">
+                  <button
+                    onClick={() => setCurrentPage(prev => Math.max(prev - 1, 1))}
+                    disabled={currentPage === 1}
+                    className="px-3 py-1.5 rounded-xl border border-gray-250 bg-white hover:bg-gray-50 disabled:opacity-40 disabled:cursor-not-allowed text-xs font-bold transition-all shadow-xs cursor-pointer"
+                  >
+                    Previous
+                  </button>
+
+                  <span className="px-3 py-1.5 font-bold text-[#041E42]">
+                    Page {currentPage} of {Math.ceil(products.length / pageSize) || 1}
+                  </span>
+
+                  <button
+                    onClick={() => setCurrentPage(prev => Math.min(prev + 1, Math.ceil(products.length / pageSize) || 1))}
+                    disabled={currentPage >= Math.ceil(products.length / pageSize)}
+                    className="px-3 py-1.5 rounded-xl border border-gray-250 bg-white hover:bg-gray-50 disabled:opacity-40 disabled:cursor-not-allowed text-xs font-bold transition-all shadow-xs cursor-pointer"
+                  >
+                    Next
+                  </button>
+                </div>
+              </div>
+            )}
           </div>
         </main>
       </div>
