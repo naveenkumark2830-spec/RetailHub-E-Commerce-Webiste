@@ -285,7 +285,7 @@ class SimulatorService {
   // Simulation Configurations (CLEAN by default)
   private speedMs = 100;
   private usersCount = 100;
-  private targetRate = 50;
+  private targetRate = 15;
   private rateUnit = '/sec';
   private duration = '5 min';
   private trafficProfile = 'Mixed / Realistic';
@@ -297,6 +297,7 @@ class SimulatorService {
   private fraudRatio = 0.80;
   private fraudIpPool: string[] = [];
   private selectedFraudScenario = 'ALL';
+  private scenarioDeck: string[] = [];
   public groundTruthLogs: any[] = [];
   private fraudEventQueue: Array<{
     customer: VirtualCustomer;
@@ -356,8 +357,11 @@ class SimulatorService {
 
       const dev1 = `DEV-${hashStr}-PRIMARY`;
       const dev2 = `DEV-${hashStr}-MOBILE`;
-      const ip1 = `49.207.${(hashNum % 200) + 10}.${(hashNum % 250) + 1}`;
-      const ip2 = `103.22.${(hashNum % 100) + 50}.${(hashNum % 250) + 1}`;
+      const subnets = [49, 103, 182, 14, 157, 106, 27, 117, 152, 223];
+      const subA1 = subnets[hashNum % subnets.length];
+      const subA2 = subnets[(hashNum + 3) % subnets.length];
+      const ip1 = `${subA1}.${(hashNum % 220) + 10}.${(hashNum % 250) + 1}.${((hashNum * 7) % 250) + 1}`;
+      const ip2 = `${subA2}.${((hashNum * 13) % 220) + 10}.${((hashNum * 17) % 250) + 1}.${((hashNum * 31) % 250) + 1}`;
 
       const cities = [
         { city: 'Bengaluru', state: 'Karnataka', country: 'IN' },
@@ -1153,9 +1157,11 @@ Product-category validation:
       ? historyState.knownDevices[Math.floor(Math.random() * historyState.knownDevices.length)]
       : `DEV-SIM-${sessionHash}-${Math.floor(100 + Math.random() * 900)}`;
 
+    const subnets = [49, 103, 182, 14, 157, 106, 27, 117, 152, 223];
+    const randSub = subnets[Math.floor(Math.random() * subnets.length)];
     const ipAddress = historyState 
       ? historyState.knownIps[Math.floor(Math.random() * historyState.knownIps.length)]
-      : `10.0.${Math.floor(Math.random() * 255)}.${Math.floor(1 + Math.random() * 254)}`;
+      : `${randSub}.${Math.floor(1 + Math.random() * 250)}.${Math.floor(1 + Math.random() * 250)}.${Math.floor(1 + Math.random() * 250)}`;
 
     const isForcedTest = Math.random() < 0.08;
     const forcedSteps = isForcedTest ? ['session_started', 'login', 'cart_item_added', 'checkout_started', 'payment_initiated', 'order_created', 'payment_success'] : undefined;
@@ -1237,18 +1243,7 @@ Product-category validation:
       }
     }
 
-    // 2. Process customer progress transitions up to tick budget
-    while (this.currentTickEmittedCount < allowedEventsThisTick && this.activeCustomers.length > 0) {
-      const idx = Math.floor(Math.random() * this.activeCustomers.length);
-      const customer = this.activeCustomers[idx];
-      try {
-        await this.progressCustomer(customer);
-      } catch (err) {
-        console.error(`[Simulator Error] Transition failed for session ${customer.sessionId}:`, err);
-      }
-    }
-
-    // 3. Process Fraud Injection in FRAUD mode using queue under rate control
+    // 2. Process Fraud Injection in FRAUD mode using queue under rate control
     if (this.mode === 'FRAUD') {
       while (this.currentTickEmittedCount < allowedEventsThisTick && this.fraudEventQueue.length > 0) {
         const ev = this.fraudEventQueue.shift()!;
@@ -1261,6 +1256,17 @@ Product-category validation:
           const ev = this.fraudEventQueue.shift()!;
           this.triggerEvent(ev.customer, ev.eventType, ev.metadata, ev.actorType || 'CUSTOMER', ev.eventSource || 'website');
         }
+      }
+    }
+
+    // 3. Process background customer progress transitions up to remaining tick budget
+    while (this.currentTickEmittedCount < allowedEventsThisTick && this.activeCustomers.length > 0) {
+      const idx = Math.floor(Math.random() * this.activeCustomers.length);
+      const customer = this.activeCustomers[idx];
+      try {
+        await this.progressCustomer(customer);
+      } catch (err) {
+        console.error(`[Simulator Error] Transition failed for session ${customer.sessionId}:`, err);
       }
     }
 
@@ -1385,7 +1391,9 @@ Product-category validation:
       return_id: (isReturnStep || metadata.return_id) ? (metadata.return_id || customer.activeReturnId || null) : null,
       refund_id: (isRefundStep || metadata.refund_id) ? (metadata.refund_id || customer.activeRefundId || null) : null,
       review_id: (isReviewStep || metadata.review_id) ? (metadata.review_id || customer.activeReviewId || null) : null,
-      admin_id: isAdminType ? (metadata.admin_id || 'ADM001') : null
+      admin_id: isAdminType ? (metadata.admin_id || 'ADM001') : null,
+      coupon_code: metadata.coupon_code || metadata.coupon || null,
+      amount: metadata.amount !== undefined ? metadata.amount : (metadata.total_amount !== undefined ? metadata.total_amount : null)
     };
 
     const isSystemActor = finalActorType === 'SYSTEM';
@@ -1452,12 +1460,15 @@ Product-category validation:
         city: metadata.city || customer.historyState?.primaryLocation.city || 'Bengaluru',
         device: isSystemActor ? null : (metadata.device || 'desktop'),
         browser: isSystemActor ? null : (metadata.browser || 'Chrome'),
-        device_id: metadata.device_id || customer.deviceId,
-        ip_address: metadata.ip_address || customer.ipAddress
+        device_id: metadata.device_id !== undefined ? metadata.device_id : (isSystemActor ? null : customer.deviceId),
+        ip_address: metadata.ip_address !== undefined ? metadata.ip_address : customer.ipAddress
       },
       entity: entityPayload,
       metadata: {
         ...cleanMeta,
+        amount: metadata.amount !== undefined ? metadata.amount : (metadata.total_amount !== undefined ? metadata.total_amount : null),
+        payment_method: metadata.payment_method || metadata.paymentMethod || null,
+        coupon_code: metadata.coupon_code || metadata.coupon || null,
         simulated: true,
         simulation_mode: isDirtyRun ? 'DIRTY' : (isFraud ? 'FRAUD' : 'CLEAN'),
         producer_ingestion_lag_seconds: computedLagSec,
@@ -2510,44 +2521,64 @@ Product-category validation:
 
   private SCENARIO_KEYS = [
     'BRUTE_FORCE_LOGIN',
-    'MULTI_IP_LOGIN',
-    'ACCOUNT_TAKEOVER',
-    'PAYMENT_FRAUD',
+    'MULTI_IP_LOGIN_ATTACK',
+    'PAYMENT_FAILURE_VELOCITY',
+    'MULTIPLE_PAYMENT_METHODS',
     'HIGH_VALUE_TRANSACTION',
-    'HIGH_VALUE_VELOCITY',
+    'HIGH_VALUE_ORDER_VELOCITY',
+    'ACCOUNT_CHANGE_NEW_DEVICE',
+    'ACCOUNT_TAKEOVER_SEQUENCE',
     'MULTI_ACCOUNT_DEVICE',
     'MULTI_ACCOUNT_IP',
     'COUPON_ABUSE',
     'REFUND_ABUSE',
-    'CHECKOUT_VELOCITY',
-    'BOT_SCRAPER',
-    'DDOS_FLOOD',
-    'SUSPICIOUS_LOCATION_CHANGE',
-    'REPEATED_FRAUD_ESCALATION'
+    'BOT_OR_SCRAPER',
+    'DDOS',
+    'CHECKOUT_VELOCITY'
   ];
+
+  private getNextFraudScenario(): string {
+    if (this.scenarioDeck.length === 0) {
+      const deck = [...this.SCENARIO_KEYS];
+      for (let i = deck.length - 1; i > 0; i--) {
+        const j = Math.floor(Math.random() * (i + 1));
+        [deck[i], deck[j]] = [deck[j], deck[i]];
+      }
+      this.scenarioDeck = deck;
+    }
+    return this.scenarioDeck.shift()!;
+  }
 
   public async generateFraudScenarioSequence(targetScenario?: string) {
     let scenario = targetScenario || this.selectedFraudScenario;
     if (!scenario || scenario === 'ALL') {
-      scenario = this.SCENARIO_KEYS[Math.floor(Math.random() * this.SCENARIO_KEYS.length)];
+      scenario = this.getNextFraudScenario();
     }
 
     const scenarioId = scenario;
     const scenarioNameMap: Record<string, string> = {
       'BRUTE_FORCE_LOGIN': 'Brute-force login',
       'MULTI_IP_LOGIN': 'Multi-IP login attack',
-      'ACCOUNT_TAKEOVER': 'Account takeover',
-      'PAYMENT_FRAUD': 'Payment fraud',
+      'MULTI_IP_LOGIN_ATTACK': 'Multi-IP login attack',
+      'PAYMENT_FRAUD': 'Payment failure velocity',
+      'PAYMENT_FAILURE_VELOCITY': 'Payment failure velocity',
+      'MULTIPLE_PAYMENT_METHODS': 'Multiple payment methods',
       'HIGH_VALUE_TRANSACTION': 'High-value transaction',
-      'HIGH_VALUE_VELOCITY': 'High-value velocity',
+      'HIGH_VALUE_VELOCITY': 'High-value order velocity',
+      'HIGH_VALUE_ORDER_VELOCITY': 'High-value order velocity',
+      'ACCOUNT_CHANGE_NEW_DEVICE': 'Account change on new device',
+      'ACCOUNT_TAKEOVER': 'Account takeover sequence',
+      'ACCOUNT_TAKEOVER_SEQUENCE': 'Account takeover sequence',
       'MULTI_ACCOUNT_DEVICE': 'Multi-account device sharing',
       'MULTI_ACCOUNT_IP': 'Multi-account IP sharing',
       'COUPON_ABUSE': 'Coupon abuse',
       'REFUND_ABUSE': 'Refund abuse',
       'CHECKOUT_VELOCITY': 'Checkout velocity',
       'BOT_SCRAPER': 'Bot scraper',
+      'BOT_OR_SCRAPER': 'Bot scraper',
       'BOT_ACTIVITY': 'Bot scraper',
       'DDOS_FLOOD': 'DDoS flood',
+      'DDOS': 'DDoS flood',
       'SUSPICIOUS_LOCATION_CHANGE': 'Suspicious location change',
       'REPEATED_FRAUD_ESCALATION': 'Repeated fraud escalation',
       'REPEATED_OFFENDER': 'Repeated fraud escalation'
@@ -2557,256 +2588,305 @@ Product-category validation:
 
     switch (scenario) {
       case 'BRUTE_FORCE_LOGIN': {
+        const randSuffix = Math.floor(10000 + Math.random() * 90000);
         const cust = this.spawnVirtualCustomer(1.0);
+        cust.customerId = `CUST-SIM-BF-${randSuffix}`;
+        cust.deviceId = `DEV-SIM-BF-${randSuffix}`;
+        cust.ipAddress = `103.22.${Math.floor(10 + Math.random() * 200)}.${Math.floor(1 + Math.random() * 250)}`;
+
+        let baseTime = Date.now() - 25000;
         for (let attempt = 1; attempt <= 6; attempt++) {
-          this.emitOrQueueFraudEvent(cust, 'login_failed', { ...fraudMeta, reason: 'INVALID_CREDENTIALS', attempt_count: attempt }, 'CUSTOMER', 'website');
+          const timeIso = new Date(baseTime + attempt * 4000).toISOString();
+          this.emitOrQueueFraudEvent(cust, 'login_failed', { ...fraudMeta, reason: 'INVALID_CREDENTIALS', attempt_count: attempt, event_time: timeIso }, 'CUSTOMER', 'website');
         }
-        this.emitOrQueueFraudEvent(cust, 'login', { ...fraudMeta }, 'CUSTOMER', 'website');
+        this.emitOrQueueFraudEvent(cust, 'login', { ...fraudMeta, event_time: new Date().toISOString() }, 'CUSTOMER', 'website');
         this.liveStats.fraud_events += 7;
         break;
       }
 
-      case 'MULTI_IP_LOGIN': {
+      case 'MULTI_IP_LOGIN':
+      case 'MULTI_IP_LOGIN_ATTACK': {
+        const randSuffix = Math.floor(10000 + Math.random() * 90000);
         const cust = this.spawnVirtualCustomer(1.0);
-        const ips = ['198.51.100.11', '198.51.100.22', '198.51.100.33', '198.51.100.44'];
+        cust.customerId = `CUST-SIM-MIP-${randSuffix}`;
+        cust.deviceId = `DEV-SIM-MIP-${randSuffix}`;
+
+        const ips = [
+          `198.51.${Math.floor(10 + Math.random() * 200)}.${Math.floor(1 + Math.random() * 250)}`,
+          `203.0.${Math.floor(10 + Math.random() * 200)}.${Math.floor(1 + Math.random() * 250)}`,
+          `49.207.${Math.floor(10 + Math.random() * 200)}.${Math.floor(1 + Math.random() * 250)}`,
+          `103.22.${Math.floor(10 + Math.random() * 200)}.${Math.floor(1 + Math.random() * 250)}`
+        ];
+
+        let baseTime = Date.now() - 30000;
         for (let i = 0; i < 3; i++) {
-          cust.ipAddress = ips[i];
-          this.emitOrQueueFraudEvent(cust, 'login_failed', { ...fraudMeta, reason: 'INVALID_CREDENTIALS', attempt_count: i + 1, ip_address: ips[i] }, 'CUSTOMER', 'website');
+          const timeIso = new Date(baseTime + i * 8000).toISOString();
+          this.emitOrQueueFraudEvent(cust, 'login_failed', { ...fraudMeta, reason: 'INVALID_CREDENTIALS', attempt_count: i + 1, ip_address: ips[i], event_time: timeIso }, 'CUSTOMER', 'website');
         }
-        cust.ipAddress = ips[3];
-        this.emitOrQueueFraudEvent(cust, 'login', { ...fraudMeta, ip_address: ips[3] }, 'CUSTOMER', 'website');
+        this.emitOrQueueFraudEvent(cust, 'login', { ...fraudMeta, ip_address: ips[3], event_time: new Date().toISOString() }, 'CUSTOMER', 'website');
         this.liveStats.fraud_events += 4;
         break;
       }
 
-      case 'ACCOUNT_TAKEOVER': {
+      case 'PAYMENT_FRAUD':
+      case 'PAYMENT_FAILURE_VELOCITY': {
+        const randSuffix = Math.floor(10000 + Math.random() * 90000);
         const cust = this.spawnVirtualCustomer(1.0);
-        const atoDev = `DEV-ATO-${Math.floor(1000 + Math.random() * 9000)}`;
-        cust.deviceId = atoDev;
-        this.emitOrQueueFraudEvent(cust, 'login_failed', { ...fraudMeta, reason: 'INVALID_CREDENTIALS', attempt_count: 1 }, 'CUSTOMER', 'website');
-        this.emitOrQueueFraudEvent(cust, 'login', { ...fraudMeta }, 'CUSTOMER', 'website');
-        this.emitOrQueueFraudEvent(cust, 'device_registered', { ...fraudMeta, device_id: atoDev, device_type: 'desktop' }, 'CUSTOMER', 'website');
-        this.emitOrQueueFraudEvent(cust, 'password_changed', { ...fraudMeta, change_source: 'account_settings' }, 'CUSTOMER', 'website');
-        this.emitOrQueueFraudEvent(cust, 'profile_updated', { ...fraudMeta }, 'CUSTOMER', 'website');
-        cust.cart = [{ productId: 'PROD-CAT001-001', quantity: 1, unitPrice: 45000.00 }];
-        this.emitOrQueueFraudEvent(cust, 'checkout_started', { ...fraudMeta }, 'CUSTOMER', 'website');
-        const payId = `PAY-ATO-${Math.floor(10000 + Math.random() * 90000)}`;
-        const ordId = `ORD-ATO-${Math.floor(10000 + Math.random() * 90000)}`;
-        this.emitOrQueueFraudEvent(cust, 'payment_initiated', { ...fraudMeta, payment_id: payId, order_id: ordId, amount: 45000.00 }, 'CUSTOMER', 'website');
-        this.emitOrQueueFraudEvent(cust, 'payment_success', { ...fraudMeta, payment_id: payId, order_id: ordId, amount: 45000.00 }, 'SYSTEM', 'payment_service');
-        this.emitOrQueueFraudEvent(cust, 'order_created', { ...fraudMeta, order_id: ordId, payment_id: payId, total_amount: 45000.00 }, 'SYSTEM', 'order_service');
-        this.liveStats.fraud_events += 9;
+        cust.customerId = `CUST-SIM-PFV-${randSuffix}`;
+        cust.deviceId = `DEV-SIM-PFV-${randSuffix}`;
+
+        let baseTime = Date.now() - 120000;
+        for (let i = 1; i <= 4; i++) {
+          const timeIso = new Date(baseTime + i * 25000).toISOString();
+          const payId = `PAY-SIM-PFV-${i}-${randSuffix}`;
+          this.emitOrQueueFraudEvent(cust, 'payment_failed', { ...fraudMeta, payment_id: payId, amount: 4999.00, payment_method: 'card', reason: 'CARD_DECLINED', attempt_number: i, event_time: timeIso }, 'SYSTEM', 'payment_service');
+        }
+        this.liveStats.fraud_events += 4;
         break;
       }
 
-      case 'PAYMENT_FRAUD': {
+      case 'MULTIPLE_PAYMENT_METHODS': {
+        const randSuffix = Math.floor(10000 + Math.random() * 90000);
         const cust = this.spawnVirtualCustomer(1.0);
-        cust.cart = [{ productId: 'PROD-CAT001-002', quantity: 1, unitPrice: 8900.00 }];
-        this.emitOrQueueFraudEvent(cust, 'session_started', { ...fraudMeta }, 'CUSTOMER', 'website');
-        this.emitOrQueueFraudEvent(cust, 'login', { ...fraudMeta }, 'CUSTOMER', 'website');
-        this.emitOrQueueFraudEvent(cust, 'checkout_started', { ...fraudMeta }, 'CUSTOMER', 'website');
-        const ordId = `ORD-PF-${Math.floor(10000 + Math.random() * 90000)}`;
-        const payId = `PAY-PF-${Math.floor(10000 + Math.random() * 90000)}`;
+        cust.customerId = `CUST-SIM-MPM-${randSuffix}`;
+        cust.deviceId = `DEV-SIM-MPM-${randSuffix}`;
 
-        for (let i = 1; i <= 3; i++) {
-          const pmCard = `PM-CARD-TEST-${i}`;
-          this.emitOrQueueFraudEvent(cust, 'payment_initiated', { ...fraudMeta, payment_id: payId, order_id: ordId, payment_method_id: pmCard, amount: 8900.00, attempt_number: i }, 'CUSTOMER', 'website');
-          this.emitOrQueueFraudEvent(cust, 'payment_failed', { ...fraudMeta, payment_id: payId, order_id: ordId, payment_method_id: pmCard, amount: 8900.00, reason: 'CARD_DECLINED', attempt_number: i }, 'SYSTEM', 'payment_service');
+        const methods = ['card', 'upi', 'netbanking', 'wallet'];
+        let baseTime = Date.now() - 100000;
+        for (let i = 0; i < 4; i++) {
+          const timeIso = new Date(baseTime + i * 20000).toISOString();
+          const payId = `PAY-SIM-MPM-${i+1}-${randSuffix}`;
+          const pm = methods[i % methods.length];
+          this.emitOrQueueFraudEvent(cust, 'payment_failed', { ...fraudMeta, payment_id: payId, amount: 8900.00, payment_method: pm, reason: 'GATEWAY_ERROR', attempt_number: i + 1, event_time: timeIso }, 'SYSTEM', 'payment_service');
         }
-        const finalCard = `PM-CARD-TEST-4`;
-        this.emitOrQueueFraudEvent(cust, 'payment_initiated', { ...fraudMeta, payment_id: payId, order_id: ordId, payment_method_id: finalCard, amount: 8900.00, attempt_number: 4 }, 'CUSTOMER', 'website');
-        this.emitOrQueueFraudEvent(cust, 'payment_success', { ...fraudMeta, payment_id: payId, order_id: ordId, payment_method_id: finalCard, amount: 8900.00 }, 'SYSTEM', 'payment_service');
-        this.emitOrQueueFraudEvent(cust, 'order_created', { ...fraudMeta, order_id: ordId, payment_id: payId, total_amount: 8900.00 }, 'SYSTEM', 'order_service');
-        this.liveStats.fraud_events += 12;
+        this.liveStats.fraud_events += 4;
         break;
       }
 
       case 'HIGH_VALUE_TRANSACTION': {
+        const randSuffix = Math.floor(10000 + Math.random() * 90000);
         const cust = this.spawnVirtualCustomer(1.0);
-        const prodId = 'PROD-CAT001-050';
-        cust.cart = [{ productId: prodId, quantity: 1, unitPrice: 150000.00 }];
-        this.emitOrQueueFraudEvent(cust, 'product_view', { ...fraudMeta, product_id: prodId }, 'CUSTOMER', 'website');
-        this.emitOrQueueFraudEvent(cust, 'cart_item_added', { ...fraudMeta, product_id: prodId, quantity: 1, unit_price: 150000.00 }, 'CUSTOMER', 'website');
-        this.emitOrQueueFraudEvent(cust, 'checkout_started', { ...fraudMeta }, 'CUSTOMER', 'website');
-        const payId = `PAY-HV-${Math.floor(10000 + Math.random() * 90000)}`;
-        const ordId = `ORD-HV-${Math.floor(10000 + Math.random() * 90000)}`;
-        this.emitOrQueueFraudEvent(cust, 'payment_initiated', { ...fraudMeta, payment_id: payId, order_id: ordId, amount: 150000.00 }, 'CUSTOMER', 'website');
-        this.emitOrQueueFraudEvent(cust, 'payment_success', { ...fraudMeta, payment_id: payId, order_id: ordId, amount: 150000.00 }, 'SYSTEM', 'payment_service');
-        this.emitOrQueueFraudEvent(cust, 'order_created', { ...fraudMeta, order_id: ordId, payment_id: payId, total_amount: 150000.00 }, 'SYSTEM', 'order_service');
-        this.liveStats.fraud_events += 6;
+        cust.customerId = `CUST-SIM-HVT-${randSuffix}`;
+        cust.deviceId = `DEV-SIM-HVT-${randSuffix}`;
+
+        const ordId = `ORD-SIM-HVT-${randSuffix}`;
+        const payId = `PAY-SIM-HVT-${randSuffix}`;
+        const amount = 75000 + Math.floor(Math.random() * 50000);
+        this.emitOrQueueFraudEvent(cust, 'order_created', { ...fraudMeta, order_id: ordId, payment_id: payId, amount, total_amount: amount, payment_method: 'card', event_time: new Date().toISOString() }, 'SYSTEM', 'order_service');
+        this.liveStats.fraud_events += 1;
         break;
       }
 
-      case 'HIGH_VALUE_VELOCITY': {
+      case 'HIGH_VALUE_VELOCITY':
+      case 'HIGH_VALUE_ORDER_VELOCITY': {
+        const randSuffix = Math.floor(10000 + Math.random() * 90000);
         const cust = this.spawnVirtualCustomer(1.0);
+        cust.customerId = `CUST-SIM-HVV-${randSuffix}`;
+        cust.deviceId = `DEV-SIM-HVV-${randSuffix}`;
+
+        let baseTime = Date.now() - 300000;
         for (let i = 1; i <= 3; i++) {
-          cust.cart = [{ productId: 'PROD-CAT001-050', quantity: 1, unitPrice: 65000.00 }];
-          const payId = `PAY-HVV-${i}-${Math.floor(10000 + Math.random() * 90000)}`;
-          const ordId = `ORD-HVV-${i}-${Math.floor(10000 + Math.random() * 90000)}`;
-          this.emitOrQueueFraudEvent(cust, 'checkout_started', { ...fraudMeta }, 'CUSTOMER', 'website');
-          this.emitOrQueueFraudEvent(cust, 'payment_initiated', { ...fraudMeta, payment_id: payId, order_id: ordId, amount: 65000.00 }, 'CUSTOMER', 'website');
-          this.emitOrQueueFraudEvent(cust, 'payment_success', { ...fraudMeta, payment_id: payId, order_id: ordId, amount: 65000.00 }, 'SYSTEM', 'payment_service');
-          this.emitOrQueueFraudEvent(cust, 'order_created', { ...fraudMeta, order_id: ordId, payment_id: payId, total_amount: 65000.00 }, 'SYSTEM', 'order_service');
+          const timeIso = new Date(baseTime + i * 90000).toISOString();
+          const ordId = `ORD-SIM-HVV-${i}-${randSuffix}`;
+          const payId = `PAY-SIM-HVV-${i}-${randSuffix}`;
+          const amount = 65000 + Math.floor(Math.random() * 20000);
+          this.emitOrQueueFraudEvent(cust, 'order_created', { ...fraudMeta, order_id: ordId, payment_id: payId, amount, total_amount: amount, payment_method: 'card', event_time: timeIso }, 'SYSTEM', 'order_service');
         }
-        this.liveStats.fraud_events += 12;
+        this.liveStats.fraud_events += 3;
         break;
       }
 
-      case 'MULTI_ACCOUNT_DEVICE': {
-        const sharedDev = `DEV-SHARED-ABUSE-${Math.floor(1000 + Math.random() * 9000)}`;
-        for (let i = 1; i <= 5; i++) {
-          const accId = `CUST-SHARED-DEV-${i}-${Math.floor(100 + Math.random() * 900)}`;
-          const sessId = `sess_dev_${accId}`;
-          const randSuffix = Math.floor(10000 + Math.random() * 90000);
-          const payId = `PAY-MAD-${i}-${randSuffix}`;
-          const ordId = `ORD-MAD-${i}-${randSuffix}`;
-          const cust = this.spawnVirtualCustomer(1.0);
-          cust.customerId = accId;
-          cust.sessionId = sessId;
-          cust.deviceId = sharedDev;
-          cust.ipAddress = '10.0.1.5';
-          cust.cart = [{ productId: 'PROD-CAT001-001', quantity: 1, unitPrice: 2500 }];
-
-          this.emitOrQueueFraudEvent(cust, 'session_started', { ...fraudMeta, device_id: sharedDev }, 'CUSTOMER', 'website');
-          this.emitOrQueueFraudEvent(cust, 'login', { ...fraudMeta, device_id: sharedDev }, 'CUSTOMER', 'website');
-          this.emitOrQueueFraudEvent(cust, 'payment_success', { ...fraudMeta, payment_id: payId, order_id: ordId, amount: 2500.00, device_id: sharedDev }, 'SYSTEM', 'payment_service');
-          this.emitOrQueueFraudEvent(cust, 'order_created', { ...fraudMeta, order_id: ordId, payment_id: payId, total_amount: 2500.00, device_id: sharedDev }, 'SYSTEM', 'order_service');
-        }
-        this.liveStats.fraud_events += 20;
-        break;
-      }
-
-      case 'MULTI_ACCOUNT_IP': {
-        const sharedIp = `198.51.100.88`;
-        for (let i = 1; i <= 5; i++) {
-          const accId = `CUST-SHARED-IP-${i}-${Math.floor(100 + Math.random() * 900)}`;
-          const sessId = `sess_ip_${accId}`;
-          const randSuffix = Math.floor(10000 + Math.random() * 90000);
-          const payId = `PAY-MAI-${i}-${randSuffix}`;
-          const ordId = `ORD-MAI-${i}-${randSuffix}`;
-          const cust = this.spawnVirtualCustomer(1.0);
-          cust.customerId = accId;
-          cust.sessionId = sessId;
-          cust.deviceId = `DEV-IP-${i}`;
-          cust.ipAddress = sharedIp;
-          cust.cart = [{ productId: 'PROD-CAT002-001', quantity: 1, unitPrice: 1500 }];
-
-          this.emitOrQueueFraudEvent(cust, 'login', { ...fraudMeta, ip_address: sharedIp }, 'CUSTOMER', 'website');
-          this.emitOrQueueFraudEvent(cust, 'payment_success', { ...fraudMeta, payment_id: payId, order_id: ordId, amount: 1500.00, ip_address: sharedIp }, 'SYSTEM', 'payment_service');
-          this.emitOrQueueFraudEvent(cust, 'order_created', { ...fraudMeta, order_id: ordId, payment_id: payId, total_amount: 1500.00, ip_address: sharedIp }, 'SYSTEM', 'order_service');
-        }
-        this.liveStats.fraud_events += 15;
-        break;
-      }
-
-      case 'COUPON_ABUSE': {
-        for (let i = 1; i <= 5; i++) {
-          const accId = `CUST-COUPON-${i}-${Math.floor(100 + Math.random() * 900)}`;
-          const sessId = `sess_coup_${accId}`;
-          const randSuffix = Math.floor(10000 + Math.random() * 90000);
-          const payId = `PAY-COUP-${i}-${randSuffix}`;
-          const ordId = `ORD-COUP-${i}-${randSuffix}`;
-          const cust = this.spawnVirtualCustomer(1.0);
-          cust.customerId = accId;
-          cust.sessionId = sessId;
-          cust.deviceId = `DEV-COUP-${i}`;
-          cust.ipAddress = `10.0.2.${i}`;
-          cust.cart = [{ productId: 'PROD-CAT004-001', quantity: 1, unitPrice: 550 }];
-
-          this.emitOrQueueFraudEvent(cust, 'coupon_applied', { ...fraudMeta, coupon: 'WELCOME500', discount_amount: 500.00 }, 'CUSTOMER', 'website');
-          this.emitOrQueueFraudEvent(cust, 'payment_success', { ...fraudMeta, payment_id: payId, order_id: ordId, amount: 50.00 }, 'SYSTEM', 'payment_service');
-          this.emitOrQueueFraudEvent(cust, 'order_created', { ...fraudMeta, order_id: ordId, payment_id: payId, coupon: 'WELCOME500', discount_amount: 500.00, total_amount: 50.00 }, 'SYSTEM', 'order_service');
-        }
-        this.liveStats.fraud_events += 15;
-        break;
-      }
-
-      case 'REFUND_ABUSE': {
+      case 'ACCOUNT_CHANGE_NEW_DEVICE': {
+        const randSuffix = Math.floor(10000 + Math.random() * 90000);
         const cust = this.spawnVirtualCustomer(1.0);
-        for (let i = 1; i <= 3; i++) {
-          const ordId = `ORD-REF-ABUSE-${i}-${Math.floor(1000 + Math.random() * 9000)}`;
-          const payId = `PAY-REF-ABUSE-${i}-${Math.floor(1000 + Math.random() * 9000)}`;
-          const retId = `RET-REF-ABUSE-${i}-${Math.floor(1000 + Math.random() * 9000)}`;
-          const refId = `REF-REF-ABUSE-${i}-${Math.floor(1000 + Math.random() * 9000)}`;
-          this.emitOrQueueFraudEvent(cust, 'payment_success', { ...fraudMeta, payment_id: payId, order_id: ordId, amount: 12000.00 }, 'SYSTEM', 'payment_service');
-          this.emitOrQueueFraudEvent(cust, 'order_created', { ...fraudMeta, order_id: ordId, payment_id: payId, total_amount: 12000.00 }, 'SYSTEM', 'order_service');
-          this.emitOrQueueFraudEvent(cust, 'delivered', { ...fraudMeta, order_id: ordId }, 'SYSTEM', 'fulfillment_service');
-          this.emitOrQueueFraudEvent(cust, 'return_requested', { ...fraudMeta, order_id: ordId, return_id: retId, reason: 'DEFECTIVE' }, 'CUSTOMER', 'website');
-          this.emitOrQueueFraudEvent(cust, 'refund_success', { ...fraudMeta, order_id: ordId, return_id: retId, refund_id: refId, amount: 12000.00 }, 'SYSTEM', 'payment_service');
-        }
-        this.liveStats.fraud_events += 15;
+        cust.customerId = `CUST-SIM-ACND-${randSuffix}`;
+        const newDev = `DEV-SIM-NEW-${randSuffix}`;
+        cust.deviceId = newDev;
+
+        const baseTime = Date.now() - 120000;
+        const timeIso1 = new Date(baseTime).toISOString();
+        const timeIso2 = new Date(baseTime + 90000).toISOString();
+
+        this.emitOrQueueFraudEvent(cust, 'login', { ...fraudMeta, device_id: newDev, event_time: timeIso1 }, 'CUSTOMER', 'website');
+        this.emitOrQueueFraudEvent(cust, 'password_changed', { ...fraudMeta, device_id: newDev, change_source: 'account_settings', event_time: timeIso2 }, 'CUSTOMER', 'website');
+        this.liveStats.fraud_events += 2;
         break;
       }
 
-      case 'CHECKOUT_VELOCITY': {
+      case 'ACCOUNT_TAKEOVER':
+      case 'ACCOUNT_TAKEOVER_SEQUENCE': {
+        const randSuffix = Math.floor(10000 + Math.random() * 90000);
         const cust = this.spawnVirtualCustomer(1.0);
-        for (let i = 1; i <= 5; i++) {
-          const ordId = `ORD-VEL-${i}-${Math.floor(1000 + Math.random() * 9000)}`;
-          const payId = `PAY-VEL-${i}-${Math.floor(1000 + Math.random() * 9000)}`;
-          cust.cart = [{ productId: `PROD-CAT001-00${i}`, quantity: 1, unitPrice: 3000.00 }];
-          this.emitOrQueueFraudEvent(cust, 'checkout_started', { ...fraudMeta }, 'CUSTOMER', 'website');
-          this.emitOrQueueFraudEvent(cust, 'payment_initiated', { ...fraudMeta, payment_id: payId, order_id: ordId, amount: 3000.00 }, 'CUSTOMER', 'website');
-        }
-        this.liveStats.fraud_events += 10;
-        break;
-      }
+        cust.customerId = `CUST-SIM-ATO-${randSuffix}`;
+        const newDev = `DEV-SIM-ATO-NEW-${randSuffix}`;
 
-      case 'BOT_SCRAPER':
-      case 'BOT_ACTIVITY': {
-        const botIp = `198.51.100.99`;
-        const botDev = `DEV-BOT-SCRAPER-${Math.floor(1000 + Math.random() * 9000)}`;
-        const cust = this.spawnVirtualCustomer(0.0);
-        cust.ipAddress = botIp;
-        cust.deviceId = botDev;
+        let baseTime = Date.now() - 240000;
+        const time1 = new Date(baseTime).toISOString();
+        const time2 = new Date(baseTime + 60000).toISOString();
+        const time3 = new Date(baseTime + 120000).toISOString();
+        const time4 = new Date(baseTime + 180000).toISOString();
 
-        for (let loop = 1; loop <= 8; loop++) {
-          this.emitOrQueueFraudEvent(cust, 'page_view', { ...fraudMeta, page: `category_${loop}` }, 'CUSTOMER', 'website');
-          this.emitOrQueueFraudEvent(cust, 'product_impression', { ...fraudMeta, product_id: `PROD-CAT001-00${loop}` }, 'CUSTOMER', 'website');
-        }
-        this.liveStats.fraud_events += 16;
-        this.liveStats.scraper_fraud_count += 16;
-        break;
-      }
+        // Event 1: login_failed with device_id = null
+        const custNoDev = { ...cust, deviceId: null as any };
+        this.emitOrQueueFraudEvent(custNoDev, 'login_failed', { ...fraudMeta, device_id: null, reason: 'INVALID_CREDENTIALS', attempt_count: 1, event_time: time1 }, 'CUSTOMER', 'website');
 
-      case 'DDOS_FLOOD': {
-        const ddosIp = `198.51.100.50`;
-        const cust = this.spawnVirtualCustomer(0.0);
-        cust.ipAddress = ddosIp;
-        for (let i = 0; i < 20; i++) {
-          this.emitOrQueueFraudEvent(cust, 'page_view', { ...fraudMeta, ip_address: ddosIp }, 'CUSTOMER', 'website');
-        }
-        this.liveStats.fraud_events += 20;
-        this.liveStats.ddos_fraud_count += 20;
-        break;
-      }
+        // Event 2: login on new device
+        cust.deviceId = newDev;
+        this.emitOrQueueFraudEvent(cust, 'login', { ...fraudMeta, device_id: newDev, event_time: time2 }, 'CUSTOMER', 'website');
 
-      case 'SUSPICIOUS_LOCATION_CHANGE': {
-        const cust = this.spawnVirtualCustomer(1.0);
-        this.emitOrQueueFraudEvent(cust, 'login', { ...fraudMeta, country: 'IN', city: 'Bengaluru' }, 'CUSTOMER', 'website');
-        this.emitOrQueueFraudEvent(cust, 'password_changed', { ...fraudMeta, country: 'US', city: 'New York', ip_address: '198.51.100.44' }, 'CUSTOMER', 'website');
-        const payId = `PAY-LOC-${Math.floor(1000 + Math.random() * 9000)}`;
-        const ordId = `ORD-LOC-${Math.floor(1000 + Math.random() * 9000)}`;
-        cust.cart = [{ productId: 'PROD-CAT001-010', quantity: 1, unitPrice: 75000.00 }];
-        this.emitOrQueueFraudEvent(cust, 'payment_success', { ...fraudMeta, payment_id: payId, order_id: ordId, amount: 75000.00, country: 'US', city: 'New York', ip_address: '198.51.100.44' }, 'SYSTEM', 'payment_service');
-        this.emitOrQueueFraudEvent(cust, 'order_created', { ...fraudMeta, order_id: ordId, payment_id: payId, total_amount: 75000.00, country: 'US', city: 'New York', ip_address: '198.51.100.44' }, 'SYSTEM', 'order_service');
+        // Event 3: password_changed on same new device
+        this.emitOrQueueFraudEvent(cust, 'password_changed', { ...fraudMeta, device_id: newDev, change_source: 'account_settings', event_time: time3 }, 'CUSTOMER', 'website');
+
+        // Event 4: order_created on same new device
+        const ordId = `ORD-SIM-ATO-${randSuffix}`;
+        const payId = `PAY-SIM-ATO-${randSuffix}`;
+        this.emitOrQueueFraudEvent(cust, 'order_created', { ...fraudMeta, device_id: newDev, order_id: ordId, payment_id: payId, amount: 1500, total_amount: 1500, event_time: time4 }, 'SYSTEM', 'order_service');
         this.liveStats.fraud_events += 4;
         break;
       }
 
-      case 'REPEATED_FRAUD_ESCALATION':
-      case 'REPEATED_OFFENDER': {
+      case 'MULTI_ACCOUNT_DEVICE': {
+        const randSuffix = Math.floor(10000 + Math.random() * 90000);
+        const sharedDev = `DEV-SHARED-ABUSE-${randSuffix}`;
+        let baseTime = Date.now() - 150000;
+        for (let i = 1; i <= 5; i++) {
+          const accId = `CUST-SHARED-DEV-${i}-${randSuffix}`;
+          const sessId = `sess_dev_${accId}`;
+          const timeIso = new Date(baseTime + i * 20000).toISOString();
+          const cust = this.spawnVirtualCustomer(1.0);
+          cust.customerId = accId;
+          cust.sessionId = sessId;
+          cust.deviceId = sharedDev;
+          cust.ipAddress = `10.0.1.${i}`;
+          this.emitOrQueueFraudEvent(cust, 'login', { ...fraudMeta, device_id: sharedDev, event_time: timeIso }, 'CUSTOMER', 'website');
+        }
+        this.liveStats.fraud_events += 5;
+        break;
+      }
+
+      case 'MULTI_ACCOUNT_IP': {
+        const randSuffix = Math.floor(10000 + Math.random() * 90000);
+        const sharedIp = `198.51.${Math.floor(10 + Math.random() * 200)}.${Math.floor(1 + Math.random() * 250)}`;
+        let baseTime = Date.now() - 150000;
+        for (let i = 1; i <= 5; i++) {
+          const accId = `CUST-SHARED-IP-${i}-${randSuffix}`;
+          const sessId = `sess_ip_${accId}`;
+          const devId = `DEV-IP-${i}-${randSuffix}`;
+          const timeIso = new Date(baseTime + i * 20000).toISOString();
+          const cust = this.spawnVirtualCustomer(1.0);
+          cust.customerId = accId;
+          cust.sessionId = sessId;
+          cust.deviceId = devId;
+          cust.ipAddress = sharedIp;
+          this.emitOrQueueFraudEvent(cust, 'login', { ...fraudMeta, ip_address: sharedIp, event_time: timeIso }, 'CUSTOMER', 'website');
+        }
+        this.liveStats.fraud_events += 5;
+        break;
+      }
+
+      case 'COUPON_ABUSE': {
+        const randSuffix = Math.floor(10000 + Math.random() * 90000);
+        const couponCode = `SAVE50_${randSuffix}`;
+        const dev1 = `DEV-COUP-A-${randSuffix}`;
+        const dev2 = `DEV-COUP-B-${randSuffix}`;
+        const devices = [dev1, dev2, dev1];
+
+        let baseTime = Date.now() - 120000;
+        for (let i = 1; i <= 3; i++) {
+          const accId = `CUST-COUPON-${i}-${randSuffix}`;
+          const sessId = `sess_coup_${accId}`;
+          const devId = devices[i - 1];
+          const timeIso = new Date(baseTime + i * 30000).toISOString();
+          const cust = this.spawnVirtualCustomer(1.0);
+          cust.customerId = accId;
+          cust.sessionId = sessId;
+          cust.deviceId = devId;
+          this.emitOrQueueFraudEvent(cust, 'coupon_applied', { ...fraudMeta, coupon_code: couponCode, coupon: couponCode, discount_amount: 500.00, device_id: devId, event_time: timeIso }, 'CUSTOMER', 'website');
+        }
+        this.liveStats.fraud_events += 3;
+        break;
+      }
+
+      case 'REFUND_ABUSE': {
+        const randSuffix = Math.floor(10000 + Math.random() * 90000);
         const cust = this.spawnVirtualCustomer(1.0);
-        const failPayId = `PAY-ESC-FAIL-${Math.floor(1000 + Math.random() * 9000)}`;
-        this.emitOrQueueFraudEvent(cust, 'login_failed', { ...fraudMeta, reason: 'INVALID_CREDENTIALS', attempt_count: 1 }, 'CUSTOMER', 'website');
-        this.emitOrQueueFraudEvent(cust, 'login_failed', { ...fraudMeta, reason: 'INVALID_CREDENTIALS', attempt_count: 2 }, 'CUSTOMER', 'website');
-        this.emitOrQueueFraudEvent(cust, 'login', { ...fraudMeta }, 'CUSTOMER', 'website');
-        this.emitOrQueueFraudEvent(cust, 'payment_failed', { ...fraudMeta, payment_id: failPayId, amount: 15000.00, reason: 'STOLEN_CARD_SUSPECT' }, 'SYSTEM', 'payment_service');
-        cust.cart = [{ productId: 'PROD-CAT001-050', quantity: 1, unitPrice: 65000.00 }];
-        const ordId = `ORD-ESC-${Math.floor(1000 + Math.random() * 9000)}`;
-        const payId = `PAY-ESC-${Math.floor(1000 + Math.random() * 9000)}`;
-        this.emitOrQueueFraudEvent(cust, 'payment_success', { ...fraudMeta, payment_id: payId, order_id: ordId, amount: 65000.00 }, 'SYSTEM', 'payment_service');
-        this.emitOrQueueFraudEvent(cust, 'order_created', { ...fraudMeta, order_id: ordId, payment_id: payId, total_amount: 65000.00 }, 'SYSTEM', 'order_service');
-        this.liveStats.fraud_events += 6;
+        cust.customerId = `CUST-SIM-REF-${randSuffix}`;
+        cust.deviceId = `DEV-SIM-REF-${randSuffix}`;
+
+        let baseTime = Date.now() - 3600000;
+        for (let i = 1; i <= 3; i++) {
+          const timeIso = new Date(baseTime + i * 600000).toISOString();
+          const retId = `RET-SIM-REF-${i}-${randSuffix}`;
+          const ordId = `ORD-SIM-REF-${i}-${randSuffix}`;
+          this.emitOrQueueFraudEvent(cust, 'return_requested', { ...fraudMeta, order_id: ordId, return_id: retId, reason: 'DEFECTIVE', event_time: timeIso }, 'CUSTOMER', 'website');
+        }
+        this.liveStats.fraud_events += 3;
+        break;
+      }
+
+      case 'BOT_SCRAPER':
+      case 'BOT_OR_SCRAPER':
+      case 'BOT_ACTIVITY': {
+        const randSuffix = Math.floor(10000 + Math.random() * 90000);
+        const botIp = `198.51.100.${Math.floor(10 + Math.random() * 200)}`;
+        const botDev = `DEV-BOT-SCRAPER-${randSuffix}`;
+
+        const sessions = [
+          `sess_bot_1_${randSuffix}`,
+          `sess_bot_2_${randSuffix}`,
+          `sess_bot_3_${randSuffix}`,
+          `sess_bot_4_${randSuffix}`
+        ];
+
+        let baseTime = Date.now() - 5000;
+        for (let loop = 1; loop <= 20; loop++) {
+          const sessId = sessions[loop % sessions.length];
+          const timeIso = new Date(baseTime + (loop * 200)).toISOString();
+          const cust = this.spawnVirtualCustomer(0.0);
+          cust.sessionId = sessId;
+          cust.ipAddress = botIp;
+          cust.deviceId = botDev;
+          this.emitOrQueueFraudEvent(cust, 'page_view', { ...fraudMeta, page: `category_${loop}`, ip_address: botIp, event_time: timeIso }, 'CUSTOMER', 'website');
+        }
+        this.liveStats.fraud_events += 20;
+        this.liveStats.scraper_fraud_count += 20;
+        break;
+      }
+
+      case 'DDOS_FLOOD':
+      case 'DDOS': {
+        const randSuffix = Math.floor(10000 + Math.random() * 90000);
+        const ddosIp = `198.51.200.${Math.floor(10 + Math.random() * 200)}`;
+
+        let baseTime = Date.now() - 8000;
+        for (let i = 1; i <= 30; i++) {
+          const sessId = `sess_ddos_${(i % 6) + 1}_${randSuffix}`;
+          const timeIso = new Date(baseTime + (i * 250)).toISOString();
+          const cust = this.spawnVirtualCustomer(0.0);
+          cust.sessionId = sessId;
+          cust.ipAddress = ddosIp;
+          this.emitOrQueueFraudEvent(cust, 'page_view', { ...fraudMeta, ip_address: ddosIp, event_time: timeIso }, 'CUSTOMER', 'website');
+        }
+        this.liveStats.fraud_events += 30;
+        this.liveStats.ddos_fraud_count += 30;
+        break;
+      }
+
+      case 'CHECKOUT_VELOCITY': {
+        const randSuffix = Math.floor(10000 + Math.random() * 90000);
+        const cust = this.spawnVirtualCustomer(1.0);
+        cust.customerId = `CUST-SIM-VEL-${randSuffix}`;
+        cust.deviceId = `DEV-SIM-VEL-${randSuffix}`;
+
+        let baseTime = Date.now() - 200000;
+        for (let i = 1; i <= 5; i++) {
+          const timeIso = new Date(baseTime + i * 35000).toISOString();
+          const ordId = `ORD-SIM-VEL-${i}-${randSuffix}`;
+          const payId = `PAY-SIM-VEL-${i}-${randSuffix}`;
+          const eventType = i % 2 === 1 ? 'checkout_started' : 'order_created';
+          this.emitOrQueueFraudEvent(cust, eventType, { ...fraudMeta, order_id: ordId, payment_id: payId, amount: 3000.00, total_amount: 3000.00, event_time: timeIso }, 'CUSTOMER', 'website');
+        }
+        this.liveStats.fraud_events += 5;
         break;
       }
     }
