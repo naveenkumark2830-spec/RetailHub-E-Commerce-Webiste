@@ -97,6 +97,107 @@ export interface BannerRecord {
   status: string;
 }
 
+export interface FraudIncidentRecord {
+  incident_id: string;
+  customer_id: string;
+  fraud_type: string;
+  severity: string;
+  reason: string;
+  risk_score: number;
+  risk_level: string;
+  action: string;
+  requires_customer_action: boolean;
+  requires_admin_review: boolean;
+  restriction_minutes: number | null;
+  ai_attack_pattern: string | null;
+  ai_finding: string | null;
+  ai_confidence: number | null;
+  ai_recommendation: string | null;
+  source_event_id: string | null;
+  source_event_type: string | null;
+  ip_address: string | null;
+  device_id: string | null;
+  session_id: string | null;
+  timestamp: string;
+  created_at?: Date;
+}
+
+export interface FraudRestrictionRecord {
+  restriction_id: string;
+  customer_id: string;
+  incident_id: string | null;
+  restriction_type: string;
+  status: string;
+  reason: string | null;
+  started_at: Date | string;
+  expires_at: Date | string | null;
+  released_at?: Date | string | null;
+  released_by?: string | null;
+  release_reason?: string | null;
+  created_at?: Date | string;
+  updated_at?: Date | string;
+}
+
+export interface VerificationChallengeRecord {
+  challenge_id: string;
+  customer_id: string;
+  incident_id: string | null;
+  challenge_type: string;
+  channel: string;
+  destination_masked: string | null;
+  otp_hash: string;
+  status: string;
+  attempts: number;
+  max_attempts: number;
+  expires_at: Date | string;
+  verified_at?: Date | string | null;
+  created_at?: Date | string;
+}
+
+export interface FraudAdminActionRecord {
+  action_id: string;
+  admin_id: string;
+  customer_id: string;
+  incident_id: string | null;
+  restriction_id: string | null;
+  action: string;
+  reason: string | null;
+  previous_state: string | null;
+  new_state: string | null;
+  created_at?: Date | string;
+}
+
+export interface FraudAuditLogRecord {
+  audit_id: string;
+  actor_type: string;
+  actor_id: string;
+  customer_id: string | null;
+  incident_id: string | null;
+  event_type: string;
+  event: string;
+  reason: string | null;
+  evidence: any;
+  decision: string | null;
+  confidence: number | null;
+  action: string | null;
+  approval: string | null;
+  result: string | null;
+  metadata: any;
+  created_at?: Date | string;
+}
+
+export interface CustomerSecurityRecord {
+  customer_id: string;
+  account_status: string;
+  security_status: string;
+  active_restriction_id: string | null;
+  failed_login_count: number;
+  last_fraud_incident_id: string | null;
+  step_up_required: boolean;
+  updated_at?: Date | string;
+  created_at?: Date | string;
+}
+
 export let dbPool: mysqlPromise.Pool | null = null;
 let isInMemoryFallback = false;
 
@@ -110,6 +211,12 @@ const inMemoryBanners = new Map<number, BannerRecord>();
 const inMemoryCart = new Map<string, Array<{ product_id: string; quantity: number }>>(); // keyed by session_id/customer_id
 const inMemoryRecentlyViewed = new Map<string, string[]>(); // key: session/customer, value: product_ids
 const inMemoryWishlist = new Map<string, string[]>(); // key: session/customer, value: product_ids
+const inMemoryFraudIncidents = new Map<string, FraudIncidentRecord>();
+const inMemoryFraudRestrictions = new Map<string, FraudRestrictionRecord>();
+const inMemoryVerificationChallenges = new Map<string, VerificationChallengeRecord>();
+const inMemoryFraudAdminActions = new Map<string, FraudAdminActionRecord>();
+const inMemoryFraudAuditLogs = new Map<string, FraudAuditLogRecord>();
+const inMemoryCustomerSecurity = new Map<string, CustomerSecurityRecord>();
 
 const CATEGORIES_LIST = [
   { id: 'CAT001', name: 'Electronics', slug: 'electronics', desc: 'Gadgets, devices, and computing gear.' },
@@ -1065,6 +1172,187 @@ export async function initDb() {
         FOREIGN KEY (admin_id) REFERENCES admin_users(admin_id)
       );
     `);
+
+    // Create Fraud Incidents Registry (Stage 1)
+    await dbPool.query(`
+      CREATE TABLE IF NOT EXISTS fraud_incidents (
+        incident_id VARCHAR(128) PRIMARY KEY,
+        customer_id VARCHAR(128) NOT NULL,
+        fraud_type VARCHAR(128) NOT NULL,
+        severity VARCHAR(64) NOT NULL,
+        reason TEXT,
+        risk_score INT DEFAULT 0,
+        risk_level VARCHAR(64) NOT NULL,
+        action VARCHAR(128) NOT NULL,
+        requires_customer_action TINYINT(1) DEFAULT 0,
+        requires_admin_review TINYINT(1) DEFAULT 0,
+        restriction_minutes INT DEFAULT NULL,
+        ai_attack_pattern TEXT,
+        ai_finding TEXT,
+        ai_confidence DECIMAL(5,4) DEFAULT NULL,
+        ai_recommendation TEXT,
+        source_event_id VARCHAR(128),
+        source_event_type VARCHAR(128),
+        ip_address VARCHAR(128),
+        device_id VARCHAR(128),
+        session_id VARCHAR(128),
+        timestamp VARCHAR(128) NOT NULL,
+        created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+      );
+    `);
+
+    // Helper to safely create indexes without failing if they already exist
+    const ensureIndex = async (tableName: string, indexName: string, columns: string) => {
+      try {
+        const [rows]: any = await dbPool!.query(`SHOW INDEX FROM ${tableName} WHERE Key_name = ?`, [indexName]);
+        if (!rows || rows.length === 0) {
+          await dbPool!.query(`CREATE INDEX ${indexName} ON ${tableName}(${columns})`);
+        }
+      } catch (err) {}
+    };
+
+    // Helper to safely drop legacy FK constraints if previously created
+    const dropFkSafely = async (tableName: string, fkName: string) => {
+      try {
+        const [rows]: any = await dbPool!.query(
+          `SELECT CONSTRAINT_NAME FROM INFORMATION_SCHEMA.KEY_COLUMN_USAGE 
+           WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = ? AND CONSTRAINT_NAME = ?`,
+          [tableName, fkName]
+        );
+        if (rows && rows.length > 0) {
+          await dbPool!.query(`ALTER TABLE ${tableName} DROP FOREIGN KEY ${fkName}`);
+        }
+      } catch (err) {}
+    };
+
+    await dropFkSafely('fraud_restrictions', 'fraud_restrictions_ibfk_1');
+    await dropFkSafely('verification_challenges', 'verification_challenges_ibfk_1');
+    await dropFkSafely('fraud_admin_actions', 'fraud_admin_actions_ibfk_1');
+    await dropFkSafely('customer_security', 'customer_security_ibfk_1');
+
+    // Indexes for fraud_incidents
+    await ensureIndex('fraud_incidents', 'idx_fraud_inc_cust', 'customer_id');
+    await ensureIndex('fraud_incidents', 'idx_fraud_inc_risk', 'risk_level');
+    await ensureIndex('fraud_incidents', 'idx_fraud_inc_type', 'fraud_type');
+    await ensureIndex('fraud_incidents', 'idx_fraud_inc_sev', 'severity');
+    await ensureIndex('fraud_incidents', 'idx_fraud_inc_created', 'created_at');
+    await ensureIndex('fraud_incidents', 'idx_fraud_inc_action', 'action');
+
+    // Create Fraud Restrictions Registry (Stage 2)
+    await dbPool.query(`
+      CREATE TABLE IF NOT EXISTS fraud_restrictions (
+        restriction_id VARCHAR(128) PRIMARY KEY,
+        customer_id VARCHAR(128) NOT NULL,
+        incident_id VARCHAR(128) NULL,
+        restriction_type VARCHAR(64) NOT NULL DEFAULT 'TEMPORARY_RESTRICTION',
+        status VARCHAR(32) NOT NULL DEFAULT 'ACTIVE',
+        reason TEXT NULL,
+        started_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+        expires_at DATETIME NULL,
+        released_at DATETIME NULL,
+        released_by VARCHAR(128) NULL,
+        release_reason TEXT NULL,
+        created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+        updated_at DATETIME DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+        FOREIGN KEY (incident_id) REFERENCES fraud_incidents(incident_id) ON DELETE SET NULL
+      );
+    `);
+    await ensureIndex('fraud_restrictions', 'idx_fraud_restr_cust', 'customer_id');
+    await ensureIndex('fraud_restrictions', 'idx_fraud_restr_status', 'status');
+    await ensureIndex('fraud_restrictions', 'idx_fraud_restr_expires', 'expires_at');
+    await ensureIndex('fraud_restrictions', 'idx_fraud_restr_inc', 'incident_id');
+
+    // Create Verification Challenges Registry (Stage 2)
+    await dbPool.query(`
+      CREATE TABLE IF NOT EXISTS verification_challenges (
+        challenge_id VARCHAR(128) PRIMARY KEY,
+        customer_id VARCHAR(128) NOT NULL,
+        incident_id VARCHAR(128) NULL,
+        challenge_type VARCHAR(64) NOT NULL DEFAULT 'STEP_UP_AUTHENTICATION',
+        channel VARCHAR(32) NOT NULL DEFAULT 'SMS',
+        destination_masked VARCHAR(128) NULL,
+        otp_hash VARCHAR(255) NOT NULL,
+        status VARCHAR(32) NOT NULL DEFAULT 'PENDING',
+        attempts INT NOT NULL DEFAULT 0,
+        max_attempts INT NOT NULL DEFAULT 3,
+        expires_at DATETIME NOT NULL,
+        verified_at DATETIME NULL,
+        created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+        FOREIGN KEY (incident_id) REFERENCES fraud_incidents(incident_id) ON DELETE SET NULL
+      );
+    `);
+    await ensureIndex('verification_challenges', 'idx_verif_chall_cust', 'customer_id');
+    await ensureIndex('verification_challenges', 'idx_verif_chall_status', 'status');
+    await ensureIndex('verification_challenges', 'idx_verif_chall_expires', 'expires_at');
+    await ensureIndex('verification_challenges', 'idx_verif_chall_inc', 'incident_id');
+
+    // Create Fraud Admin Actions Registry (Stage 2)
+    await dbPool.query(`
+      CREATE TABLE IF NOT EXISTS fraud_admin_actions (
+        action_id VARCHAR(128) PRIMARY KEY,
+        admin_id VARCHAR(128) NOT NULL,
+        customer_id VARCHAR(128) NOT NULL,
+        incident_id VARCHAR(128) NULL,
+        restriction_id VARCHAR(128) NULL,
+        action VARCHAR(64) NOT NULL,
+        reason TEXT NULL,
+        previous_state TEXT NULL,
+        new_state TEXT NULL,
+        created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+        FOREIGN KEY (incident_id) REFERENCES fraud_incidents(incident_id) ON DELETE SET NULL,
+        FOREIGN KEY (restriction_id) REFERENCES fraud_restrictions(restriction_id) ON DELETE SET NULL
+      );
+    `);
+    await ensureIndex('fraud_admin_actions', 'idx_admin_act_cust', 'customer_id');
+    await ensureIndex('fraud_admin_actions', 'idx_admin_act_admin', 'admin_id');
+    await ensureIndex('fraud_admin_actions', 'idx_admin_act_inc', 'incident_id');
+    await ensureIndex('fraud_admin_actions', 'idx_admin_act_restr', 'restriction_id');
+
+    // Create Fraud Audit Log Registry (Stage 2)
+    await dbPool.query(`
+      CREATE TABLE IF NOT EXISTS fraud_audit_log (
+        audit_id VARCHAR(128) PRIMARY KEY,
+        actor_type VARCHAR(32) NOT NULL DEFAULT 'SYSTEM',
+        actor_id VARCHAR(128) NOT NULL,
+        customer_id VARCHAR(128) NULL,
+        incident_id VARCHAR(128) NULL,
+        event_type VARCHAR(128) NOT NULL,
+        event VARCHAR(128) NOT NULL,
+        reason TEXT NULL,
+        evidence JSON NULL,
+        decision VARCHAR(128) NULL,
+        confidence DECIMAL(5,4) NULL,
+        action VARCHAR(128) NULL,
+        approval VARCHAR(128) NULL,
+        result VARCHAR(128) NULL,
+        metadata JSON NULL,
+        created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+      );
+    `);
+    await ensureIndex('fraud_audit_log', 'idx_audit_actor_type', 'actor_type');
+    await ensureIndex('fraud_audit_log', 'idx_audit_actor_id', 'actor_id');
+    await ensureIndex('fraud_audit_log', 'idx_audit_cust', 'customer_id');
+    await ensureIndex('fraud_audit_log', 'idx_audit_inc', 'incident_id');
+    await ensureIndex('fraud_audit_log', 'idx_audit_evt_type', 'event_type');
+    await ensureIndex('fraud_audit_log', 'idx_audit_created', 'created_at');
+
+    // Create Customer Security Registry (Stage 2)
+    await dbPool.query(`
+      CREATE TABLE IF NOT EXISTS customer_security (
+        customer_id VARCHAR(128) PRIMARY KEY,
+        account_status VARCHAR(32) NOT NULL DEFAULT 'ACTIVE',
+        security_status VARCHAR(32) NOT NULL DEFAULT 'NORMAL',
+        active_restriction_id VARCHAR(128) NULL,
+        failed_login_count INT NOT NULL DEFAULT 0,
+        last_fraud_incident_id VARCHAR(128) NULL,
+        step_up_required TINYINT(1) NOT NULL DEFAULT 0,
+        updated_at DATETIME DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+        created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+      );
+    `);
+    await ensureIndex('customer_security', 'idx_cust_sec_status', 'security_status');
+    await ensureIndex('customer_security', 'idx_cust_sec_restr', 'active_restriction_id');
+    await ensureIndex('customer_security', 'idx_cust_sec_stepup', 'step_up_required');
 
     // Perform database seed check
     await seedDatabaseIfNeeded();
@@ -6914,6 +7202,772 @@ export async function updateSimulationRun(runId: string, run: any): Promise<void
       runId
     ]
   );
+}
+
+// ----------------------------------------------------
+// FRAUD INCIDENTS STAGE 1 HELPERS
+// ----------------------------------------------------
+
+export async function insertFraudIncident(incident: FraudIncidentRecord): Promise<boolean> {
+  if (dbPool && !isInMemoryFallback) {
+    try {
+      const [existing]: any = await dbPool.query(
+        'SELECT incident_id FROM fraud_incidents WHERE incident_id = ?',
+        [incident.incident_id]
+      );
+      if (existing && existing.length > 0) {
+        return false; // Duplicate ignored
+      }
+
+      await dbPool.query(
+        `INSERT INTO fraud_incidents (
+          incident_id, customer_id, fraud_type, severity, reason,
+          risk_score, risk_level, action, requires_customer_action,
+          requires_admin_review, restriction_minutes, ai_attack_pattern,
+          ai_finding, ai_confidence, ai_recommendation, source_event_id,
+          source_event_type, ip_address, device_id, session_id, timestamp
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+        [
+          incident.incident_id,
+          incident.customer_id,
+          incident.fraud_type,
+          incident.severity,
+          incident.reason,
+          incident.risk_score,
+          incident.risk_level,
+          incident.action,
+          incident.requires_customer_action ? 1 : 0,
+          incident.requires_admin_review ? 1 : 0,
+          incident.restriction_minutes,
+          incident.ai_attack_pattern,
+          incident.ai_finding,
+          incident.ai_confidence,
+          incident.ai_recommendation,
+          incident.source_event_id,
+          incident.source_event_type,
+          incident.ip_address,
+          incident.device_id,
+          incident.session_id,
+          incident.timestamp
+        ]
+      );
+      return true;
+    } catch (err: any) {
+      if (err?.code === 'ER_DUP_ENTRY') {
+        return false;
+      }
+      throw err;
+    }
+  } else {
+    if (inMemoryFraudIncidents.has(incident.incident_id)) {
+      return false;
+    }
+    inMemoryFraudIncidents.set(incident.incident_id, {
+      ...incident,
+      created_at: new Date()
+    });
+    return true;
+  }
+}
+
+export async function getFraudIncidents(): Promise<FraudIncidentRecord[]> {
+  if (dbPool && !isInMemoryFallback) {
+    const [rows]: any = await dbPool.query(
+      'SELECT * FROM fraud_incidents ORDER BY created_at DESC'
+    );
+    return rows;
+  } else {
+    return Array.from(inMemoryFraudIncidents.values()).sort(
+      (a, b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime()
+    );
+  }
+}
+
+// ----------------------------------------------------
+// FRAUDGUARD STAGE 2 SECURITY & REPOSITORY HELPERS
+// ----------------------------------------------------
+
+/**
+ * Securely hash OTPs before persistence (never plaintext)
+ */
+export function hashOtp(otp: string): string {
+  const salt = process.env.OTP_SALT || 'retailhub_fraudguard_otp_secret_salt';
+  return crypto.createHmac('sha256', salt).update(String(otp)).digest('hex');
+}
+
+// --- Restrictions Repository ---
+
+export async function createFraudRestriction(restriction: FraudRestrictionRecord): Promise<boolean> {
+  if (dbPool && !isInMemoryFallback) {
+    try {
+      await dbPool.query(
+        `INSERT INTO fraud_restrictions (
+          restriction_id, customer_id, incident_id, restriction_type,
+          status, reason, started_at, expires_at, released_at,
+          released_by, release_reason
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+        [
+          restriction.restriction_id,
+          restriction.customer_id,
+          restriction.incident_id || null,
+          restriction.restriction_type || 'TEMPORARY_RESTRICTION',
+          restriction.status || 'ACTIVE',
+          restriction.reason || null,
+          restriction.started_at ? new Date(restriction.started_at) : new Date(),
+          restriction.expires_at ? new Date(restriction.expires_at) : null,
+          restriction.released_at ? new Date(restriction.released_at) : null,
+          restriction.released_by || null,
+          restriction.release_reason || null
+        ]
+      );
+      return true;
+    } catch (err) {
+      console.error('[DB] createFraudRestriction error:', err);
+      return false;
+    }
+  } else {
+    inMemoryFraudRestrictions.set(restriction.restriction_id, {
+      ...restriction,
+      created_at: new Date(),
+      updated_at: new Date()
+    });
+    return true;
+  }
+}
+
+export async function getFraudRestrictions(customerId?: string): Promise<FraudRestrictionRecord[]> {
+  if (dbPool && !isInMemoryFallback) {
+    let sql = 'SELECT * FROM fraud_restrictions';
+    const params: any[] = [];
+    if (customerId) {
+      sql += ' WHERE customer_id = ?';
+      params.push(customerId);
+    }
+    sql += ' ORDER BY created_at DESC';
+    const [rows]: any = await dbPool.query(sql, params);
+    return rows;
+  } else {
+    let list = Array.from(inMemoryFraudRestrictions.values());
+    if (customerId) {
+      list = list.filter(r => r.customer_id === customerId);
+    }
+    return list.sort((a, b) => new Date(b.started_at).getTime() - new Date(a.started_at).getTime());
+  }
+}
+
+export async function getActiveCustomerRestriction(customerId: string): Promise<FraudRestrictionRecord | null> {
+  const now = new Date();
+  if (dbPool && !isInMemoryFallback) {
+    const [rows]: any = await dbPool.query(
+      `SELECT * FROM fraud_restrictions 
+       WHERE customer_id = ? AND status = 'ACTIVE' 
+         AND (expires_at IS NULL OR expires_at > ?)
+       ORDER BY created_at DESC LIMIT 1`,
+      [customerId, now]
+    );
+    return rows.length > 0 ? rows[0] : null;
+  } else {
+    const list = Array.from(inMemoryFraudRestrictions.values()).filter(r => {
+      if (r.customer_id !== customerId || r.status !== 'ACTIVE') return false;
+      if (r.expires_at && new Date(r.expires_at).getTime() <= now.getTime()) return false;
+      return true;
+    });
+    return list.length > 0 ? list[0] : null;
+  }
+}
+
+// --- Verification Challenges Repository ---
+
+export async function createVerificationChallenge(challenge: VerificationChallengeRecord): Promise<boolean> {
+  if (dbPool && !isInMemoryFallback) {
+    try {
+      await dbPool.query(
+        `INSERT INTO verification_challenges (
+          challenge_id, customer_id, incident_id, challenge_type,
+          channel, destination_masked, otp_hash, status,
+          attempts, max_attempts, expires_at, verified_at
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+        [
+          challenge.challenge_id,
+          challenge.customer_id,
+          challenge.incident_id || null,
+          challenge.challenge_type || 'STEP_UP_AUTHENTICATION',
+          challenge.channel || 'SMS',
+          challenge.destination_masked || null,
+          challenge.otp_hash,
+          challenge.status || 'PENDING',
+          challenge.attempts || 0,
+          challenge.max_attempts || 3,
+          new Date(challenge.expires_at),
+          challenge.verified_at ? new Date(challenge.verified_at) : null
+        ]
+      );
+      return true;
+    } catch (err) {
+      console.error('[DB] createVerificationChallenge error:', err);
+      return false;
+    }
+  } else {
+    inMemoryVerificationChallenges.set(challenge.challenge_id, {
+      ...challenge,
+      created_at: new Date()
+    });
+    return true;
+  }
+}
+
+export async function getVerificationChallenge(challengeId: string): Promise<VerificationChallengeRecord | null> {
+  if (dbPool && !isInMemoryFallback) {
+    const [rows]: any = await dbPool.query(
+      'SELECT * FROM verification_challenges WHERE challenge_id = ?',
+      [challengeId]
+    );
+    return rows.length > 0 ? rows[0] : null;
+  } else {
+    return inMemoryVerificationChallenges.get(challengeId) || null;
+  }
+}
+
+export async function updateVerificationChallenge(
+  challengeId: string,
+  updates: Partial<VerificationChallengeRecord>
+): Promise<boolean> {
+  if (dbPool && !isInMemoryFallback) {
+    const setClauses: string[] = [];
+    const values: any[] = [];
+    if (updates.status !== undefined) { setClauses.push('status = ?'); values.push(updates.status); }
+    if (updates.attempts !== undefined) { setClauses.push('attempts = ?'); values.push(updates.attempts); }
+    if (updates.verified_at !== undefined) { setClauses.push('verified_at = ?'); values.push(updates.verified_at ? new Date(updates.verified_at) : null); }
+
+    if (setClauses.length === 0) return true;
+    values.push(challengeId);
+
+    const [res]: any = await dbPool.query(
+      `UPDATE verification_challenges SET ${setClauses.join(', ')} WHERE challenge_id = ?`,
+      values
+    );
+    return res.affectedRows > 0;
+  } else {
+    const record = inMemoryVerificationChallenges.get(challengeId);
+    if (!record) return false;
+    const updated = { ...record, ...updates };
+    inMemoryVerificationChallenges.set(challengeId, updated);
+    return true;
+  }
+}
+
+// --- Fraud Admin Actions Repository ---
+
+export async function createFraudAdminAction(adminAction: FraudAdminActionRecord): Promise<boolean> {
+  if (dbPool && !isInMemoryFallback) {
+    try {
+      await dbPool.query(
+        `INSERT INTO fraud_admin_actions (
+          action_id, admin_id, customer_id, incident_id,
+          restriction_id, action, reason, previous_state, new_state
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+        [
+          adminAction.action_id,
+          adminAction.admin_id,
+          adminAction.customer_id,
+          adminAction.incident_id || null,
+          adminAction.restriction_id || null,
+          adminAction.action,
+          adminAction.reason || null,
+          adminAction.previous_state || null,
+          adminAction.new_state || null
+        ]
+      );
+      return true;
+    } catch (err) {
+      console.error('[DB] createFraudAdminAction error:', err);
+      return false;
+    }
+  } else {
+    inMemoryFraudAdminActions.set(adminAction.action_id, {
+      ...adminAction,
+      created_at: new Date()
+    });
+    return true;
+  }
+}
+
+export async function getFraudAdminActions(customerId?: string): Promise<FraudAdminActionRecord[]> {
+  if (dbPool && !isInMemoryFallback) {
+    let sql = 'SELECT * FROM fraud_admin_actions';
+    const params: any[] = [];
+    if (customerId) {
+      sql += ' WHERE customer_id = ?';
+      params.push(customerId);
+    }
+    sql += ' ORDER BY created_at DESC';
+    const [rows]: any = await dbPool.query(sql, params);
+    return rows;
+  } else {
+    let list = Array.from(inMemoryFraudAdminActions.values());
+    if (customerId) list = list.filter(a => a.customer_id === customerId);
+    return list.sort((a, b) => new Date(b.created_at || 0).getTime() - new Date(a.created_at || 0).getTime());
+  }
+}
+
+// --- Fraud Audit Log Repository ---
+
+export async function createFraudAuditRecord(audit: FraudAuditLogRecord): Promise<boolean> {
+  const evidenceJson = typeof audit.evidence === 'object' ? JSON.stringify(audit.evidence) : (audit.evidence || null);
+  const metadataJson = typeof audit.metadata === 'object' ? JSON.stringify(audit.metadata) : (audit.metadata || null);
+
+  if (dbPool && !isInMemoryFallback) {
+    try {
+      await dbPool.query(
+        `INSERT INTO fraud_audit_log (
+          audit_id, actor_type, actor_id, customer_id, incident_id,
+          event_type, event, reason, evidence, decision, confidence,
+          action, approval, result, metadata
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+        [
+          audit.audit_id,
+          audit.actor_type || 'SYSTEM',
+          audit.actor_id,
+          audit.customer_id || null,
+          audit.incident_id || null,
+          audit.event_type,
+          audit.event,
+          audit.reason || null,
+          evidenceJson,
+          audit.decision || null,
+          audit.confidence || null,
+          audit.action || null,
+          audit.approval || null,
+          audit.result || null,
+          metadataJson
+        ]
+      );
+      return true;
+    } catch (err) {
+      console.error('[DB] createFraudAuditRecord error:', err);
+      return false;
+    }
+  } else {
+    inMemoryFraudAuditLogs.set(audit.audit_id, {
+      ...audit,
+      created_at: new Date()
+    });
+    return true;
+  }
+}
+
+export async function getFraudAuditLogs(customerId?: string): Promise<FraudAuditLogRecord[]> {
+  if (dbPool && !isInMemoryFallback) {
+    let sql = 'SELECT * FROM fraud_audit_log';
+    const params: any[] = [];
+    if (customerId) {
+      sql += ' WHERE customer_id = ?';
+      params.push(customerId);
+    }
+    sql += ' ORDER BY created_at DESC';
+    const [rows]: any = await dbPool.query(sql, params);
+    return rows;
+  } else {
+    let list = Array.from(inMemoryFraudAuditLogs.values());
+    if (customerId) list = list.filter(l => l.customer_id === customerId);
+    return list.sort((a, b) => new Date(b.created_at || 0).getTime() - new Date(a.created_at || 0).getTime());
+  }
+}
+
+// --- Customer Security Repository ---
+
+export async function getCustomerSecurity(customerId: string): Promise<CustomerSecurityRecord | null> {
+  if (dbPool && !isInMemoryFallback) {
+    const [rows]: any = await dbPool.query(
+      'SELECT * FROM customer_security WHERE customer_id = ?',
+      [customerId]
+    );
+    if (rows.length > 0) {
+      return {
+        ...rows[0],
+        step_up_required: Boolean(rows[0].step_up_required)
+      };
+    }
+    return null;
+  } else {
+    const record = inMemoryCustomerSecurity.get(customerId);
+    return record ? { ...record } : null;
+  }
+}
+
+export async function upsertCustomerSecurity(
+  security: Partial<CustomerSecurityRecord> & { customer_id: string }
+): Promise<CustomerSecurityRecord> {
+  const existing = await getCustomerSecurity(security.customer_id);
+  const updatedRecord: CustomerSecurityRecord = {
+    customer_id: security.customer_id,
+    account_status: security.account_status || existing?.account_status || 'ACTIVE',
+    security_status: security.security_status || existing?.security_status || 'NORMAL',
+    active_restriction_id: security.active_restriction_id !== undefined ? security.active_restriction_id : (existing?.active_restriction_id || null),
+    failed_login_count: security.failed_login_count !== undefined ? security.failed_login_count : (existing?.failed_login_count || 0),
+    last_fraud_incident_id: security.last_fraud_incident_id !== undefined ? security.last_fraud_incident_id : (existing?.last_fraud_incident_id || null),
+    step_up_required: security.step_up_required !== undefined ? security.step_up_required : (existing?.step_up_required || false),
+    updated_at: new Date()
+  };
+
+  if (dbPool && !isInMemoryFallback) {
+    await dbPool.query(
+      `INSERT INTO customer_security (
+        customer_id, account_status, security_status, active_restriction_id,
+        failed_login_count, last_fraud_incident_id, step_up_required
+      ) VALUES (?, ?, ?, ?, ?, ?, ?)
+      ON DUPLICATE KEY UPDATE
+        account_status = VALUES(account_status),
+        security_status = VALUES(security_status),
+        active_restriction_id = VALUES(active_restriction_id),
+        failed_login_count = VALUES(failed_login_count),
+        last_fraud_incident_id = VALUES(last_fraud_incident_id),
+        step_up_required = VALUES(step_up_required),
+        updated_at = CURRENT_TIMESTAMP`,
+      [
+        updatedRecord.customer_id,
+        updatedRecord.account_status,
+        updatedRecord.security_status,
+        updatedRecord.active_restriction_id,
+        updatedRecord.failed_login_count,
+        updatedRecord.last_fraud_incident_id,
+        updatedRecord.step_up_required ? 1 : 0
+      ]
+    );
+  } else {
+    inMemoryCustomerSecurity.set(security.customer_id, updatedRecord);
+  }
+
+  return updatedRecord;
+}
+
+// ----------------------------------------------------
+// FRAUDGUARD STAGE 3 REST API QUERY & AGGREGATION HELPERS
+// ----------------------------------------------------
+
+export async function getFraudIncidentById(incidentId: string): Promise<FraudIncidentRecord | null> {
+  const { incidents } = await getFraudIncidentsFiltered({ incident_id: incidentId, limit: 1 });
+  return incidents.length > 0 ? incidents[0] : null;
+}
+
+export async function getFraudIncidentsFiltered(options: {
+  incident_id?: string;
+  customer_id?: string;
+  risk_level?: string;
+  severity?: string;
+  fraud_type?: string;
+  action?: string;
+  startDate?: string;
+  endDate?: string;
+  page?: number;
+  limit?: number;
+}): Promise<{ incidents: FraudIncidentRecord[]; total: number }> {
+  const page = Math.max(1, options.page || 1);
+  const limit = Math.min(100, Math.max(1, options.limit || 25));
+  const offset = (page - 1) * limit;
+
+  if (dbPool && !isInMemoryFallback) {
+    const whereClauses: string[] = [];
+    const params: any[] = [];
+
+    if (options.incident_id) { whereClauses.push('incident_id = ?'); params.push(options.incident_id); }
+    if (options.customer_id) { whereClauses.push('customer_id = ?'); params.push(options.customer_id); }
+    if (options.risk_level) { whereClauses.push('risk_level = ?'); params.push(options.risk_level); }
+    if (options.severity) { whereClauses.push('severity = ?'); params.push(options.severity); }
+    if (options.fraud_type) { whereClauses.push('fraud_type = ?'); params.push(options.fraud_type); }
+    if (options.action) { whereClauses.push('action = ?'); params.push(options.action); }
+    if (options.startDate) { whereClauses.push('created_at >= ?'); params.push(options.startDate); }
+    if (options.endDate) { whereClauses.push('created_at <= ?'); params.push(options.endDate); }
+
+    const whereSql = whereClauses.length > 0 ? `WHERE ${whereClauses.join(' AND ')}` : '';
+
+    const [[{ total }]]: any = await dbPool.query(`SELECT COUNT(*) AS total FROM fraud_incidents ${whereSql}`, params);
+
+    const [rows]: any = await dbPool.query(
+      `SELECT * FROM fraud_incidents ${whereSql} ORDER BY created_at DESC LIMIT ? OFFSET ?`,
+      [...params, limit, offset]
+    );
+
+    return { incidents: rows, total: total || 0 };
+  } else {
+    let list = Array.from(inMemoryFraudIncidents.values());
+    if (options.incident_id) list = list.filter(i => i.incident_id === options.incident_id);
+    if (options.customer_id) list = list.filter(i => i.customer_id === options.customer_id);
+    if (options.risk_level) list = list.filter(i => i.risk_level === options.risk_level);
+    if (options.severity) list = list.filter(i => i.severity === options.severity);
+    if (options.fraud_type) list = list.filter(i => i.fraud_type === options.fraud_type);
+    if (options.action) list = list.filter(i => i.action === options.action);
+    if (options.startDate) list = list.filter(i => new Date(i.timestamp).getTime() >= new Date(options.startDate!).getTime());
+    if (options.endDate) list = list.filter(i => new Date(i.timestamp).getTime() <= new Date(options.endDate!).getTime());
+
+    const total = list.length;
+    const sorted = list.sort((a, b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime());
+    const paginated = sorted.slice(offset, offset + limit);
+
+    return { incidents: paginated, total };
+  }
+}
+
+export async function getFraudRestrictionById(restrictionId: string): Promise<FraudRestrictionRecord | null> {
+  const { restrictions } = await getFraudRestrictionsFiltered({ restriction_id: restrictionId, limit: 1 });
+  return restrictions.length > 0 ? restrictions[0] : null;
+}
+
+export async function getFraudRestrictionsFiltered(options: {
+  restriction_id?: string;
+  customer_id?: string;
+  incident_id?: string;
+  status?: string;
+  restriction_type?: string;
+  page?: number;
+  limit?: number;
+}): Promise<{ restrictions: FraudRestrictionRecord[]; total: number }> {
+  const page = Math.max(1, options.page || 1);
+  const limit = Math.min(100, Math.max(1, options.limit || 25));
+  const offset = (page - 1) * limit;
+
+  if (dbPool && !isInMemoryFallback) {
+    const whereClauses: string[] = [];
+    const params: any[] = [];
+
+    if (options.restriction_id) { whereClauses.push('restriction_id = ?'); params.push(options.restriction_id); }
+    if (options.customer_id) { whereClauses.push('customer_id = ?'); params.push(options.customer_id); }
+    if (options.incident_id) { whereClauses.push('incident_id = ?'); params.push(options.incident_id); }
+    if (options.status) { whereClauses.push('status = ?'); params.push(options.status); }
+    if (options.restriction_type) { whereClauses.push('restriction_type = ?'); params.push(options.restriction_type); }
+
+    const whereSql = whereClauses.length > 0 ? `WHERE ${whereClauses.join(' AND ')}` : '';
+
+    const [[{ total }]]: any = await dbPool.query(`SELECT COUNT(*) AS total FROM fraud_restrictions ${whereSql}`, params);
+
+    const [rows]: any = await dbPool.query(
+      `SELECT * FROM fraud_restrictions ${whereSql} ORDER BY created_at DESC LIMIT ? OFFSET ?`,
+      [...params, limit, offset]
+    );
+
+    return { restrictions: rows, total: total || 0 };
+  } else {
+    let list = Array.from(inMemoryFraudRestrictions.values());
+    if (options.restriction_id) list = list.filter(r => r.restriction_id === options.restriction_id);
+    if (options.customer_id) list = list.filter(r => r.customer_id === options.customer_id);
+    if (options.incident_id) list = list.filter(r => r.incident_id === options.incident_id);
+    if (options.status) list = list.filter(r => r.status === options.status);
+    if (options.restriction_type) list = list.filter(r => r.restriction_type === options.restriction_type);
+
+    const total = list.length;
+    const sorted = list.sort((a, b) => new Date(b.started_at).getTime() - new Date(a.started_at).getTime());
+    const paginated = sorted.slice(offset, offset + limit);
+
+    return { restrictions: paginated, total };
+  }
+}
+
+export async function getFraudAuditLogById(auditId: string): Promise<FraudAuditLogRecord | null> {
+  const { auditLogs } = await getFraudAuditLogsFiltered({ audit_id: auditId, limit: 1 });
+  return auditLogs.length > 0 ? auditLogs[0] : null;
+}
+
+export async function getFraudAuditLogsFiltered(options: {
+  audit_id?: string;
+  actor_type?: string;
+  actor_id?: string;
+  event_type?: string;
+  customer_id?: string;
+  incident_id?: string;
+  startDate?: string;
+  endDate?: string;
+  page?: number;
+  limit?: number;
+}): Promise<{ auditLogs: FraudAuditLogRecord[]; total: number }> {
+  const page = Math.max(1, options.page || 1);
+  const limit = Math.min(100, Math.max(1, options.limit || 25));
+  const offset = (page - 1) * limit;
+
+  const safeParseJson = (val: any) => {
+    if (!val) return null;
+    if (typeof val === 'object') return val;
+    try { return JSON.parse(val); } catch (e) { return val; }
+  };
+
+  if (dbPool && !isInMemoryFallback) {
+    const whereClauses: string[] = [];
+    const params: any[] = [];
+
+    if (options.audit_id) { whereClauses.push('audit_id = ?'); params.push(options.audit_id); }
+    if (options.actor_type) { whereClauses.push('actor_type = ?'); params.push(options.actor_type); }
+    if (options.actor_id) { whereClauses.push('actor_id = ?'); params.push(options.actor_id); }
+    if (options.event_type) { whereClauses.push('event_type = ?'); params.push(options.event_type); }
+    if (options.customer_id) { whereClauses.push('customer_id = ?'); params.push(options.customer_id); }
+    if (options.incident_id) { whereClauses.push('incident_id = ?'); params.push(options.incident_id); }
+    if (options.startDate) { whereClauses.push('created_at >= ?'); params.push(options.startDate); }
+    if (options.endDate) { whereClauses.push('created_at <= ?'); params.push(options.endDate); }
+
+    const whereSql = whereClauses.length > 0 ? `WHERE ${whereClauses.join(' AND ')}` : '';
+
+    const [[{ total }]]: any = await dbPool.query(`SELECT COUNT(*) AS total FROM fraud_audit_log ${whereSql}`, params);
+
+    const [rows]: any = await dbPool.query(
+      `SELECT * FROM fraud_audit_log ${whereSql} ORDER BY created_at DESC LIMIT ? OFFSET ?`,
+      [...params, limit, offset]
+    );
+
+    const formatted = rows.map((r: any) => ({
+      ...r,
+      evidence: safeParseJson(r.evidence),
+      metadata: safeParseJson(r.metadata)
+    }));
+
+    return { auditLogs: formatted, total: total || 0 };
+  } else {
+    let list = Array.from(inMemoryFraudAuditLogs.values());
+    if (options.audit_id) list = list.filter(l => l.audit_id === options.audit_id);
+    if (options.actor_type) list = list.filter(l => l.actor_type === options.actor_type);
+    if (options.actor_id) list = list.filter(l => l.actor_id === options.actor_id);
+    if (options.event_type) list = list.filter(l => l.event_type === options.event_type);
+    if (options.customer_id) list = list.filter(l => l.customer_id === options.customer_id);
+    if (options.incident_id) list = list.filter(l => l.incident_id === options.incident_id);
+    if (options.startDate) list = list.filter(l => new Date(l.created_at || 0).getTime() >= new Date(options.startDate!).getTime());
+    if (options.endDate) list = list.filter(l => new Date(l.created_at || 0).getTime() <= new Date(options.endDate!).getTime());
+
+    const total = list.length;
+    const sorted = list.sort((a, b) => new Date(b.created_at || 0).getTime() - new Date(a.created_at || 0).getTime());
+    const paginated = sorted.slice(offset, offset + limit).map(l => ({
+      ...l,
+      evidence: safeParseJson(l.evidence),
+      metadata: safeParseJson(l.metadata)
+    }));
+
+    return { auditLogs: paginated, total };
+  }
+}
+
+export async function getFraudAdminActionById(actionId: string): Promise<FraudAdminActionRecord | null> {
+  const { adminActions } = await getFraudAdminActionsFiltered({ action_id: actionId, limit: 1 });
+  return adminActions.length > 0 ? adminActions[0] : null;
+}
+
+export async function getFraudAdminActionsFiltered(options: {
+  action_id?: string;
+  admin_id?: string;
+  customer_id?: string;
+  incident_id?: string;
+  restriction_id?: string;
+  action?: string;
+  page?: number;
+  limit?: number;
+}): Promise<{ adminActions: FraudAdminActionRecord[]; total: number }> {
+  const page = Math.max(1, options.page || 1);
+  const limit = Math.min(100, Math.max(1, options.limit || 25));
+  const offset = (page - 1) * limit;
+
+  if (dbPool && !isInMemoryFallback) {
+    const whereClauses: string[] = [];
+    const params: any[] = [];
+
+    if (options.action_id) { whereClauses.push('action_id = ?'); params.push(options.action_id); }
+    if (options.admin_id) { whereClauses.push('admin_id = ?'); params.push(options.admin_id); }
+    if (options.customer_id) { whereClauses.push('customer_id = ?'); params.push(options.customer_id); }
+    if (options.incident_id) { whereClauses.push('incident_id = ?'); params.push(options.incident_id); }
+    if (options.restriction_id) { whereClauses.push('restriction_id = ?'); params.push(options.restriction_id); }
+    if (options.action) { whereClauses.push('action = ?'); params.push(options.action); }
+
+    const whereSql = whereClauses.length > 0 ? `WHERE ${whereClauses.join(' AND ')}` : '';
+
+    const [[{ total }]]: any = await dbPool.query(`SELECT COUNT(*) AS total FROM fraud_admin_actions ${whereSql}`, params);
+
+    const [rows]: any = await dbPool.query(
+      `SELECT * FROM fraud_admin_actions ${whereSql} ORDER BY created_at DESC LIMIT ? OFFSET ?`,
+      [...params, limit, offset]
+    );
+
+    return { adminActions: rows, total: total || 0 };
+  } else {
+    let list = Array.from(inMemoryFraudAdminActions.values());
+    if (options.action_id) list = list.filter(a => a.action_id === options.action_id);
+    if (options.admin_id) list = list.filter(a => a.admin_id === options.admin_id);
+    if (options.customer_id) list = list.filter(a => a.customer_id === options.customer_id);
+    if (options.incident_id) list = list.filter(a => a.incident_id === options.incident_id);
+    if (options.restriction_id) list = list.filter(a => a.restriction_id === options.restriction_id);
+    if (options.action) list = list.filter(a => a.action === options.action);
+
+    const total = list.length;
+    const sorted = list.sort((a, b) => new Date(b.created_at || 0).getTime() - new Date(a.created_at || 0).getTime());
+    const paginated = sorted.slice(offset, offset + limit);
+
+    return { adminActions: paginated, total };
+  }
+}
+
+export async function getFraudOverviewMetrics(): Promise<any> {
+  if (dbPool && !isInMemoryFallback) {
+    const [[{ total }]]: any = await dbPool.query('SELECT COUNT(*) AS total FROM fraud_incidents');
+    const [[{ high }]]: any = await dbPool.query('SELECT COUNT(*) AS high FROM fraud_incidents WHERE risk_level = "HIGH"');
+    const [[{ very_high }]]: any = await dbPool.query('SELECT COUNT(*) AS very_high FROM fraud_incidents WHERE risk_level = "VERY_HIGH"');
+    const [[{ critical }]]: any = await dbPool.query('SELECT COUNT(*) AS critical FROM fraud_incidents WHERE risk_level = "CRITICAL" OR severity = "CRITICAL"');
+    const [[{ active_restr }]]: any = await dbPool.query('SELECT COUNT(*) AS active_restr FROM fraud_restrictions WHERE status = "ACTIVE" AND (expires_at IS NULL OR expires_at > NOW())');
+    const [[{ pending_stepup }]]: any = await dbPool.query('SELECT COUNT(*) AS pending_stepup FROM verification_challenges WHERE status = "PENDING" AND expires_at > NOW()');
+
+    const [typeRows]: any = await dbPool.query('SELECT fraud_type, COUNT(*) AS count FROM fraud_incidents GROUP BY fraud_type');
+    const incidents_by_fraud_type: Record<string, number> = {};
+    for (const r of typeRows) {
+      incidents_by_fraud_type[r.fraud_type] = r.count;
+    }
+
+    const [riskRows]: any = await dbPool.query('SELECT risk_level, COUNT(*) AS count FROM fraud_incidents GROUP BY risk_level');
+    const incidents_by_risk_level: Record<string, number> = {};
+    for (const r of riskRows) {
+      incidents_by_risk_level[r.risk_level] = r.count;
+    }
+
+    const [recent_incidents]: any = await dbPool.query('SELECT * FROM fraud_incidents ORDER BY created_at DESC LIMIT 5');
+
+    return {
+      total_incidents: total || 0,
+      high_risk_incidents: high || 0,
+      very_high_risk_incidents: very_high || 0,
+      critical_incidents: critical || 0,
+      active_restrictions: active_restr || 0,
+      pending_step_up_verification: pending_stepup || 0,
+      incidents_by_fraud_type,
+      incidents_by_risk_level,
+      recent_incidents
+    };
+  } else {
+    const incidents = Array.from(inMemoryFraudIncidents.values());
+    const restrictions = Array.from(inMemoryFraudRestrictions.values());
+    const challenges = Array.from(inMemoryVerificationChallenges.values());
+    const now = Date.now();
+
+    const total = incidents.length;
+    const high = incidents.filter(i => i.risk_level === 'HIGH').length;
+    const very_high = incidents.filter(i => i.risk_level === 'VERY_HIGH').length;
+    const critical = incidents.filter(i => i.risk_level === 'CRITICAL' || i.severity === 'CRITICAL').length;
+    const active_restr = restrictions.filter(r => r.status === 'ACTIVE' && (!r.expires_at || new Date(r.expires_at).getTime() > now)).length;
+    const pending_stepup = challenges.filter(c => c.status === 'PENDING' && new Date(c.expires_at).getTime() > now).length;
+
+    const incidents_by_fraud_type: Record<string, number> = {};
+    const incidents_by_risk_level: Record<string, number> = {};
+    for (const i of incidents) {
+      incidents_by_fraud_type[i.fraud_type] = (incidents_by_fraud_type[i.fraud_type] || 0) + 1;
+      incidents_by_risk_level[i.risk_level] = (incidents_by_risk_level[i.risk_level] || 0) + 1;
+    }
+
+    const recent_incidents = [...incidents]
+      .sort((a, b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime())
+      .slice(0, 5);
+
+    return {
+      total_incidents: total,
+      high_risk_incidents: high,
+      very_high_risk_incidents: very_high,
+      critical_incidents: critical,
+      active_restrictions: active_restr,
+      pending_step_up_verification: pending_stepup,
+      incidents_by_fraud_type,
+      incidents_by_risk_level,
+      recent_incidents
+    };
+  }
 }
 
 

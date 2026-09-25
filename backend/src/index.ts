@@ -30,6 +30,8 @@ import adminCouponRoutes from './routes/adminCouponRoutes';
 import adminWarehouseRoutes from './routes/adminWarehouseRoutes';
 import adminEventRoutes from './routes/adminEventRoutes';
 import adminSimulatorRoutes from './routes/adminSimulatorRoutes';
+import fraudRoutes from './routes/fraudRoutes';
+import { startFraudGuardConsumer } from './services/fraudGuardConsumer';
 
 dotenv.config();
 
@@ -56,6 +58,7 @@ app.use('/api/profile', profileRoutes);
 app.use('/api/addresses', addressRoutes);
 app.use('/api/notifications', notificationRoutes);
 app.use('/api/help', helpSupportRoutes);
+app.use('/api/fraud', fraudRoutes);
 app.use('/api/admin/auth', adminAuthRoutes);
 app.use('/api/admin/dashboard', adminDashboardRoutes);
 app.use('/api/admin/products', adminProductRoutes);
@@ -84,6 +87,11 @@ app.get('*', (req, res, next) => {
 
 async function startServer() {
   await initDb();
+  
+  startFraudGuardConsumer().catch((err) => {
+    console.error('[FraudGuard Consumer Startup Error]', err);
+  });
+
   app.listen(PORT, () => {
     console.log(`[NexDay Server] Single unified server running on http://localhost:${PORT}`);
   });
