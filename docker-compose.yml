@@ -1,5 +1,6 @@
 services:
   app:
+    #image: retailhub-web:latest if u dont give it dir name and app
     build:
       context: .
       dockerfile: Dockerfile
