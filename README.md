@@ -101,7 +101,7 @@ docker run -d -p 5000:5000 --name nexday-platform naveen9200/website_app:latest
   - `BOT_OR_SCRAPER`: Sub-100ms rapid category scraping with session cookie clearing (Score: 70–96).
   - `DDOS`: Burst traffic exceeding 30 requests/10s per IP (Score: 90–99).
 - **Security Priority State Machine**:
-  $$\text{NORMAL (1)} < \text{STEP\_UP\_REQUIRED (2)} < \text{PROTECTED (3)} < \text{RESTRICTED (4)} < \text{DEACTIVATED (5)} < \text{BANNED (6)}$$
+  `NORMAL (1)` ➔ `STEP_UP_REQUIRED (2)` ➔ `PROTECTED (3)` ➔ `RESTRICTED (4)` ➔ `DEACTIVATED (5)` ➔ `BANNED (6)`
   *(Prevents accidental status downgrades during concurrent fraud evaluations).*
 - **OTP Step-Up Authentication**: Generates 6-digit OTP challenge (300s expiry). Exceeding 3 failed attempts triggers a 24-hour restriction.
 - **Restriction Expiration & Release**: Expired or released restrictions mandate passing OTP step-up verification on next login before returning to `NORMAL` status.
