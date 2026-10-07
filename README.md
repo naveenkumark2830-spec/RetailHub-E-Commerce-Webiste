@@ -6,7 +6,7 @@
 
 ---
 
-## 📌 Executive Summary
+## Executive Summary
 
 **RetailHub** is a full-stack, enterprise-grade e-commerce platform integrated with **FraudGuard**, a real-time event-driven telemetry and behavioral risk engine. 
 
@@ -14,12 +14,12 @@ The platform captures live customer clickstream telemetry asynchronously using *
 
 ---
 
-## 🔗 Related Repositories
+##  Related Repositories
 
-### 📊 ETL Data Pipeline Repository
+###  ETL Data Pipeline Repository
 The batch and streaming ETL pipeline for processing historical clickstream telemetry, data warehouse transformations, and analytics modeling is hosted in a separate dedicated repository:
 
-👉 **[RetailHub ETL Data Pipeline Repository](https://github.com/naveenkumark2830-spec/Retailhub-ETL)**  
+**[RetailHub ETL Data Pipeline Repository](https://github.com/naveenkumark2830-spec/Retailhub-ETL)**  
 *URL*: `https://github.com/naveenkumark2830-spec/Retailhub-ETL`
 
 ---
@@ -81,7 +81,7 @@ docker run -d -p 5000:5000 --name nexday-platform naveen9200/website_app:latest
 
 ---
 
-## 🌟 Key Platform Capabilities
+##  Key Platform Capabilities
 
 ### 🛒 Omnichannel E-Commerce Portal
 - **Catalog Browsing & Search**: Search across categories with multi-parameter filtering (price, brand, rating, discount).
@@ -89,7 +89,7 @@ docker run -d -p 5000:5000 --name nexday-platform naveen9200/website_app:latest
 - **Order Lifecycle & Invoicing**: Real-time order status tracking, automated text/PDF invoice generation, and return/refund processing.
 - **Resilient Dual-Storage**: Primary persistence in **MySQL** with an automatic, zero-downtime **In-Memory Repository Fallback** (`Map` cache) during database outages.
 
-### 🛡️ FraudGuard Real-Time Security Operations (`/admin/fraud`)
+###  FraudGuard Real-Time Security Operations (`/admin/fraud`)
 - **Real-Time KPI Dashboard**: 5 dynamic KPI cards (Total Incidents, Admin Reviews Required, Banned Accounts, Currently Restricted, Step-Up Verifications Pending), interactive 7-day trend chart with hover tooltips, horizontal security workflow breakdown, and fraud type distribution.
 - **15+ Automated Fraud Scenarios**:
   - `BRUTE_FORCE_LOGIN`: Rapid failed login bursts (Score: 85–90).
@@ -109,7 +109,7 @@ docker run -d -p 5000:5000 --name nexday-platform naveen9200/website_app:latest
 
 ---
 
-## ⚡ Apache Kafka Event Streaming Infrastructure
+## Apache Kafka Event Streaming Infrastructure
 
 Telemetry events are published to **13 dedicated Kafka topics** mapped via `kafkaTopicMapper.ts`:
 
@@ -134,7 +134,7 @@ Telemetry events are published to **13 dedicated Kafka topics** mapped via `kafk
 
 ---
 
-## 🗄️ Database Schema Reference (MySQL)
+##  Database Schema Reference (MySQL)
 
 The application maintains 12 relational database tables:
 1. `customers`: User profile, credentials, and default account status.
@@ -152,7 +152,7 @@ The application maintains 12 relational database tables:
 
 ---
 
-## 🚀 Local Development Setup
+##  Local Development Setup
 
 ### Prerequisites
 - **Node.js** (v20.x or higher)
@@ -202,6 +202,6 @@ npm run dev
 
 ---
 
-## 📜 License & Copyright
+##  License & Copyright
 
 © 2026 **RetailHub & FraudGuard Platform**. All rights reserved. Managed under the `naveenkumark2830-spec` GitHub organization.
