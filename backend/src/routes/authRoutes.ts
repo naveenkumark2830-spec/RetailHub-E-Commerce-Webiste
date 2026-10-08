@@ -10,7 +10,10 @@ import {
   linkSessionToCustomer,
   mergeCarts,
   endSession,
-  mergeWishlists
+  mergeWishlists,
+  getCustomerSecurity,
+  checkAndReleaseExpiredRestrictions,
+  isEmailOrPhoneBanned
 } from '../config/db';
 import { EventLogger } from '../services/eventLogger';
 
@@ -67,6 +70,15 @@ router.post('/register', async (req: Request, res: Response) => {
     }
 
     const data = parseResult.data;
+
+    // Check if email or phone is permanently banned
+    const isBanned = await isEmailOrPhoneBanned(data.email, data.phone);
+    if (isBanned) {
+      return res.status(403).json({
+        success: false,
+        error: 'This email address or phone number is permanently banned from RetailHub. Registration denied.'
+      });
+    }
 
     // Check if email already registered
     const existingCustomer = await getCustomerByEmail(data.email);
@@ -190,6 +202,46 @@ router.post('/login', async (req: Request, res: Response) => {
         metadata: { reason: 'invalid_credentials' }
       });
       return res.status(401).json({ success: false, error: 'Invalid email or password' });
+    }
+
+    // Check FraudGuard account & security status
+    await checkAndReleaseExpiredRestrictions();
+    const secState = await getCustomerSecurity(customer.customer_id);
+    const accountStatus = String(customer.account_status || secState?.account_status || 'ACTIVE').toUpperCase();
+    const securityStatus = String(secState?.security_status || 'NORMAL').toUpperCase();
+
+    if (accountStatus === 'BANNED' || securityStatus === 'BANNED') {
+      EventLogger.logEvent({
+        event_type: 'login_failed',
+        session_id: sessionId,
+        customer_id: customer.customer_id,
+        user_type: 'registered',
+        page: 'login',
+        metadata: { reason: 'account_banned' }
+      });
+      return res.status(403).json({
+        success: false,
+        error: 'Your account has been permanently banned due to severe fraud policy violations.',
+        account_status: 'BANNED',
+        customer_id: customer.customer_id
+      });
+    }
+
+    if (accountStatus === 'DEACTIVATED' || securityStatus === 'DEACTIVATED') {
+      EventLogger.logEvent({
+        event_type: 'login_failed',
+        session_id: sessionId,
+        customer_id: customer.customer_id,
+        user_type: 'registered',
+        page: 'login',
+        metadata: { reason: 'account_deactivated' }
+      });
+      return res.status(403).json({
+        success: false,
+        error: 'Your account has been deactivated for security reasons. Please contact customer support.',
+        account_status: 'DEACTIVATED',
+        customer_id: customer.customer_id
+      });
     }
 
     // Link guest session to customer

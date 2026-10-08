@@ -7,9 +7,7 @@ import {
   Warehouse, 
   Star, 
   Layers, 
-  LayoutDashboard,
-  BarChart3,
-  Settings
+  ShieldAlert
 } from 'lucide-react';
 
 export interface NavItemConfig {
@@ -20,7 +18,7 @@ export interface NavItemConfig {
 }
 
 export const CANONICAL_NAV_ITEMS: NavItemConfig[] = [
-  { key: 'dashboard', name: 'Dashboard', path: '/admin/simulator', icon: LayoutDashboard },
+  { key: 'fraudguard', name: 'FraudGuard', path: '/admin/fraud', icon: ShieldAlert },
   { key: 'simulator', name: 'Simulator', path: '/admin/simulator', icon: Cpu },
   { key: 'products', name: 'Products', path: '/admin/products', icon: ShoppingBag },
   { key: 'categories', name: 'Categories', path: '/admin/categories', icon: FolderOpen },
@@ -31,6 +29,4 @@ export const CANONICAL_NAV_ITEMS: NavItemConfig[] = [
   { key: 'reviews', name: 'Reviews', path: '/admin/reviews', icon: Star },
   { key: 'coupons', name: 'Coupons', path: '/admin/coupons', icon: Layers },
   { key: 'warehouses', name: 'Warehouses', path: '/admin/warehouses', icon: Warehouse },
-  { key: 'analytics', name: 'Analytics', path: '/admin/simulator', icon: BarChart3 },
-  { key: 'settings', name: 'Settings', path: '/admin/simulator', icon: Settings },
 ];

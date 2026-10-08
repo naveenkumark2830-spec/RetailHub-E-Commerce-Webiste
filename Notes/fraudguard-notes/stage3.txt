@@ -1,0 +1,584 @@
+STAGE 3 Verification|
+
+---------------------------------------------------------------------------------------------------\
+PS C:\Users\navee\OneDrive\Attachments\Desktop\Website\backend> npm.cmd run build
+
+> retailhub-backend@1.0.0 build
+> tsc
+
+PS C:\Users\navee\OneDrive\Attachments\Desktop\Website\backend> npx.cmd tsc --noEmit
+PS C:\Users\navee\OneDrive\Attachments\Desktop\Website\backend> Invoke-RestMethod http://localhost:5000/api/fraud/incidents
+
+
+success : True
+count   : 9
+total   : 9
+page    : 1
+limit   : 25
+data    : {@{incident_id=INC-STAGE3-1790318005478; customer_id=CUST-STAGE3-001; fraud_type=MULTI_IP_LOGIN_ATTACK; severity=HIGH; reason=Stage 3 test incident; risk_score=90; 
+          risk_level=HIGH; action=STEP_UP_AUTHENTICATION; requires_customer_action=1; requires_admin_review=0; restriction_minutes=15; ai_attack_pattern=Distributed login; 
+          ai_finding=Multiple IPs used; ai_confidence=0.9000; ai_recommendation=STEP_UP_AUTHENTICATION; source_event_id=EVT-S3-1; source_event_type=login_failed; 
+          ip_address=103.22.1.1; device_id=DEV-S3-1; session_id=SESS-S3-1; timestamp=2026-09-25T06:33:25.478Z; created_at=2026-09-25T06:33:25.000Z}, 
+          @{incident_id=INC-20260925-0C10A1F5; customer_id=TEST-CUST-LOGIN-02; fraud_type=BRUTE_FORCE_LOGIN; severity=HIGH; reason=5 failed logins within 5 minutes; 
+          risk_score=55; risk_level=HIGH; action=STEP_UP_AUTHENTICATION; requires_customer_action=1; requires_admin_review=0; restriction_minutes=; ai_attack_pattern=Credential 
+          attack; ai_finding=Repeated authentication failures indicate possible credential guessing or automated login attempts.; ai_confidence=0.7800; 
+          ai_recommendation=STEP_UP_AUTHENTICATION; source_event_id=EVT-LOGIN-005; source_event_type=login_failed; ip_address=10.0.0.2; device_id=; session_id=s1; 
+          timestamp=2026-09-25T06:20:03.757101+00:00; created_at=2026-09-25T06:20:03.000Z}, @{incident_id=INC-20260925-11068F75; customer_id=TEST-CUST-LOGIN-02; 
+          fraud_type=MULTI_IP_LOGIN_ATTACK; severity=HIGH; reason=Failed logins from 3 different IP addresses; risk_score=60; risk_level=HIGH; action=STEP_UP_AUTHENTICATION; 
+          requires_customer_action=1; requires_admin_review=0; restriction_minutes=; ai_attack_pattern=Credential Stuffing / Distributed Brute Force; ai_finding=Authentication 
+          failures originated from multiple IP addresses against the same customer.; ai_confidence=0.8500; ai_recommendation=STEP_UP_AUTHENTICATION; 
+          source_event_id=EVT-LOGIN-003; source_event_type=login_failed; ip_address=10.0.0.3; device_id=; session_id=s1; timestamp=2026-09-25T06:19:57.236292+00:00; 
+          created_at=2026-09-25T06:19:58.000Z}, @{incident_id=INC-TEST-STAGE2-1790315893393; customer_id=CUST-SIM-00001; fraud_type=BRUTE_FORCE_LOGIN; severity=HIGH; 
+          reason=Multiple failed logins detected within 5 minutes; risk_score=85; risk_level=HIGH; action=TEMPORARY_RESTRICTION; requires_customer_action=1; 
+          requires_admin_review=1; restriction_minutes=30; ai_attack_pattern=Credential stuffing; ai_finding=High velocity failed login attempts; ai_confidence=0.9500; 
+          ai_recommendation=Enforce step-up authentication; source_event_id=EVT-TEST-001; source_event_type=login_failed; ip_address=103.22.45.12; device_id=DEV-TEST-01; 
+          session_id=sess_test_01; timestamp=2026-09-25T05:58:13.393Z; created_at=2026-09-25T05:58:13.000Z}...}
+
+
+
+PS C:\Users\navee\OneDrive\Attachments\Desktop\Website\backend> Invoke-RestMethod http://localhost:5000/api/fraud/incidents/INC-20260925-11068F75
+
+success data                                                                                                                                                                       
+------- ----                                                                                                                                                                       
+   True @{incident_id=INC-20260925-11068F75; customer_id=TEST-CUST-LOGIN-02; fraud_type=MULTI_IP_LOGIN_ATTACK; severity=HIGH; reason=Failed logins from 3 different IP addresses...
+
+
+PS C:\Users\navee\OneDrive\Attachments\Desktop\Website\backend> Invoke-RestMethod http://localhost:5000/api/fraud/customers/TEST-CUST-LOGIN-02/security
+
+success data                                                                                                                                                                       
+------- ----                                                                                                                                                                       
+   True @{customer_id=TEST-CUST-LOGIN-02; account_status=ACTIVE; security_status=NORMAL; active_restriction_id=; failed_login_count=0; last_fraud_incident_id=; step_up_required...
+
+
+PS C:\Users\navee\OneDrive\Attachments\Desktop\Website\backend> Invoke-RestMethod http://localhost:5000/api/fraud/restrictions
+
+
+success : True
+count   : 4
+total   : 4
+page    : 1
+limit   : 25
+data    : {@{restriction_id=RESTR-STAGE3-1790318005478; customer_id=CUST-STAGE3-001; incident_id=INC-STAGE3-1790318005478; restriction_type=TEMPORARY_RESTRICTION; status=ACTIVE; 
+          reason=Stage 3 active test restriction; started_at=2026-09-25T06:33:25.000Z; expires_at=2026-09-25T06:43:25.000Z; released_at=; released_by=; release_reason=; 
+          created_at=2026-09-25T06:33:25.000Z; updated_at=2026-09-25T06:33:25.000Z}, @{restriction_id=RESTR-TEST-1790315893405; customer_id=CUST-SIM-00001; 
+          incident_id=INC-TEST-STAGE2-1790315893393; restriction_type=TEMPORARY_RESTRICTION; status=ACTIVE; reason=Suspicious brute-force attempt; 
+          started_at=2026-09-25T05:58:13.000Z; expires_at=2026-09-25T06:28:13.000Z; released_at=; released_by=; release_reason=; created_at=2026-09-25T05:58:13.000Z; 
+          updated_at=2026-09-25T05:58:13.000Z}, @{restriction_id=RESTR-TEST-1790313541890; customer_id=CUST-SIM-00001; incident_id=INC-TEST-STAGE2-1790313541876; 
+          restriction_type=TEMPORARY_RESTRICTION; status=ACTIVE; reason=Suspicious brute-force attempt; started_at=2026-09-25T05:19:02.000Z; expires_at=2026-09-25T05:49:02.000Z; 
+          released_at=; released_by=; release_reason=; created_at=2026-09-25T05:19:01.000Z; updated_at=2026-09-25T05:19:01.000Z}, @{restriction_id=RESTR-TEST-1790276444230; 
+          customer_id=CUST-SIM-00001; incident_id=INC-TEST-STAGE2-1790276444217; restriction_type=TEMPORARY_RESTRICTION; status=ACTIVE; reason=Suspicious brute-force attempt; 
+          started_at=2026-09-24T19:00:44.000Z; expires_at=2026-09-24T19:30:44.000Z; released_at=; released_by=; release_reason=; created_at=2026-09-24T19:00:44.000Z; 
+          updated_at=2026-09-24T19:00:44.000Z}}
+
+
+
+PS C:\Users\navee\OneDrive\Attachments\Desktop\Website\backend> Invoke-RestMethod http://localhost:5000/api/fraud/audit
+
+
+success : True
+count   : 4
+total   : 4
+page    : 1
+limit   : 25
+data    : {@{audit_id=AUDIT-STAGE3-1790318005478; actor_type=SYSTEM; actor_id=SYS-01; customer_id=CUST-STAGE3-001; incident_id=INC-STAGE3-1790318005478; 
+          event_type=FRAUD_DECISION; event=STEP_UP_TRIGGERED; reason=Multi-IP attack; evidence=; decision=STEP_UP; confidence=0.9000; action=CREATE_CHALLENGE; approval=AUTO; 
+          result=SUCCESS; metadata=; created_at=2026-09-25T06:33:25.000Z}, @{audit_id=AUDIT-TEST-1790315893450; actor_type=FRAUDGUARD; actor_id=FG-ENGINE-01; 
+          customer_id=CUST-SIM-00001; incident_id=INC-TEST-STAGE2-1790315893393; event_type=FRAUD_DECISION; event=STEP_UP_TRIGGERED; reason=Rule BRUTE_FORCE_LOGIN fired; 
+          evidence=; decision=RESTRICT; confidence=0.9500; action=CREATE_RESTRICTION; approval=AUTO; result=SUCCESS; metadata=; created_at=2026-09-25T05:58:13.000Z}, 
+          @{audit_id=AUDIT-TEST-1790313541932; actor_type=FRAUDGUARD; actor_id=FG-ENGINE-01; customer_id=CUST-SIM-00001; incident_id=INC-TEST-STAGE2-1790313541876; 
+          event_type=FRAUD_DECISION; event=STEP_UP_TRIGGERED; reason=Rule BRUTE_FORCE_LOGIN fired; evidence=; decision=RESTRICT; confidence=0.9500; action=CREATE_RESTRICTION; 
+          approval=AUTO; result=SUCCESS; metadata=; created_at=2026-09-25T05:19:01.000Z}, @{audit_id=AUDIT-TEST-1790276444275; actor_type=FRAUDGUARD; actor_id=FG-ENGINE-01; 
+          customer_id=CUST-SIM-00001; incident_id=INC-TEST-STAGE2-1790276444217; event_type=FRAUD_DECISION; event=STEP_UP_TRIGGERED; reason=Rule BRUTE_FORCE_LOGIN fired; 
+          evidence=; decision=RESTRICT; confidence=0.9500; action=CREATE_RESTRICTION; approval=AUTO; result=SUCCESS; metadata=; created_at=2026-09-24T19:00:44.000Z}}
+
+
+
+PS C:\Users\navee\OneDrive\Attachments\Desktop\Website\backend> Invoke-RestMethod "http://localhost:5000/api/fraud/incidents?page=1&pageSize=10"
+
+
+success : True
+count   : 9
+total   : 9
+page    : 1
+limit   : 25
+data    : {@{incident_id=INC-STAGE3-1790318005478; customer_id=CUST-STAGE3-001; fraud_type=MULTI_IP_LOGIN_ATTACK; severity=HIGH; reason=Stage 3 test incident; risk_score=90; 
+          risk_level=HIGH; action=STEP_UP_AUTHENTICATION; requires_customer_action=1; requires_admin_review=0; restriction_minutes=15; ai_attack_pattern=Distributed login; 
+          ai_finding=Multiple IPs used; ai_confidence=0.9000; ai_recommendation=STEP_UP_AUTHENTICATION; source_event_id=EVT-S3-1; source_event_type=login_failed; 
+          ip_address=103.22.1.1; device_id=DEV-S3-1; session_id=SESS-S3-1; timestamp=2026-09-25T06:33:25.478Z; created_at=2026-09-25T06:33:25.000Z}, 
+          @{incident_id=INC-20260925-0C10A1F5; customer_id=TEST-CUST-LOGIN-02; fraud_type=BRUTE_FORCE_LOGIN; severity=HIGH; reason=5 failed logins within 5 minutes; 
+          risk_score=55; risk_level=HIGH; action=STEP_UP_AUTHENTICATION; requires_customer_action=1; requires_admin_review=0; restriction_minutes=; ai_attack_pattern=Credential 
+          attack; ai_finding=Repeated authentication failures indicate possible credential guessing or automated login attempts.; ai_confidence=0.7800; 
+          ai_recommendation=STEP_UP_AUTHENTICATION; source_event_id=EVT-LOGIN-005; source_event_type=login_failed; ip_address=10.0.0.2; device_id=; session_id=s1; 
+          timestamp=2026-09-25T06:20:03.757101+00:00; created_at=2026-09-25T06:20:03.000Z}, @{incident_id=INC-20260925-11068F75; customer_id=TEST-CUST-LOGIN-02; 
+          fraud_type=MULTI_IP_LOGIN_ATTACK; severity=HIGH; reason=Failed logins from 3 different IP addresses; risk_score=60; risk_level=HIGH; action=STEP_UP_AUTHENTICATION; 
+          requires_customer_action=1; requires_admin_review=0; restriction_minutes=; ai_attack_pattern=Credential Stuffing / Distributed Brute Force; ai_finding=Authentication 
+          failures originated from multiple IP addresses against the same customer.; ai_confidence=0.8500; ai_recommendation=STEP_UP_AUTHENTICATION; 
+          source_event_id=EVT-LOGIN-003; source_event_type=login_failed; ip_address=10.0.0.3; device_id=; session_id=s1; timestamp=2026-09-25T06:19:57.236292+00:00; 
+          created_at=2026-09-25T06:19:58.000Z}, @{incident_id=INC-TEST-STAGE2-1790315893393; customer_id=CUST-SIM-00001; fraud_type=BRUTE_FORCE_LOGIN; severity=HIGH; 
+          reason=Multiple failed logins detected within 5 minutes; risk_score=85; risk_level=HIGH; action=TEMPORARY_RESTRICTION; requires_customer_action=1; 
+          requires_admin_review=1; restriction_minutes=30; ai_attack_pattern=Credential stuffing; ai_finding=High velocity failed login attempts; ai_confidence=0.9500; 
+          ai_recommendation=Enforce step-up authentication; source_event_id=EVT-TEST-001; source_event_type=login_failed; ip_address=103.22.45.12; device_id=DEV-TEST-01; 
+          session_id=sess_test_01; timestamp=2026-09-25T05:58:13.393Z; created_at=2026-09-25T05:58:13.000Z}...}
+
+
+
+PS C:\Users\navee\OneDrive\Attachments\Desktop\Website\backend> Invoke-RestMethod http://localhost:5000/api/fraud/incidents/DOES-NOT-EXIST
+Invoke-RestMethod : {"success":false,"error":"Incident not found"}
+At line:1 char:1
++ Invoke-RestMethod http://localhost:5000/api/fraud/incidents/DOES-NOT- ...
++ ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+    + CategoryInfo          : InvalidOperation: (System.Net.HttpWebRequest:HttpWebRequest) [Invoke-RestMethod], WebException
+    + FullyQualifiedErrorId : WebCmdletWebResponseException,Microsoft.PowerShell.Commands.InvokeRestMethodCommand
+PS C:\Users\navee\OneDrive\Attachments\Desktop\Website\backend> -
+-----------------------------------------------------------------------------------------------------------------------------------------------------------------------
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+Yes. Based on your actual verification output, **Stage 3 is working successfully**: the build passed, the incident API returned real records, the individual incident endpoint worked, customer security/restrictions/audit endpoints returned data, pagination was accepted, and the nonexistent incident correctly returned `"Incident not found"`.     
+
+## What we did in Stage 3
+
+Stage 3 was basically:
+
+**MySQL → Backend REST API**
+
+We took the database foundation from Stage 2 and exposed it to the website.
+
+### 1. Fraud Incident APIs
+
+The website backend can now retrieve:
+
+* all fraud incidents
+* a specific incident
+* incidents for a customer
+* filtered/paginated incident data
+
+Your test returned **9 incidents**, including the real FraudGuard incidents generated earlier. 
+
+### 2. Customer Security API
+
+We can now ask:
+
+> "What is the current FraudGuard security state of this customer?"
+
+For example:
+
+```text
+customer_id
+account_status
+security_status
+active_restriction_id
+failed_login_count
+last_fraud_incident_id
+step_up_required
+```
+
+Your endpoint successfully returned the customer security record. 
+
+### 3. Restriction APIs
+
+The backend can now retrieve:
+
+* all restrictions
+* customer restrictions
+* active restrictions
+* restriction details
+
+Your test returned **4 restrictions**. 
+
+### 4. Audit APIs
+
+The backend can now retrieve FraudGuard audit information.
+
+Your test returned **4 audit records**, including:
+
+```text
+FRAUD_DECISION
+STEP_UP_TRIGGERED
+CREATE_RESTRICTION
+```
+
+with actor, customer, incident, decision, action and result information. 
+
+### 5. Fraud Overview API
+
+We also created the endpoint that will eventually power the dashboard:
+
+```text
+GET /api/fraud/overview
+```
+
+This gives aggregated FraudGuard statistics.
+
+### 6. Pagination/filtering
+
+The incident API supports paginated retrieval rather than dumping an unlimited number of records.
+
+Your request worked, although notice this:
+
+```text
+?page=1&pageSize=10
+```
+
+returned:
+
+```text
+limit : 25
+```
+
+So **the API appears to be using `limit` rather than honoring `pageSize`**. That's a small thing we'll want to fix before calling Stage 3 completely polished.
+
+### 7. Error handling
+
+You tested:
+
+```text
+/api/fraud/incidents/DOES-NOT-EXIST
+```
+
+and got:
+
+```json
+{
+  "success": false,
+  "error": "Incident not found"
+}
+```
+
+So the API isn't crashing when a record doesn't exist. 
+
+---
+
+# Where we are now
+
+```text
+                         RETAILHUB
+
+FraudGuard
+    │
+    ▼
+Kafka
+    │
+    ▼
+Website Backend
+    │
+    ▼
+┌──────────────────────────┐
+│        MySQL              │
+│                          │
+│ fraud_incidents          │
+│ fraud_restrictions       │
+│ verification_challenges  │
+│ fraud_admin_actions      │
+│ fraud_audit_log          │
+│ customer_security        │
+└────────────┬─────────────┘
+             │
+             ▼
+       REST API Layer
+             │
+             ▼
+       ┌─────────────┐
+       │ React UI    │
+       │ NEXT STAGE  │
+       └─────────────┘
+```
+
+So **Stages 1–3 are essentially complete**.
+
+---
+
+# What remains
+
+## Stage 4 — FraudGuard Admin Dashboard
+
+Build the main `/admin/fraud` dashboard:
+
+* total incidents
+* HIGH / VERY_HIGH / CRITICAL
+* active restrictions
+* pending verification
+* fraud types
+* risk distribution
+* recent incidents
+* live/recent FraudGuard activity
+
+---
+
+## Stage 5 — Fraud Incident Details
+
+When admin clicks an incident:
+
+```text
+Incident
+Customer
+Fraud Type
+Severity
+Risk Score
+Reason
+Evidence
+Source Event
+IP
+Device
+Session
+
+AI Investigation
+    Attack Pattern
+    Finding
+    Confidence
+    Recommendation
+
+Response
+    Action
+    Restriction
+    Customer Action Required
+    Admin Review Required
+```
+
+---
+
+## Stage 6 — Customer Security Page
+
+Admin can view a customer's security profile:
+
+```text
+Customer
+   ↓
+Account status
+Security status
+Fraud history
+Active restrictions
+Failed logins
+Step-up requirement
+Recent incidents
+Audit history
+```
+
+---
+
+## Stage 7 — OTP / Step-Up Authentication
+
+For:
+
+```text
+STEP_UP_AUTHENTICATION
+```
+
+we build:
+
+```text
+FraudGuard
+    ↓
+Backend
+    ↓
+Create verification challenge
+    ↓
+Generate OTP
+    ↓
+Send/display through appropriate channel
+    ↓
+Customer enters OTP
+    ↓
+Verify hash
+    ↓
+Allow protected action
+```
+
+The database foundation for this already exists.
+
+---
+
+## Stage 8 — Temporary Restriction System
+
+Implement actual restriction behavior:
+
+```text
+VERY_HIGH / CRITICAL
+        ↓
+Create restriction
+        ↓
+Customer becomes restricted
+        ↓
+Website checks security state
+        ↓
+Protected actions blocked
+        ↓
+expires_at reached
+        ↓
+Restriction expires
+```
+
+This is where the database restriction table becomes an actual security mechanism.
+
+---
+
+## Stage 9 — Admin Controls
+
+Admin can eventually:
+
+```text
+Release Restriction
+Keep Restricted
+Deactivate Account
+Ban Account
+```
+
+with:
+
+```text
+Admin
+ ↓
+Action
+ ↓
+Reason required
+ ↓
+Database update
+ ↓
+Security state update
+ ↓
+Audit record
+```
+
+---
+
+## Stage 10 — Complete E2E Testing
+
+Test the whole thing:
+
+```text
+Website event
+ ↓
+Kafka
+ ↓
+FraudGuard
+ ↓
+Detection
+ ↓
+Risk
+ ↓
+AI
+ ↓
+Fraud decision
+ ↓
+Kafka
+ ↓
+Website Backend
+ ↓
+MySQL
+ ↓
+API
+ ↓
+React
+ ↓
+OTP / Restriction
+ ↓
+Admin action
+ ↓
+Audit
+```
+
+Including failures:
+
+* Gemini unavailable
+* Kafka unavailable
+* duplicate Kafka message
+* invalid event
+* backend restart
+* expired OTP
+* incorrect OTP
+* expired restriction
+
+---
+
+## Stage 11 — Performance + Production Hardening
+
+Then address things we've already seen, such as the Kafka consumer rebalancing and the earlier FraudGuard processing delay.
+
+Also:
+
+* Kafka consumer tuning
+* asynchronous publishing
+* API pagination
+* database indexes
+* connection pool
+* logging
+* error handling
+* security
+* monitoring
+
+---
+
+## Stage 12 — AWS / Databricks Deployment
+
+Finally:
+
+```text
+Internet
+   ↓
+ALB
+   ↓
+Web EC2
+   ↓
+RDS MySQL
+
+Web EC2
+   ↓
+Kafka
+
+Kafka
+   ↓
+FraudGuard / Streaming
+
+S3
+ ├── Bronze
+ ├── Silver
+ └── Gold
+
+Databricks
+   ↓
+Spark processing
+
+Airflow
+   ↓
+Orchestration
+
+Athena
+   ↓
+Analytics
+```
+
+### Current progress
+
+```text
+Stage 1  Kafka → Backend              ✅
+Stage 2  MySQL persistence             ✅
+Stage 3  REST APIs                     ✅*
+Stage 4  Admin Dashboard               ⏳
+Stage 5  Incident Details              ⏳
+Stage 6  Customer Security             ⏳
+Stage 7  OTP                           ⏳
+Stage 8  Restrictions                  ⏳
+Stage 9  Admin Controls                ⏳
+Stage 10 E2E Testing                   ⏳
+Stage 11 Performance/Hardening        ⏳
+Stage 12 AWS/Databricks Deployment     ⏳
+```
+
+`*` Stage 3 has passed the practical API tests you ran; the `pageSize` behavior is a minor issue worth correcting before final polish.
+
+**Next is Stage 4: build the actual FraudGuard Admin Dashboard UI.**

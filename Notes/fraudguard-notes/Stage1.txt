@@ -1,0 +1,252 @@
+Yes. Since Antigravity already reports compilation/build success, now we need to verify the **actual runtime flow**, not just the code.
+
+Do this in order.
+
+## 1. Start Kafka
+
+Make sure your Kafka container is running in WSL:
+
+```bash
+docker ps --filter name=retailhub-kafka
+```
+
+You should see `retailhub-kafka`.
+
+If it isn't running:
+
+```bash
+docker start retailhub-kafka
+```
+
+---
+
+## 2. Confirm the FraudGuard topic exists
+
+In WSL:
+
+```bash
+docker exec -it retailhub-kafka /opt/kafka/bin/kafka-topics.sh \
+  --bootstrap-server localhost:9092 \
+  --list | grep retail_fraudguard_events
+```
+
+Expected:
+
+```text
+retail_fraudguard_events
+```
+
+---
+
+## 3. Start your Windows website backend
+
+Open **PowerShell** in your website project:
+
+```powershell
+cd <your-website-path>\backend
+npm run dev
+```
+
+You should see something similar to:
+
+```text
+[NexDay Server] Single unified server running on http://localhost:5000
+
+[FraudGuard Consumer] FraudGuard Kafka consumer started
+[FraudGuard Consumer] Connected to Kafka
+```
+
+### Stop here if you don't see `Connected to Kafka`.
+
+Send me the backend output.
+
+---
+
+# 4. Check the API before sending anything
+
+Open another PowerShell:
+
+```powershell
+curl http://localhost:5000/api/fraud/incidents
+```
+
+or:
+
+```powershell
+Invoke-RestMethod http://localhost:5000/api/fraud/incidents
+```
+
+You should get something like:
+
+```json
+{
+  "success": true,
+  "count": 0,
+  "data": []
+}
+```
+
+If there are already incidents, that's also fine.
+
+---
+
+# 5. Now send a test FraudGuard decision
+
+Since your Kafka is inside Docker/WSL, run this **in WSL**:
+
+```bash
+docker exec -i retailhub-kafka /opt/kafka/bin/kafka-console-producer.sh \
+  --bootstrap-server localhost:9092 \
+  --topic retail_fraudguard_events <<'EOF'
+{"event_type":"FRAUD_DECISION","timestamp":"2026-09-25T00:20:00+05:30","incident_id":"TEST-STAGE1-001","customer_id":"TEST-CUSTOMER-001","fraud_type":"BRUTE_FORCE_LOGIN","severity":"HIGH","reason":"5 failed logins within 5 minutes","risk_score":55,"risk_level":"HIGH","action":"STEP_UP_AUTHENTICATION","requires_customer_action":true,"requires_admin_review":false,"restriction_minutes":null,"ai_attack_pattern":"Credential attack","ai_finding":"Repeated authentication failures detected.","ai_confidence":0.78,"ai_recommendation":"STEP_UP_AUTHENTICATION","source_event_id":"TEST-EVENT-001","source_event_type":"login_failed","ip_address":"10.10.10.10","device_id":"TEST-DEVICE-001","session_id":"TEST-SESSION-001","source":"fraudguard"}
+EOF
+```
+
+---
+
+# 6. Look at the Windows backend terminal
+
+You should now see:
+
+```text
+[FraudGuard Consumer] Received FraudGuard decision: TEST-STAGE1-001
+[FraudGuard Consumer] Incident persisted: TEST-STAGE1-001
+```
+
+### This is the most important test.
+
+It proves:
+
+```text
+Kafka
+  ↓
+Website Kafka Consumer
+  ↓
+Backend
+```
+
+---
+
+# 7. Check the API again
+
+PowerShell:
+
+```powershell
+Invoke-RestMethod http://localhost:5000/api/fraud/incidents
+```
+
+You should now find:
+
+```text
+incident_id = TEST-STAGE1-001
+customer_id = TEST-CUSTOMER-001
+fraud_type  = BRUTE_FORCE_LOGIN
+risk_score  = 55
+risk_level  = HIGH
+action      = STEP_UP_AUTHENTICATION
+```
+
+If you see it, then:
+
+```text
+Kafka → Backend → Database/API
+```
+
+is working.
+
+---
+
+# 8. Test duplicate protection
+
+Send **the exact same message again**.
+
+You can simply run the producer command again.
+
+The backend should say:
+
+```text
+[FraudGuard Consumer] Duplicate incident ignored: TEST-STAGE1-001
+```
+
+Then call:
+
+```powershell
+Invoke-RestMethod http://localhost:5000/api/fraud/incidents
+```
+
+There must still be **only one**:
+
+```text
+TEST-STAGE1-001
+```
+
+This verifies idempotency.
+
+---
+
+# 9. One important thing to check
+
+Antigravity said:
+
+> `mysql2/promise` connection pool with **in-memory Map fallback repository**
+
+We need to determine whether your test actually persisted into **MySQL**, rather than only the in-memory fallback.
+
+So after the API test, we should query MySQL directly.
+
+If your website uses MySQL locally, run:
+
+```sql
+SELECT
+    incident_id,
+    customer_id,
+    fraud_type,
+    risk_score,
+    risk_level,
+    action,
+    created_at
+FROM fraud_incidents
+WHERE incident_id = 'TEST-STAGE1-001';
+```
+
+Expected:
+
+```text
+TEST-STAGE1-001 | TEST-CUSTOMER-001 | BRUTE_FORCE_LOGIN | 55 | HIGH | STEP_UP_AUTHENTICATION | ...
+```
+
+**This is important.** The API returning the incident alone doesn't prove MySQL was used if the fallback Map is active.
+
+---
+
+## Our Stage 1 success criteria
+
+We want all six to pass:
+
+```text
+[ ] Kafka topic exists
+[ ] Backend connects to Kafka
+[ ] FraudGuard message reaches backend
+[ ] Incident appears in API
+[ ] Incident exists in MySQL
+[ ] Duplicate message does NOT create another row
+```
+
+If all six pass, **Stage 1 is genuinely complete**.
+
+Start with **steps 1–4** and send me the output. Then we'll proceed to the test message.
+
+
+
+
+
+
+MySQL — complete FraudGuard database schema
+Backend APIs — incidents, customers, restrictions, audit
+Admin Fraud Dashboard UI
+Incident Details + Evidence + AI Investigation UI
+Customer Security/Profile UI
+OTP / Step-Up Authentication
+Temporary Restrictions + automatic expiry
+Admin Controls + Admin Action Audit
+Complete E2E testing + failure/performance testing

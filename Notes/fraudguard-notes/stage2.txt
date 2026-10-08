@@ -1,0 +1,237 @@
+Stage 2 Completion Report: RetailHub FraudGuard Persistence Layer
+Stage 2 implementation is complete. The complete MySQL persistence layer, typescript interfaces, database repositories, index optimizations, and security hashing utilities required for FraudGuard UI, OTP, temporary restrictions, and admin controls are fully implemented, verified, and tested.
+
+1. Existing Database Tables Inspected
+customers: Primary customer account registry (customer_id VARCHAR(64) PRIMARY KEY).
+admin_users: Admin account registry (admin_id VARCHAR(64) PRIMARY KEY).
+fraud_incidents: Stage 1 decision records (incident_id VARCHAR(128) PRIMARY KEY).
+Existing e-commerce tables (orders, payments, sessions, categories, products, reviews, etc.) were preserved without alteration.
+2. Tables Created / Modified
+Modified: fraud_incidents (added secondary indexes for performance optimization).
+Created:
+fraud_restrictions
+verification_challenges
+fraud_admin_actions
+fraud_audit_log
+customer_security
+3. Complete Schema
+1. fraud_incidents (Preserved & Optimized)
+sql
+
+
+CREATE TABLE IF NOT EXISTS fraud_incidents (
+  incident_id VARCHAR(128) PRIMARY KEY,
+  customer_id VARCHAR(128) NOT NULL,
+  fraud_type VARCHAR(128) NOT NULL,
+  severity VARCHAR(64) NOT NULL,
+  reason TEXT,
+  risk_score INT DEFAULT 0,
+  risk_level VARCHAR(64) NOT NULL,
+  action VARCHAR(128) NOT NULL,
+  requires_customer_action TINYINT(1) DEFAULT 0,
+  requires_admin_review TINYINT(1) DEFAULT 0,
+  restriction_minutes INT DEFAULT NULL,
+  ai_attack_pattern TEXT,
+  ai_finding TEXT,
+  ai_confidence DECIMAL(5,4) DEFAULT NULL,
+  ai_recommendation TEXT,
+  source_event_id VARCHAR(128),
+  source_event_type VARCHAR(128),
+  ip_address VARCHAR(128),
+  device_id VARCHAR(128),
+  session_id VARCHAR(128),
+  timestamp VARCHAR(128) NOT NULL,
+  created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+);
+2. fraud_restrictions
+sql
+
+
+CREATE TABLE IF NOT EXISTS fraud_restrictions (
+  restriction_id VARCHAR(128) PRIMARY KEY,
+  customer_id VARCHAR(128) NOT NULL,
+  incident_id VARCHAR(128) NULL,
+  restriction_type VARCHAR(64) NOT NULL DEFAULT 'TEMPORARY_RESTRICTION',
+  status VARCHAR(32) NOT NULL DEFAULT 'ACTIVE',
+  reason TEXT NULL,
+  started_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  expires_at DATETIME NULL,
+  released_at DATETIME NULL,
+  released_by VARCHAR(128) NULL,
+  release_reason TEXT NULL,
+  created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+  updated_at DATETIME DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+  FOREIGN KEY (incident_id) REFERENCES fraud_incidents(incident_id) ON DELETE SET NULL
+);
+3. verification_challenges
+sql
+
+
+CREATE TABLE IF NOT EXISTS verification_challenges (
+  challenge_id VARCHAR(128) PRIMARY KEY,
+  customer_id VARCHAR(128) NOT NULL,
+  incident_id VARCHAR(128) NULL,
+  challenge_type VARCHAR(64) NOT NULL DEFAULT 'STEP_UP_AUTHENTICATION',
+  channel VARCHAR(32) NOT NULL DEFAULT 'SMS',
+  destination_masked VARCHAR(128) NULL,
+  otp_hash VARCHAR(255) NOT NULL,
+  status VARCHAR(32) NOT NULL DEFAULT 'PENDING',
+  attempts INT NOT NULL DEFAULT 0,
+  max_attempts INT NOT NULL DEFAULT 3,
+  expires_at DATETIME NOT NULL,
+  verified_at DATETIME NULL,
+  created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+  FOREIGN KEY (incident_id) REFERENCES fraud_incidents(incident_id) ON DELETE SET NULL
+);
+4. fraud_admin_actions
+sql
+
+
+CREATE TABLE IF NOT EXISTS fraud_admin_actions (
+  action_id VARCHAR(128) PRIMARY KEY,
+  admin_id VARCHAR(128) NOT NULL,
+  customer_id VARCHAR(128) NOT NULL,
+  incident_id VARCHAR(128) NULL,
+  restriction_id VARCHAR(128) NULL,
+  action VARCHAR(64) NOT NULL,
+  reason TEXT NULL,
+  previous_state TEXT NULL,
+  new_state TEXT NULL,
+  created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+  FOREIGN KEY (incident_id) REFERENCES fraud_incidents(incident_id) ON DELETE SET NULL,
+  FOREIGN KEY (restriction_id) REFERENCES fraud_restrictions(restriction_id) ON DELETE SET NULL
+);
+5. fraud_audit_log
+sql
+
+
+CREATE TABLE IF NOT EXISTS fraud_audit_log (
+  audit_id VARCHAR(128) PRIMARY KEY,
+  actor_type VARCHAR(32) NOT NULL DEFAULT 'SYSTEM',
+  actor_id VARCHAR(128) NOT NULL,
+  customer_id VARCHAR(128) NULL,
+  incident_id VARCHAR(128) NULL,
+  event_type VARCHAR(128) NOT NULL,
+  event VARCHAR(128) NOT NULL,
+  reason TEXT NULL,
+  evidence JSON NULL,
+  decision VARCHAR(128) NULL,
+  confidence DECIMAL(5,4) NULL,
+  action VARCHAR(128) NULL,
+  approval VARCHAR(128) NULL,
+  result VARCHAR(128) NULL,
+  metadata JSON NULL,
+  created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+);
+6. customer_security
+sql
+
+
+CREATE TABLE IF NOT EXISTS customer_security (
+  customer_id VARCHAR(128) PRIMARY KEY,
+  account_status VARCHAR(32) NOT NULL DEFAULT 'ACTIVE',
+  security_status VARCHAR(32) NOT NULL DEFAULT 'NORMAL',
+  active_restriction_id VARCHAR(128) NULL,
+  failed_login_count INT NOT NULL DEFAULT 0,
+  last_fraud_incident_id VARCHAR(128) NULL,
+  step_up_required TINYINT(1) NOT NULL DEFAULT 0,
+  updated_at DATETIME DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+  created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+);
+4. Indexes Created
+fraud_incidents: idx_fraud_inc_cust (customer_id), idx_fraud_inc_risk (risk_level), idx_fraud_inc_type (fraud_type), idx_fraud_inc_sev (severity), idx_fraud_inc_created (created_at), idx_fraud_inc_action (action).
+fraud_restrictions: idx_fraud_restr_cust (customer_id), idx_fraud_restr_status (status), idx_fraud_restr_expires (expires_at), idx_fraud_restr_inc (incident_id).
+verification_challenges: idx_verif_chall_cust (customer_id), idx_verif_chall_status (status), idx_verif_chall_expires (expires_at), idx_verif_chall_inc (incident_id).
+fraud_admin_actions: idx_admin_act_cust (customer_id), idx_admin_act_admin (admin_id), idx_admin_act_inc (incident_id), idx_admin_act_restr (restriction_id).
+fraud_audit_log: idx_audit_actor_type (actor_type), idx_audit_actor_id (actor_id), idx_audit_cust (customer_id), idx_audit_inc (incident_id), idx_audit_evt_type (event_type), idx_audit_created (created_at).
+customer_security: idx_cust_sec_status (security_status), idx_cust_sec_restr (active_restriction_id), idx_cust_sec_stepup (step_up_required).
+5. Foreign Keys
+fraud_restrictions.incident_id 
+→
+→ fraud_incidents.incident_id (ON DELETE SET NULL)
+verification_challenges.incident_id 
+→
+→ fraud_incidents.incident_id (ON DELETE SET NULL)
+fraud_admin_actions.incident_id 
+→
+→ fraud_incidents.incident_id (ON DELETE SET NULL)
+fraud_admin_actions.restriction_id 
+→
+→ fraud_restrictions.restriction_id (ON DELETE SET NULL)
+Note: customer_id is indexed across all tables to allow high-performance queries for both registered and dynamically simulated/guest customer sessions.
+
+6. Repository / Database Functions Added
+Added in 
+backend/src/config/db.ts
+:
+
+Restrictions: createFraudRestriction(), getFraudRestrictions(), getActiveCustomerRestriction()
+Verification Challenges: createVerificationChallenge(), getVerificationChallenge(), updateVerificationChallenge()
+Admin Actions: createFraudAdminAction(), getFraudAdminActions()
+Audit Logs: createFraudAuditRecord(), getFraudAuditLogs()
+Customer Security: getCustomerSecurity(), upsertCustomerSecurity()
+Security Utilities: hashOtp()
+7. Migration & Initialization Mechanism
+Integrated directly into initDb() using CREATE TABLE IF NOT EXISTS.
+Implemented ensureIndex helper to safely create indexes without failing if they already exist.
+Implemented dropFkSafely helper to clean up any legacy FK constraints without data loss.
+8. Security Considerations
+OTP Hashing: Plaintext OTPs are NEVER stored in the database. hashOtp() uses HMAC-SHA256 with a salt to hash all OTPs before persistence.
+Audit Logging: All administrative decisions and security state transitions record structured JSON evidence and actor metadata.
+9. Tests Executed & Results
+#	Test Verification Point	Result
+1	All 6 required FraudGuard tables initialized (initDb)	✅ PASSED
+2	Existing Stage 1 fraud_incidents data preserved	✅ PASSED
+3	Fraud Incident inserted (insertFraudIncident)	✅ PASSED
+4	Fraud Restriction created referencing incident	✅ PASSED
+5	SECURITY TEST: OTP stored as SHA256 HASH (6b5ed9...), Plaintext (123456) NEVER stored	✅ PASSED
+6	Fraud Admin Action recorded (createFraudAdminAction)	✅ PASSED
+7	Fraud Audit Log entry recorded (createFraudAuditRecord)	✅ PASSED
+8	Customer Security State created & upserted (upsertCustomerSecurity)	✅ PASSED
+9	Idempotency: Duplicate incident_id correctly rejected	✅ PASSED
+10	Re-running initDb() repeatedly is safe with zero data loss	✅ PASSED
+10. Exact Verification Commands
+To execute the automated database test suite:
+
+bash
+
+
+cd backend
+npx ts-node src/tests/stage2DbTest.ts
+Output:
+
+text
+
+
+====================================================
+    FRAUDGUARD STAGE 2 PERSISTENCE LAYER TESTS     
+====================================================
+[Test 1] Initializing Database Schema...
+✅ Test 1 Passed: All 6 required FraudGuard tables initialized successfully.
+[Test 2] Verifying existing fraud_incidents data...
+✅ Test 2 Passed: 5 existing incident(s) preserved.
+[Test 3] Inserting test Fraud Incident...
+✅ Test 3 Passed: Fraud Incident inserted (Result: true).
+[Test 4] Creating Fraud Restriction referencing incident...
+✅ Test 4 Passed: Fraud restriction created & active restriction retrieved.
+[Test 5] SECURITY TEST: Verification Challenge & OTP Hashing...
+  - Raw Plaintext OTP: 123456
+  - Persisted DB Value: 6b5ed92bf392009a802a68dc040767d5cebb91b081dd110f07eeabf6523f98c8
+✅ Test 5 Passed: OTP is securely hashed; raw plaintext OTP is NEVER stored in database.
+[Test 6] Recording Fraud Admin Action...
+✅ Test 6 Passed: Admin action recorded.
+[Test 7] Recording Fraud Audit Log Entry...
+✅ Test 8 Passed: Audit log entry recorded.
+[Test 8] Upserting Customer Security State...
+✅ Test 8 Passed: Customer security state upserted (Status: RESTRICTED).
+[Test 9] Testing Duplicate Incident Idempotency...
+✅ Test 9 Passed: Duplicate incident_id correctly rejected.
+[Test 10] Testing Re-running Database Initialization...
+✅ Test 10 Passed: initDb() executed repeatedly without errors or data loss.
+====================================================
+    ALL 10 STAGE 2 DATABASE TESTS PASSED 100%!     
+====================================================
+11. Backward Compatibility & Assumptions
+Website & API Status: Backend builds (npx tsc --noEmit) and monorepo builds (npm run build) pass cleanly with exit code 0.
+Stage 1 Endpoints: GET /api/fraud/incidents remains 100% operational.
+Clean Scope: Stopped strictly after Stage 2 persistence layer implementation without building UI, OTP REST endpoints, or admin enforcement routes (reserved for upcoming stages).

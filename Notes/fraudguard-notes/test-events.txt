@@ -1,0 +1,5 @@
+docker exec -i retailhub-kafka /opt/kafka/bin/kafka-console-producer.sh \
+  --bootstrap-server localhost:9092 \
+  --topic retail_fraudguard_events <<'EOF'
+{"event_type":"FRAUD_DECISION","timestamp":"2026-09-25T00:20:00+05:30","incident_id":"TEST-STAGE1-001","customer_id":"TEST-CUSTOMER-001","fraud_type":"BRUTE_FORCE_LOGIN","severity":"HIGH","reason":"5 failed logins within 5 minutes","risk_score":55,"risk_level":"HIGH","action":"STEP_UP_AUTHENTICATION","requires_customer_action":true,"requires_admin_review":false,"restriction_minutes":null,"ai_attack_pattern":"Credential attack","ai_finding":"Repeated authentication failures detected.","ai_confidence":0.78,"ai_recommendation":"STEP_UP_AUTHENTICATION","source_event_id":"TEST-EVENT-001","source_event_type":"login_failed","ip_address":"10.10.10.10","device_id":"TEST-DEVICE-001","session_id":"TEST-SESSION-001","source":"fraudguard"}
+EOF

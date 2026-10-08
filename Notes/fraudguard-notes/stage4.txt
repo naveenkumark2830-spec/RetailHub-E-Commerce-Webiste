@@ -1,0 +1,20 @@
+FraudGuard Kafka Decision (retail_fraudguard_events)
+            │
+            ▼
+┌─────────────────────────────────────────────────────────┐
+│ backend/src/services/fraudGuardConsumer.ts              │
+│ 1. Consumes decision message from Kafka                 │
+│ 2. Persists incident into `fraud_incidents` (Stage 1)   │
+└───────────────────────────┬─────────────────────────────┘
+                            │
+                            ▼
+┌─────────────────────────────────────────────────────────┐
+│ backend/src/services/fraudSecurityWorkflow.ts           │
+│ 1. Idempotency Check (`SECURITY_WORKFLOW_PROCESSED`)    │
+│ 2. Fetch current customer security status               │
+│ 3. Evaluate candidate action & duration                 │
+│ 4. Enforce Security Priority Hierarchy                  │
+│ 5. Insert restriction into `fraud_restrictions`         │
+│ 6. Upsert customer state into `customer_security`       │
+│ 7. Append audit record into `fraud_audit_log`           │
+└─────────────────────────────────────────────────────────┘

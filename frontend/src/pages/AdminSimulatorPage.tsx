@@ -596,7 +596,7 @@ export default function AdminSimulatorPage() {
                         disabled={running}
                         className="bg-white border border-gray-250 rounded-xl px-3 py-2 text-xs font-bold text-[#041E42] focus:outline-none focus:border-[#0071DC] disabled:opacity-50"
                       >
-                        <option value="ALL">All 15 Fraud Scenarios (Randomly Interleaved)</option>
+                        <option value="ALL">All 21 Fraud Scenarios (Randomly Interleaved)</option>
                         <option value="BRUTE_FORCE_LOGIN">1. Brute-force login (login_failed x5+ -&gt; login_success)</option>
                         <option value="MULTI_IP_LOGIN">2. Multi-IP login attack (Failed logins from 3+ IPs -&gt; login)</option>
                         <option value="ACCOUNT_TAKEOVER">3. Account takeover (login_failed -&gt; login -&gt; new_device -&gt; profile -&gt; order)</option>
@@ -612,6 +612,12 @@ export default function AdminSimulatorPage() {
                         <option value="DDOS_FLOOD">13. DDoS volumetric flood (&gt;50 events/sec from single IP)</option>
                         <option value="SUSPICIOUS_LOCATION_CHANGE">14. Impossible travel location jump (New country/IP -&gt; password_changed / order)</option>
                         <option value="REPEATED_FRAUD_ESCALATION">15. Escalating multi-incident fraud chain (Escalating fraud activity)</option>
+                        <option value="CRITICAL_ATO_MULTI_CARD_HEIST">16. [CRITICAL] ATO &amp; Multi-Card Heist (New device -&gt; email/phone change -&gt; card added -&gt; ₹1.45L order)</option>
+                        <option value="CRITICAL_MULTI_ACCOUNT_COUPON_BURST">17. [CRITICAL] Multi-Account Coupon Burst (5 accounts sharing device/IP applying ₹9k coupon)</option>
+                        <option value="CRITICAL_IMPOSSIBLE_TRAVEL_HIGH_VALUE">18. [CRITICAL] Impossible Travel &amp; High-Value Order (IN -&gt; US in 90s + password change + ₹85k orders)</option>
+                        <option value="CRITICAL_BOT_CHECKOUT_FLOOD">19. [CRITICAL] Bot Scraper &amp; Checkout Flood (15 sub-100ms scrapes -&gt; 6 rapid checkout floods)</option>
+                        <option value="VERY_HIGH_CREDENTIAL_STUFFING_BURST">20. [VERY_HIGH] Credential Stuffing Burst (10 victim accounts targeted from rotating proxies)</option>
+                        <option value="VERY_HIGH_REFUND_ACCOUNT_SWAP">21. [VERY_HIGH] Refund Payout Swap Abuse (Payout UPI swapped -&gt; 3 rapid ₹10k+ return refunds)</option>
                       </select>
                     </div>
 
@@ -693,7 +699,7 @@ export default function AdminSimulatorPage() {
               <div>
                 <h3 className="text-xs font-black text-[#041E42] uppercase tracking-widest flex items-center gap-2">
                   <ShieldAlert className="w-4 h-4 text-[#0071DC]" />
-                  <span>RetailHub FraudGuard — Controlled Fraud Scenario Generator (15 Scenarios)</span>
+                  <span>RetailHub FraudGuard — Controlled Fraud Scenario Generator (21 Scenarios)</span>
                 </h3>
                 <p className="text-[10px] text-gray-500 font-medium mt-0.5">
                   Generate seed-deterministic synthetic fraud sequences into test sink (backend/event_logs/test_runs/deterministic_events.jsonl).
@@ -727,6 +733,12 @@ export default function AdminSimulatorPage() {
                   <option value="DDOS_FLOOD">13. DDOS_FLOOD — Volumetric DDoS Traffic Flood (&gt;50 ev/sec)</option>
                   <option value="SUSPICIOUS_LOCATION_CHANGE">14. SUSPICIOUS_LOCATION_CHANGE — Impossible Travel Location Jump</option>
                   <option value="REPEATED_FRAUD_ESCALATION">15. REPEATED_FRAUD_ESCALATION — Escalating Multi-Incident Chain</option>
+                  <option value="CRITICAL_ATO_MULTI_CARD_HEIST">16. CRITICAL_ATO_MULTI_CARD_HEIST — ATO & Multi-Card Heist [CRITICAL Score 98]</option>
+                  <option value="CRITICAL_MULTI_ACCOUNT_COUPON_BURST">17. CRITICAL_MULTI_ACCOUNT_COUPON_BURST — Multi-Account Coupon Burst [CRITICAL Score 92]</option>
+                  <option value="CRITICAL_IMPOSSIBLE_TRAVEL_HIGH_VALUE">18. CRITICAL_IMPOSSIBLE_TRAVEL_HIGH_VALUE — Impossible Travel & High-Value Order [CRITICAL Score 95]</option>
+                  <option value="CRITICAL_BOT_CHECKOUT_FLOOD">19. CRITICAL_BOT_CHECKOUT_FLOOD — Bot Scraper & Rapid Checkout Flood [CRITICAL Score 96]</option>
+                  <option value="VERY_HIGH_CREDENTIAL_STUFFING_BURST">20. VERY_HIGH_CREDENTIAL_STUFFING_BURST — Credential Stuffing Burst across 10 Accounts [VERY_HIGH Score 85]</option>
+                  <option value="VERY_HIGH_REFUND_ACCOUNT_SWAP">21. VERY_HIGH_REFUND_ACCOUNT_SWAP — Refund Payout UPI Swap & Return Burst [VERY_HIGH Score 82]</option>
                 </select>
               </div>
 

@@ -2,6 +2,7 @@ import fs from 'fs';
 import path from 'path';
 import crypto from 'crypto';
 import { EventLogger } from './eventLogger';
+import { processFraudSecurityWorkflow } from './fraudSecurityWorkflow';
 import { 
   dbPool, 
   getOrCreateCart, 
@@ -10,7 +11,9 @@ import {
   createShipmentForOrder,
   applyCoupon,
   insertSimulationRun,
-  updateSimulationRun
+  updateSimulationRun,
+  insertFraudIncident,
+  FraudIncidentRecord
 } from '../config/db';
 
 export const EVENT_REGISTRY = {
@@ -2519,6 +2522,54 @@ Product-category validation:
     }
   }
 
+  public async recordIncidentForScenario(
+    customerId: string,
+    scenarioId: string,
+    scenarioName: string,
+    severity: string,
+    riskLevel: string,
+    riskScore: number,
+    action: string,
+    reason: string,
+    deviceId?: string,
+    ipAddress?: string
+  ) {
+    const incId = `INC-${scenarioId.substring(0, 6)}-${Math.floor(10000 + Math.random() * 90000)}`;
+    const incident: FraudIncidentRecord = {
+      incident_id: incId,
+      customer_id: customerId,
+      fraud_type: scenarioId,
+      severity: severity,
+      reason: reason,
+      risk_score: riskScore,
+      risk_level: riskLevel,
+      action: action,
+      requires_customer_action: action === 'STEP_UP_VERIFICATION',
+      requires_admin_review: action === 'ADMIN_REVIEW' || severity === 'CRITICAL' || severity === 'VERY_HIGH',
+      restriction_minutes: (severity === 'CRITICAL' || action === 'TEMPORARY_RESTRICTION') ? 1440 : null,
+      ai_attack_pattern: `${severity} severity ${scenarioName} pattern detected`,
+      ai_finding: `Real-time risk scoring engine assigned score ${riskScore}/100 based on composite event sequence anomaly.`,
+      ai_confidence: 0.95,
+      ai_recommendation: severity === 'CRITICAL' ? 'Immediate account restriction & mandatory MFA step-up required.' : 'Flagged for security administrator review.',
+      ip_address: ipAddress || '103.22.14.88',
+      device_id: deviceId || 'DEV-SIM-PRIMARY',
+      session_id: `sess_sim_${incId}`,
+      source_event_id: null,
+      source_event_type: null,
+      timestamp: new Date().toISOString()
+    };
+
+    try {
+      const inserted = await insertFraudIncident(incident);
+      if (inserted) {
+        await processFraudSecurityWorkflow(incident);
+        console.log(`[Simulator] Real DB Fraud Incident Created -> ${incId} (${riskLevel} - Score ${riskScore})`);
+      }
+    } catch (err) {
+      console.error('[Simulator] Failed to write DB fraud incident:', err);
+    }
+  }
+
   private SCENARIO_KEYS = [
     'BRUTE_FORCE_LOGIN',
     'MULTI_IP_LOGIN_ATTACK',
@@ -2534,7 +2585,13 @@ Product-category validation:
     'REFUND_ABUSE',
     'BOT_OR_SCRAPER',
     'DDOS',
-    'CHECKOUT_VELOCITY'
+    'CHECKOUT_VELOCITY',
+    'CRITICAL_ATO_MULTI_CARD_HEIST',
+    'CRITICAL_MULTI_ACCOUNT_COUPON_BURST',
+    'CRITICAL_IMPOSSIBLE_TRAVEL_HIGH_VALUE',
+    'CRITICAL_BOT_CHECKOUT_FLOOD',
+    'VERY_HIGH_CREDENTIAL_STUFFING_BURST',
+    'VERY_HIGH_REFUND_ACCOUNT_SWAP'
   ];
 
   private getNextFraudScenario(): string {
@@ -2581,7 +2638,13 @@ Product-category validation:
       'DDOS': 'DDoS flood',
       'SUSPICIOUS_LOCATION_CHANGE': 'Suspicious location change',
       'REPEATED_FRAUD_ESCALATION': 'Repeated fraud escalation',
-      'REPEATED_OFFENDER': 'Repeated fraud escalation'
+      'REPEATED_OFFENDER': 'Repeated fraud escalation',
+      'CRITICAL_ATO_MULTI_CARD_HEIST': 'Critical ATO & Multi-Card Heist',
+      'CRITICAL_MULTI_ACCOUNT_COUPON_BURST': 'Critical Multi-Account Coupon Burst',
+      'CRITICAL_IMPOSSIBLE_TRAVEL_HIGH_VALUE': 'Critical Impossible Travel & High-Value Order',
+      'CRITICAL_BOT_CHECKOUT_FLOOD': 'Critical Bot Checkout Flood',
+      'VERY_HIGH_CREDENTIAL_STUFFING_BURST': 'Very High Credential Stuffing Burst',
+      'VERY_HIGH_REFUND_ACCOUNT_SWAP': 'Very High Refund Account Swap Abuse'
     };
     const scenarioName = scenarioNameMap[scenario] || 'Fraud Scenario';
     const fraudMeta = { _is_fraud: true, _scenario_id: scenarioId, _scenario_name: scenarioName };
@@ -2887,6 +2950,192 @@ Product-category validation:
           this.emitOrQueueFraudEvent(cust, eventType, { ...fraudMeta, order_id: ordId, payment_id: payId, amount: 3000.00, total_amount: 3000.00, event_time: timeIso }, 'CUSTOMER', 'website');
         }
         this.liveStats.fraud_events += 5;
+        break;
+      }
+
+      case 'CRITICAL_ATO_MULTI_CARD_HEIST': {
+        const randSuffix = Math.floor(10000 + Math.random() * 90000);
+        const cust = this.spawnVirtualCustomer(1.0);
+        cust.customerId = `CUST-HEIST-${randSuffix}`;
+        const newDev = `DEV-HEIST-NEW-${randSuffix}`;
+        const heistIp = `103.22.${Math.floor(10 + Math.random() * 200)}.${Math.floor(1 + Math.random() * 250)}`;
+        cust.ipAddress = heistIp;
+
+        let baseTime = Date.now() - 180000;
+        const time1 = new Date(baseTime).toISOString();
+        const time2 = new Date(baseTime + 30000).toISOString();
+        const time3 = new Date(baseTime + 60000).toISOString();
+        const time4 = new Date(baseTime + 90000).toISOString();
+        const time5 = new Date(baseTime + 120000).toISOString();
+        const time6 = new Date(baseTime + 150000).toISOString();
+        const time7 = new Date(baseTime + 160000).toISOString();
+
+        this.emitOrQueueFraudEvent(cust, 'login_failed', { ...fraudMeta, reason: 'INVALID_CREDENTIALS', attempt_count: 1, event_time: time1 }, 'CUSTOMER', 'website');
+        cust.deviceId = newDev;
+        this.emitOrQueueFraudEvent(cust, 'login', { ...fraudMeta, device_id: newDev, event_time: time2 }, 'CUSTOMER', 'website');
+        this.emitOrQueueFraudEvent(cust, 'email_changed', { ...fraudMeta, device_id: newDev, old_email_domain: 'gmail.com', new_email_domain: 'tempmail.org', event_time: time3 }, 'CUSTOMER', 'website');
+        this.emitOrQueueFraudEvent(cust, 'phone_changed', { ...fraudMeta, device_id: newDev, event_time: time4 }, 'CUSTOMER', 'website');
+        const cardId = `PM-CARD-HEIST-${randSuffix}`;
+        this.emitOrQueueFraudEvent(cust, 'payment_method_changed', { ...fraudMeta, device_id: newDev, action: 'added', payment_method_id: cardId, payment_method_type: 'credit_card', event_time: time5 }, 'CUSTOMER', 'website');
+        const ordId = `ORD-HEIST-${randSuffix}`;
+        const payId = `PAY-HEIST-${randSuffix}`;
+        this.emitOrQueueFraudEvent(cust, 'payment_failed', { ...fraudMeta, device_id: newDev, payment_id: payId, order_id: ordId, payment_method_id: cardId, amount: 145000.00, reason: 'CARD_DECLINED', attempt_number: 1, event_time: time6 }, 'SYSTEM', 'payment_service');
+        this.emitOrQueueFraudEvent(cust, 'order_created', { ...fraudMeta, device_id: newDev, payment_id: payId, order_id: ordId, payment_method_id: cardId, amount: 145000.00, total_amount: 145000.00, event_time: time7 }, 'SYSTEM', 'order_service');
+        this.liveStats.fraud_events += 7;
+
+        this.recordIncidentForScenario(cust.customerId, 'CRITICAL_ATO_MULTI_CARD_HEIST', 'Critical ATO & Multi-Card Heist', 'CRITICAL', 'CRITICAL', 98, 'TEMPORARY_RESTRICTION', 'Account takeover on new device with card retry burst ₹1,45,000', newDev, heistIp);
+        break;
+      }
+
+      case 'CRITICAL_MULTI_ACCOUNT_COUPON_BURST': {
+        const randSuffix = Math.floor(10000 + Math.random() * 90000);
+        const sharedDev = `DEV-CRIT-COUPON-${randSuffix}`;
+        const sharedIp = `198.51.120.${Math.floor(10 + Math.random() * 200)}`;
+        const promoCode = `SUPER90_${randSuffix}`;
+        let baseTime = Date.now() - 120000;
+
+        for (let i = 1; i <= 5; i++) {
+          const accId = `CUST-CRIT-COUPON-${i}-${randSuffix}`;
+          const sessId = `sess_crit_coup_${accId}`;
+          const timeIso = new Date(baseTime + i * 15000).toISOString();
+          const cust = this.spawnVirtualCustomer(1.0);
+          cust.customerId = accId;
+          cust.sessionId = sessId;
+          cust.deviceId = sharedDev;
+          cust.ipAddress = sharedIp;
+
+          const ordId = `ORD-CRIT-COUP-${i}-${randSuffix}`;
+          const payId = `PAY-CRIT-COUP-${i}-${randSuffix}`;
+
+          this.emitOrQueueFraudEvent(cust, 'login', { ...fraudMeta, device_id: sharedDev, ip_address: sharedIp, event_time: timeIso }, 'CUSTOMER', 'website');
+          this.emitOrQueueFraudEvent(cust, 'coupon_applied', { ...fraudMeta, coupon_code: promoCode, coupon: promoCode, discount_amount: 9000.00, device_id: sharedDev, ip_address: sharedIp, event_time: timeIso }, 'CUSTOMER', 'website');
+          this.emitOrQueueFraudEvent(cust, 'order_created', { ...fraudMeta, order_id: ordId, payment_id: payId, coupon_code: promoCode, discount_amount: 9000.00, amount: 999.00, total_amount: 999.00, device_id: sharedDev, ip_address: sharedIp, event_time: timeIso }, 'SYSTEM', 'order_service');
+        }
+        this.liveStats.fraud_events += 15;
+
+        this.recordIncidentForScenario(`CUST-CRIT-COUPON-1-${randSuffix}`, 'CRITICAL_MULTI_ACCOUNT_COUPON_BURST', 'Critical Multi-Account Coupon Burst', 'CRITICAL', 'CRITICAL', 92, 'STEP_UP_VERIFICATION', '5 accounts sharing device & IP applying ₹9,000 coupon in 60s', sharedDev, sharedIp);
+        break;
+      }
+
+      case 'CRITICAL_IMPOSSIBLE_TRAVEL_HIGH_VALUE': {
+        const randSuffix = Math.floor(10000 + Math.random() * 90000);
+        const cust = this.spawnVirtualCustomer(1.0);
+        cust.customerId = `CUST-TRAVEL-${randSuffix}`;
+        const devIN = `DEV-IN-${randSuffix}`;
+        const devUS = `DEV-US-HEIST-${randSuffix}`;
+        const ipIN = `103.22.14.${Math.floor(10 + Math.random() * 200)}`;
+        const ipUS = `198.51.100.${Math.floor(10 + Math.random() * 200)}`;
+
+        let baseTime = Date.now() - 300000;
+        const time1 = new Date(baseTime).toISOString();
+        const time2 = new Date(baseTime + 90000).toISOString();
+        const time3 = new Date(baseTime + 120000).toISOString();
+        const time4 = new Date(baseTime + 180000).toISOString();
+
+        cust.deviceId = devIN;
+        cust.ipAddress = ipIN;
+        this.emitOrQueueFraudEvent(cust, 'login', { ...fraudMeta, country: 'IN', city: 'Bengaluru', device_id: devIN, ip_address: ipIN, event_time: time1 }, 'CUSTOMER', 'website');
+
+        cust.deviceId = devUS;
+        cust.ipAddress = ipUS;
+        this.emitOrQueueFraudEvent(cust, 'login', { ...fraudMeta, country: 'US', city: 'New York', device_id: devUS, ip_address: ipUS, event_time: time2 }, 'CUSTOMER', 'website');
+        this.emitOrQueueFraudEvent(cust, 'password_changed', { ...fraudMeta, country: 'US', city: 'New York', device_id: devUS, ip_address: ipUS, change_source: 'account_settings', event_time: time3 }, 'CUSTOMER', 'website');
+
+        const ordId1 = `ORD-TRAVEL-1-${randSuffix}`;
+        const ordId2 = `ORD-TRAVEL-2-${randSuffix}`;
+        this.emitOrQueueFraudEvent(cust, 'order_created', { ...fraudMeta, country: 'US', city: 'New York', device_id: devUS, ip_address: ipUS, order_id: ordId1, amount: 85000.00, total_amount: 85000.00, event_time: time4 }, 'SYSTEM', 'order_service');
+        this.emitOrQueueFraudEvent(cust, 'order_created', { ...fraudMeta, country: 'US', city: 'New York', device_id: devUS, ip_address: ipUS, order_id: ordId2, amount: 92000.00, total_amount: 92000.00, event_time: time4 }, 'SYSTEM', 'order_service');
+        this.liveStats.fraud_events += 5;
+
+        this.recordIncidentForScenario(cust.customerId, 'CRITICAL_IMPOSSIBLE_TRAVEL_HIGH_VALUE', 'Critical Impossible Travel & High-Value Order', 'CRITICAL', 'CRITICAL', 95, 'TEMPORARY_RESTRICTION', 'Location jump IN -> US in 90s with password change and ₹85k orders', devUS, ipUS);
+        break;
+      }
+
+      case 'CRITICAL_BOT_CHECKOUT_FLOOD': {
+        const randSuffix = Math.floor(10000 + Math.random() * 90000);
+        const botIp = `198.51.250.${Math.floor(10 + Math.random() * 200)}`;
+        const botDev = `DEV-BOT-FLOOD-${randSuffix}`;
+        let baseTime = Date.now() - 30000;
+
+        for (let i = 1; i <= 15; i++) {
+          const timeIso = new Date(baseTime + i * 80).toISOString();
+          const cust = this.spawnVirtualCustomer(0.0);
+          cust.sessionId = `sess_bot_flood_${(i % 3) + 1}_${randSuffix}`;
+          cust.ipAddress = botIp;
+          cust.deviceId = botDev;
+          this.emitOrQueueFraudEvent(cust, 'page_view', { ...fraudMeta, ip_address: botIp, device_id: botDev, page: `category_${i}`, event_time: timeIso }, 'CUSTOMER', 'website');
+        }
+
+        for (let j = 1; j <= 6; j++) {
+          const timeIso = new Date(baseTime + 2000 + j * 500).toISOString();
+          const cust = this.spawnVirtualCustomer(0.0);
+          cust.sessionId = `sess_bot_flood_chk_${j}_${randSuffix}`;
+          cust.ipAddress = botIp;
+          cust.deviceId = botDev;
+          const ordId = `ORD-BOT-FLOOD-${j}-${randSuffix}`;
+          const payId = `PAY-BOT-FLOOD-${j}-${randSuffix}`;
+          this.emitOrQueueFraudEvent(cust, 'checkout_started', { ...fraudMeta, ip_address: botIp, device_id: botDev, order_id: ordId, payment_id: payId, amount: 15000.00, event_time: timeIso }, 'CUSTOMER', 'website');
+          this.emitOrQueueFraudEvent(cust, 'payment_initiated', { ...fraudMeta, ip_address: botIp, device_id: botDev, order_id: ordId, payment_id: payId, amount: 15000.00, event_time: timeIso }, 'CUSTOMER', 'website');
+        }
+        this.liveStats.fraud_events += 27;
+        this.liveStats.scraper_fraud_count += 15;
+
+        this.recordIncidentForScenario(`CUST-BOT-FLOOD-${randSuffix}`, 'CRITICAL_BOT_CHECKOUT_FLOOD', 'Critical Bot Checkout Flood', 'CRITICAL', 'CRITICAL', 96, 'TEMPORARY_RESTRICTION', '15 sub-100ms scrapes followed by 6 rapid checkout floods', botDev, botIp);
+        break;
+      }
+
+      case 'VERY_HIGH_CREDENTIAL_STUFFING_BURST': {
+        const randSuffix = Math.floor(10000 + Math.random() * 90000);
+        const proxyIps = [
+          `198.51.101.10`, `198.51.101.20`, `198.51.101.30`, `198.51.101.40`, `198.51.101.50`
+        ];
+        let baseTime = Date.now() - 15000;
+
+        for (let i = 1; i <= 10; i++) {
+          const victimId = `CUST-STUFFED-VICTIM-${i}-${randSuffix}`;
+          const proxyIp = proxyIps[i % proxyIps.length];
+          const devId = `DEV-PROXY-STUFF-${i % 3}`;
+          const timeIso = new Date(baseTime + i * 1200).toISOString();
+          const cust = this.spawnVirtualCustomer(1.0);
+          cust.customerId = victimId;
+          cust.deviceId = devId;
+          cust.ipAddress = proxyIp;
+
+          this.emitOrQueueFraudEvent(cust, 'login_failed', { ...fraudMeta, reason: 'INVALID_CREDENTIALS', attempt_count: (i % 2) + 1, ip_address: proxyIp, device_id: devId, event_time: timeIso }, 'CUSTOMER', 'website');
+        }
+        this.liveStats.fraud_events += 10;
+
+        this.recordIncidentForScenario(`CUST-STUFFED-VICTIM-1-${randSuffix}`, 'VERY_HIGH_CREDENTIAL_STUFFING_BURST', 'Very High Credential Stuffing Burst', 'VERY_HIGH', 'VERY_HIGH', 85, 'STEP_UP_VERIFICATION', '10 victim accounts targeted from rotating proxy IPs in 15 seconds', 'DEV-PROXY-STUFF-0', proxyIps[0]);
+        break;
+      }
+
+      case 'VERY_HIGH_REFUND_ACCOUNT_SWAP': {
+        const randSuffix = Math.floor(10000 + Math.random() * 90000);
+        const cust = this.spawnVirtualCustomer(1.0);
+        cust.customerId = `CUST-REFUND-SWAP-${randSuffix}`;
+        const newDev = `DEV-REFUND-NEW-${randSuffix}`;
+        cust.deviceId = newDev;
+
+        let baseTime = Date.now() - 600000;
+        const time1 = new Date(baseTime).toISOString();
+
+        this.emitOrQueueFraudEvent(cust, 'profile_updated', { ...fraudMeta, change_type: 'payout_upi_updated', new_upi_handle: `fraudster_${randSuffix}@upi`, event_time: time1 }, 'CUSTOMER', 'website');
+        this.emitOrQueueFraudEvent(cust, 'payment_method_changed', { ...fraudMeta, action: 'added', payment_method_type: 'upi', payment_method_id: `PM-UPI-SWAP-${randSuffix}`, event_time: time1 }, 'CUSTOMER', 'website');
+
+        const refundAmounts = [12000.00, 18000.00, 25000.00];
+        for (let i = 0; i < 3; i++) {
+          const timeIso = new Date(baseTime + (i + 1) * 120000).toISOString();
+          const retId = `RET-SWAP-${i + 1}-${randSuffix}`;
+          const ordId = `ORD-SWAP-${i + 1}-${randSuffix}`;
+          const refId = `REF-SWAP-${i + 1}-${randSuffix}`;
+          const amt = refundAmounts[i];
+
+          this.emitOrQueueFraudEvent(cust, 'return_requested', { ...fraudMeta, order_id: ordId, return_id: retId, reason: 'DEFECTIVE', event_time: timeIso }, 'CUSTOMER', 'website');
+          this.emitOrQueueFraudEvent(cust, 'refund_initiated', { ...fraudMeta, order_id: ordId, return_id: retId, refund_id: refId, amount: amt, currency: 'INR', event_time: timeIso }, 'SYSTEM', 'payment_service');
+        }
+        this.liveStats.fraud_events += 8;
+
+        this.recordIncidentForScenario(cust.customerId, 'VERY_HIGH_REFUND_ACCOUNT_SWAP', 'Very High Refund Account Swap Abuse', 'VERY_HIGH', 'VERY_HIGH', 82, 'ADMIN_REVIEW', 'Payout UPI swapped on new device followed by 3 high-value return requests', newDev, '103.22.14.88');
         break;
       }
     }
@@ -3399,6 +3648,100 @@ Product-category validation:
         await emitDryRunEvent('payment_initiated', { payment_id: payId, order_id: ordId, amount: 65000.00, currency: 'INR' }, 'CUSTOMER', 'website', offenderId);
         await emitDryRunEvent('payment_success', { payment_id: payId, order_id: ordId, amount: 65000.00, currency: 'INR' }, 'SYSTEM', 'payment_service', offenderId);
         await emitDryRunEvent('order_created', { order_id: ordId, payment_id: payId, total_amount: 65000.00, currency: 'INR' }, 'SYSTEM', 'order_service', offenderId);
+        break;
+      }
+
+      case 'CRITICAL_ATO_MULTI_CARD_HEIST': {
+        const atoDev = `DEV-HEIST-DET-${seed}`;
+        const heistIp = `103.22.99.55`;
+        const cardId = `PM-CARD-HEIST-${seed}`;
+
+        await emitDryRunEvent('login_failed', { reason: 'INVALID_CREDENTIALS', attempt_count: 1 }, 'CUSTOMER', 'website', mainCustId, undefined, mainHistory.primaryDevice, mainHistory.primaryIp);
+        currentTimeMs += 5000;
+        await emitDryRunEvent('login', {}, 'CUSTOMER', 'website', mainCustId, undefined, atoDev, heistIp);
+        currentTimeMs += 10000;
+        await emitDryRunEvent('email_changed', { old_email_domain: 'example.com', new_email_domain: 'tempmail.com' }, 'CUSTOMER', 'website', mainCustId, undefined, atoDev, heistIp);
+        await emitDryRunEvent('phone_changed', {}, 'CUSTOMER', 'website', mainCustId, undefined, atoDev, heistIp);
+        currentTimeMs += 15000;
+        await emitDryRunEvent('payment_method_changed', { action: 'added', payment_method_id: cardId, payment_method_type: 'credit_card' }, 'CUSTOMER', 'website', mainCustId, undefined, atoDev, heistIp);
+        currentTimeMs += 20000;
+        const ordId = `ORD-HEIST-${seed}`;
+        const payId = `PAY-HEIST-${seed}`;
+        await emitDryRunEvent('payment_initiated', { payment_id: payId, order_id: ordId, payment_method_id: cardId, amount: 145000.00, currency: 'INR' }, 'CUSTOMER', 'website', mainCustId, undefined, atoDev, heistIp);
+        await emitDryRunEvent('payment_failed', { payment_id: payId, order_id: ordId, payment_method_id: cardId, amount: 145000.00, currency: 'INR', reason: 'CARD_DECLINED' }, 'SYSTEM', 'payment_service', mainCustId, undefined, atoDev, heistIp);
+        await emitDryRunEvent('payment_success', { payment_id: payId, order_id: ordId, payment_method_id: cardId, amount: 145000.00, currency: 'INR' }, 'SYSTEM', 'payment_service', mainCustId, undefined, atoDev, heistIp);
+        await emitDryRunEvent('order_created', { order_id: ordId, payment_id: payId, total_amount: 145000.00, currency: 'INR' }, 'SYSTEM', 'order_service', mainCustId, undefined, atoDev, heistIp);
+        break;
+      }
+
+      case 'CRITICAL_MULTI_ACCOUNT_COUPON_BURST': {
+        const sharedDev = `DEV-COUPON-BURST-${seed}`;
+        const sharedIp = `198.51.120.99`;
+        for (let i = 1; i <= 5; i++) {
+          const accId = `CUST-BURST-COUPON-${i}-${seed}`;
+          const sessId = `sess_burst_coup_${accId}`;
+          await emitDryRunEvent('login', {}, 'CUSTOMER', 'website', accId, sessId, sharedDev, sharedIp);
+          await emitDryRunEvent('coupon_applied', { coupon: 'SUPER90', discount_amount: 9000.00 }, 'CUSTOMER', 'website', accId, sessId, sharedDev, sharedIp);
+          await emitDryRunEvent('order_created', { order_id: `ORD-CRIT-BURST-${i}`, coupon: 'SUPER90', discount_amount: 9000.00, total_amount: 999.00 }, 'SYSTEM', 'order_service', accId, sessId, sharedDev, sharedIp);
+          currentTimeMs += 2000;
+        }
+        break;
+      }
+
+      case 'CRITICAL_IMPOSSIBLE_TRAVEL_HIGH_VALUE': {
+        const devIN = `DEV-IN-${seed}`;
+        const devUS = `DEV-US-${seed}`;
+        const ipIN = `103.22.14.88`;
+        const ipUS = `198.51.100.99`;
+
+        await emitDryRunEvent('login', {}, 'CUSTOMER', 'website', mainCustId, undefined, devIN, ipIN, { country: 'IN', city: 'Bengaluru' });
+        currentTimeMs += 90000;
+        await emitDryRunEvent('login', {}, 'CUSTOMER', 'website', mainCustId, undefined, devUS, ipUS, { country: 'US', city: 'New York' });
+        await emitDryRunEvent('password_changed', { change_source: 'account_settings' }, 'CUSTOMER', 'website', mainCustId, undefined, devUS, ipUS, { country: 'US', city: 'New York' });
+        await emitDryRunEvent('order_created', { order_id: `ORD-TRAVEL-1-${seed}`, total_amount: 85000.00, currency: 'INR' }, 'SYSTEM', 'order_service', mainCustId, undefined, devUS, ipUS, { country: 'US', city: 'New York' });
+        await emitDryRunEvent('order_created', { order_id: `ORD-TRAVEL-2-${seed}`, total_amount: 92000.00, currency: 'INR' }, 'SYSTEM', 'order_service', mainCustId, undefined, devUS, ipUS, { country: 'US', city: 'New York' });
+        break;
+      }
+
+      case 'CRITICAL_BOT_CHECKOUT_FLOOD': {
+        const botDev = `DEV-BOT-CRIT-${seed}`;
+        const botIp = `198.51.250.77`;
+        for (let i = 1; i <= 15; i++) {
+          await emitDryRunEvent('page_view', { page: `product_${i}` }, 'CUSTOMER', 'website', mainCustId, undefined, botDev, botIp);
+          currentTimeMs += 80;
+        }
+        for (let j = 1; j <= 6; j++) {
+          await emitDryRunEvent('checkout_started', { order_id: `ORD-BOT-FLOOD-${j}` }, 'CUSTOMER', 'website', mainCustId, undefined, botDev, botIp);
+          await emitDryRunEvent('payment_initiated', { order_id: `ORD-BOT-FLOOD-${j}`, amount: 15000.00 }, 'CUSTOMER', 'website', mainCustId, undefined, botDev, botIp);
+          currentTimeMs += 300;
+        }
+        break;
+      }
+
+      case 'VERY_HIGH_CREDENTIAL_STUFFING_BURST': {
+        const proxyIps = ['198.51.101.10', '198.51.101.20', '198.51.101.30', '198.51.101.40', '198.51.101.50'];
+        for (let i = 1; i <= 10; i++) {
+          const victimId = `CUST-VICTIM-${i}-${seed}`;
+          const proxyIp = proxyIps[i % proxyIps.length];
+          await emitDryRunEvent('login_failed', { reason: 'INVALID_CREDENTIALS', attempt_count: 1 }, 'CUSTOMER', 'website', victimId, undefined, `DEV-PROXY-${i}`, proxyIp);
+          currentTimeMs += 1000;
+        }
+        break;
+      }
+
+      case 'VERY_HIGH_REFUND_ACCOUNT_SWAP': {
+        const newDev = `DEV-REFUND-SWAP-${seed}`;
+        await emitDryRunEvent('profile_updated', { change_type: 'payout_upi_updated' }, 'CUSTOMER', 'website', mainCustId, undefined, newDev);
+        await emitDryRunEvent('payment_method_changed', { action: 'added', payment_method_type: 'upi' }, 'CUSTOMER', 'website', mainCustId, undefined, newDev);
+        const amounts = [12000.00, 18000.00, 25000.00];
+        for (let i = 0; i < 3; i++) {
+          const rOrd = `ORD-SWAP-${i + 1}-${seed}`;
+          const rRet = `RET-SWAP-${i + 1}-${seed}`;
+          const rRef = `REF-SWAP-${i + 1}-${seed}`;
+          await emitDryRunEvent('return_requested', { order_id: rOrd, return_id: rRet, reason: 'DEFECTIVE' }, 'CUSTOMER', 'website', mainCustId, undefined, newDev);
+          await emitDryRunEvent('refund_initiated', { order_id: rOrd, return_id: rRet, refund_id: rRef, amount: amounts[i] }, 'SYSTEM', 'payment_service', mainCustId, undefined, newDev);
+          currentTimeMs += 60000;
+        }
         break;
       }
     }

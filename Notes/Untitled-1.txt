@@ -1,0 +1,2 @@
+    when u run u have to keep mysql_host=host.docker.interval and when u pull u need a docker compse file and the env without 
+    that we cant run the wesite

@@ -15,6 +15,8 @@ export type AdminRole =
 
 export const ROLE_PERMISSIONS: Record<string, string[]> = {
   SUPER_ADMIN: [
+    '/admin/fraud',
+    '/admin/fraudguard',
     '/admin/simulator',
     '/admin/products',
     '/admin/categories',
@@ -27,6 +29,8 @@ export const ROLE_PERMISSIONS: Record<string, string[]> = {
     '/admin/warehouses'
   ],
   SUPER_ADMINISTRATOR: [
+    '/admin/fraud',
+    '/admin/fraudguard',
     '/admin/simulator',
     '/admin/products',
     '/admin/categories',
@@ -65,11 +69,11 @@ export function getDefaultRouteForRole(roleId: string | undefined | null): strin
   if (!roleId) return '/admin/login';
   const normalizedRole = (roleId || '').toUpperCase().trim();
   if (normalizedRole === 'SUPER_ADMIN' || normalizedRole === 'SUPER_ADMINISTRATOR' || normalizedRole === 'ADMIN') {
-    return '/admin/products';
+    return '/admin/fraud';
   }
   const allowed = ROLE_PERMISSIONS[normalizedRole];
   if (allowed && allowed.length > 0) {
     return allowed[0];
   }
-  return '/admin/orders';
+  return '/admin/fraud';
 }

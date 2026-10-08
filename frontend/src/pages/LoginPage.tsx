@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import { motion } from 'framer-motion';
-import { Lock, Mail, AlertCircle, Eye, EyeOff, LogIn, CreditCard, Package, Zap, Heart } from 'lucide-react';
+import { Lock, Mail, AlertCircle, Eye, EyeOff, LogIn, CreditCard, Package, Zap, Heart, ShieldAlert, ArrowRight } from 'lucide-react';
 import { useSessionStore } from '../store/useSessionStore';
 import { Header } from '../components/Header';
 import { Footer } from '../components/Footer';
@@ -251,6 +251,28 @@ export const LoginPage: React.FC = () => {
                     <path d="M18.71 19.5c-.83 1.24-1.71 2.45-3.05 2.47-1.34.03-1.77-.79-3.29-.79-1.53 0-2 .77-3.27.82-1.31.05-2.3-1.32-3.14-2.53C4.25 17 2.94 12.45 4.7 9.39c.87-1.52 2.43-2.48 4.12-2.51 1.28-.02 2.5.87 3.29.87.78 0 2.26-1.07 3.81-.91.65.03 2.47.26 3.64 1.98-.09.06-2.17 1.28-2.15 3.81.03 3.02 2.65 4.03 2.68 4.04-.03.07-.42 1.44-1.38 2.83M15.97 6.85c.66-.8 1.11-1.92.99-3.04-.96.04-2.13.64-2.82 1.44-.61.71-1.14 1.86-.99 2.96 1.07.08 2.16-.55 2.82-1.36z"/>
                   </svg>
                   <span>Continue with Apple</span>
+                </button>
+              </div>
+
+              {/* Admin FraudGuard Security Center Direct Access Option */}
+              <div className="pt-2">
+                <button 
+                  type="button"
+                  onClick={() => {
+                    navigate('/admin/login');
+                  }}
+                  className="w-full py-3 px-4 rounded-xl border border-blue-900/40 bg-gradient-to-r from-slate-900 via-[#0a1120] to-blue-950 hover:from-slate-800 hover:to-blue-900 text-white font-black text-xs shadow-md flex items-center justify-between transition-all cursor-pointer group"
+                >
+                  <div className="flex items-center space-x-2.5">
+                    <div className="p-1.5 rounded-lg bg-red-950/80 border border-red-800/60">
+                      <ShieldAlert className="w-4 h-4 text-red-400 group-hover:scale-110 transition-transform" />
+                    </div>
+                    <div className="text-left">
+                      <p className="text-xs font-black text-slate-100 tracking-wide">Admin Portal &amp; FraudGuard</p>
+                      <p className="text-[10px] text-blue-300 font-medium">Access Admin Operations & Security Desk</p>
+                    </div>
+                  </div>
+                  <ArrowRight className="w-4 h-4 text-blue-400 group-hover:translate-x-1 transition-transform" />
                 </button>
               </div>
             </div>

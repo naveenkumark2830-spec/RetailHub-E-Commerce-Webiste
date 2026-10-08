@@ -1,0 +1,65 @@
+Sure. Keep this as your **Port 5000 troubleshooting checklist**:
+
+### Port 5000 Commands
+
+**1. Check which process is using port 5000**
+
+```cmd
+netstat -ano | findstr :5000
+```
+
+**2. Check what the PID belongs to**
+
+```cmd
+tasklist | findstr <PID>
+```
+
+Example:
+
+```cmd
+tasklist | findstr 3296
+```
+
+**3. Kill the process**
+
+```cmd
+taskkill /PID <PID> /F
+```
+
+Example:
+
+```cmd
+taskkill /PID 3296 /F
+```
+
+**4. Confirm port 5000 is free**
+
+```cmd
+netstat -ano | findstr :5000
+```
+
+If nothing appears → **port is free.**
+
+**5. Start RetailHub**
+
+```cmd
+npm run dev
+```
+
+### Quick version
+
+```cmd
+netstat -ano | findstr :5000
+tasklist | findstr <PID>
+taskkill /PID <PID> /F
+netstat -ano | findstr :5000
+npm run dev
+```
+
+### If you want to kill all Node processes
+
+```cmd
+taskkill /IM node.exe /F
+```
+
+⚠️ This kills **all Node.js applications** currently running, so use it only when you're sure you don't need other Node projects running.

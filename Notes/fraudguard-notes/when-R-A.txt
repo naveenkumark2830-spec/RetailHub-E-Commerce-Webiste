@@ -1,0 +1,97 @@
+Yes, **with the current FraudGuard design**, that's the right way to think about it.
+
+### Risk → response → database
+
+| Risk level    | Typical action                                   | Restriction? | `fraud_admin_actions`? |
+| ------------- | ------------------------------------------------ | -----------: | ---------------------: |
+| **LOW**       | `MONITOR`                                        |           No |                     No |
+| **MEDIUM**    | `MONITOR`                                        |           No |                     No |
+| **HIGH**      | `STEP_UP_AUTHENTICATION`                         |           No |                     No |
+| **VERY_HIGH** | `TEMPORARY_RESTRICTION` / `TEMPORARY_PROTECTION` |      **Yes** |                     No |
+| **CRITICAL**  | `TEMPORARY_PROTECTION` / `ADMIN_REVIEW`          |      **Yes** | **No automatic entry** |
+
+So:
+
+```text
+LOW
+  → monitor
+
+MEDIUM
+  → monitor
+
+HIGH
+  → step-up authentication
+  → later OTP/verification
+
+VERY_HIGH
+  → temporary restriction/protection
+  → fraud_restrictions
+
+CRITICAL
+  → temporary protection/restriction
+  → fraud_restrictions
+  → possibly ADMIN_REVIEW
+```
+
+### Then when does `fraud_admin_actions` get a row?
+
+**Only when an actual admin performs an action.**
+
+For example:
+
+```text
+FraudGuard detects CRITICAL
+        ↓
+fraud_incidents
+        ↓
+Security workflow
+        ↓
+temporary restriction
+        ↓
+ADMIN_REVIEW
+        ↓
+Admin Dashboard shows:
+"Critical fraud incident requires review"
+        ↓
+Admin clicks "Release Restriction"
+        ↓
+fraud_admin_actions  ← NOW a row is created
+        ↓
+fraud_audit_log
+        ↓
+customer_security / fraud_restrictions updated
+```
+
+So **`ADMIN_REVIEW` ≠ an admin action**.
+
+It means:
+
+> "This incident requires an administrator's attention."
+
+The actual admin action happens later.
+
+### One important nuance
+
+Don't hard-code the rule as simply **"VERY_HIGH and CRITICAL always create restrictions."** Your current `response_engine.py` determines the action:
+
+* VERY_HIGH → `TEMPORARY_RESTRICTION`
+* CRITICAL → `TEMPORARY_PROTECTION` initially
+* CRITICAL with repeated incidents → `ADMIN_REVIEW`
+
+Therefore **the action is what should drive the database workflow**, not merely the numeric risk level.
+
+That gives us a clean architecture:
+
+```text
+Risk Score
+    ↓
+Risk Level
+    ↓
+Response Decision
+    ↓
+Action
+    ↓
+Database consequence
+```
+
+This is exactly what we should debug in the real Kafka flow now.

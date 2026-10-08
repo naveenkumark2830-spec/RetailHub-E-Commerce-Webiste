@@ -1,0 +1,32 @@
+Kafka
+  ↓
+Bronze ✅ VERIFIED
+  ↓
+① Profile Bronze data
+  ↓
+② Define Silver schema
+  ↓
+③ Define data-quality rules
+  ↓
+④ Clean + standardize
+  ↓
+⑤ Deduplicate
+  ↓
+⑥ Handle invalid records → quarantine
+  ↓
+⑦ Write Silver as Delta
+  ↓
+⑧ Test Silver thoroughly
+  ↓
+Gold-
+
+Design and implement Bronze → Silver properly for all 14 RetailHub event topics, with schemas, d
+datatype normalization, null handling, duplicate handling, invalid-record quarantine, and incremental processing.
+
+1. Process existing Bronze
+2. Generate new Kafka events
+3. Verify only new events are processed
+4. Kill/restart the job
+5. Verify no duplicate processing
+6. Add more events
+7. Verify Silver grows incrementally

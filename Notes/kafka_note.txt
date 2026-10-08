@@ -1,0 +1,443 @@
+Perfect. ✅ Kafka is running correctly.
+You have:
+retailhub-kafka
+Port: 9092
+Status: Up
+Good. Now create the **new final topics**.
+
+### Step 14 — Create the new topics
+
+Run these from the `kafka` folder:
+
+docker exec retailhub-kafka /opt/kafka/bin/kafka-topics.sh --create --topic retail_user_events --bootstrap-server localhost:9092 --partitions 3 --replication-factor 1
+
+docker exec retailhub-kafka /opt/kafka/bin/kafka-topics.sh --create --topic retail_discovery_events --bootstrap-server localhost:9092 --partitions 3 --replication-factor 1
+
+docker exec retailhub-kafka /opt/kafka/bin/kafka-topics.sh --create --topic retail_cart_events --bootstrap-server localhost:9092 --partitions 3 --replication-factor 1
+
+docker exec retailhub-kafka /opt/kafka/bin/kafka-topics.sh --create --topic retail_checkout_events --bootstrap-server localhost:9092 --partitions 3 --replication-factor 1
+
+docker exec retailhub-kafka /opt/kafka/bin/kafka-topics.sh --create --topic retail_order_events --bootstrap-server localhost:9092 --partitions 3 --replication-factor 1
+
+docker exec retailhub-kafka /opt/kafka/bin/kafka-topics.sh --create --topic retail_payment_events --bootstrap-server localhost:9092 --partitions 3 --replication-factor 1
+
+docker exec retailhub-kafka /opt/kafka/bin/kafka-topics.sh --create --topic retail_fulfillment_events --bootstrap-server localhost:9092 --partitions 3 --replication-factor 1
+
+docker exec retailhub-kafka /opt/kafka/bin/kafka-topics.sh --create --topic retail_delivery_events --bootstrap-server localhost:9092 --partitions 3 --replication-factor 1
+
+docker exec retailhub-kafka /opt/kafka/bin/kafka-topics.sh --create --topic retail_return_events --bootstrap-server localhost:9092 --partitions 3 --replication-factor 1
+
+docker exec retailhub-kafka /opt/kafka/bin/kafka-topics.sh --create --topic retail_review_events --bootstrap-server localhost:9092 --partitions 3 --replication-factor 1
+
+docker exec retailhub-kafka /opt/kafka/bin/kafka-topics.sh --create --topic retail_coupon_events --bootstrap-server localhost:9092 --partitions 3 --replication-factor 1
+
+docker exec retailhub-kafka /opt/kafka/bin/kafka-topics.sh --create --topic retail_system_events --bootstrap-server localhost:9092 --partitions 3 --replication-factor 1
+
+docker exec retailhub-kafka /opt/kafka/bin/kafka-topics.sh --create --topic retail_admin_events --bootstrap-server localhost:9092 --partitions 3 --replication-factor 1
+
+docker exec retailhub-kafka /opt/kafka/bin/kafka-topics.sh --create --topic retail_fraud_events --bootstrap-server localhost:9092 --partitions 1 --replication-factor 1
+
+docker exec retailhub-kafka /opt/kafka/bin/kafka-topics.sh --create --topic retail_dead_letter --bootstrap-server localhost:9092 --partitions 1 --replication-factor 1
+
+Then verify:
+docker exec retailhub-kafka /opt/kafka/bin/kafka-topics.sh --list --bootstrap-server localhost:9092
+
+Produce one event 
+docker exec -it retailhub-kafka /opt/kafka/bin/kafka-console-producer.sh --bootstrap-server localhost:9092 --topic retail_order_events
+
+
+
+docker exec -it retailhub-kafka opt/kafka/bin/kafka-console-consumer.sh --bootstrap-server localhost:9092 --topic retail_fraud_events --from-beginning
+
+
+
+Then verify all topics:
+docker exec retailhub-kafka /opt/kafka/bin/kafka-topics.sh --list --bootstrap-server localhost:9092
+docker exec retailhub-kafka /opt/kafka/bin/kafka-topics.sh --describe --bootstrap-server localhost:9092
+
+
+C:\Users\navee\OneDrive\Attachments\Desktop\Website\kafka>docker stats --no-stream
+CONTAINER ID   NAME              CPU %     MEM USAGE / LIMIT     MEM %     NET I/O        BLOCK I/O        PIDS
+0a2c92206ab1   retailhub-kafka   3.44%     366.5MiB / 3.506GiB   10.21%    1.7kB / 126B   146MB / 6.04MB   106
+
+KAfka topic and its asscoicated event into those
+
+1. retail.user_events
+   SESSION + PROFILE
+
+2. retail.discovery_events
+   NAVIGATION + SEARCH + PRODUCT + WISHLIST
+
+3. retail.cart_events
+   CART
+
+4. retail.checkout_events
+   CHECKOUT
+
+5. retail.order_events
+   ORDER
+
+6. retail.payment_events
+   PAYMENT
+
+7. retail.fulfillment_events
+   FULFILLMENT
+
+8. retail.delivery_events
+   DELIVERY
+
+9. retail.return_events
+   RETURNS + REFUNDS
+
+10. retail.review_events
+    REVIEWS
+
+11. retail.coupon_events
+    COUPONS
+
+12. retail.system_events
+    SYSTEM
+
+13. retail.admin_events
+    ADMIN
+
+14. retail.fraud_events
+    Spark-generated fraud results
+
+15. retail.dead_letter
+    Invalid/unprocessable events
+
+
+
+
+__consumer_offsets
+retail_admin_events
+retail_cart_events
+retail_checkout_events
+retail_coupon_events
+retail_dead_letter
+retail_delivery_events
+retail_discovery_events
+retail_fraud_events
+retail_fulfillment_events
+retail_order_events
+retail_payment_events
+retail_return_events
+retail_review_events
+retail_system_events
+retail_user_events
+retail_fraudguard_events
+
+
+
+
+
+
+C:\Users\navee\OneDrive\Attachments\Desktop\Website>docker exec retailhub-kafka /opt/kafka/bin/kafka-topics.sh --list --bootstrap-server localhost:9092
+__consumer_offsets
+retail_admin_events
+retail_cart_events
+retail_checkout_events
+retail_coupon_events
+retail_dead_letter
+retail_delivery_events
+retail_discovery_events
+retail_fraud_events
+retail_fulfillment_events
+retail_order_events
+retail_payment_events
+retail_return_events
+retail_review_events
+retail_system_events
+retail_user_events
+
+C:\Users\navee\OneDrive\Attachments\Desktop\Website>docker exec retailhub-kafka /opt/kafka/bin/kafka-topics.sh --describe --bootstrap-server localhost:9092
+Topic: retail_delivery_events   TopicId: P5b7tbyVTkKxAAPHoZJL3A PartitionCount: 3       ReplicationFactor: 1    Configs: min.insync.replicas=1
+        Topic: retail_delivery_events   Partition: 0    Leader: 1       Replicas: 1     Isr: 1  Elr:    LastKnownElr: 
+        Topic: retail_delivery_events   Partition: 1    Leader: 1       Replicas: 1     Isr: 1  Elr:    LastKnownElr: 
+        Topic: retail_delivery_events   Partition: 2    Leader: 1       Replicas: 1     Isr: 1  Elr:    LastKnownElr: 
+Topic: retail_order_events      TopicId: dJhmVrjDQDSdG28TLHHvWw PartitionCount: 3       ReplicationFactor: 1    Configs: min.insync.replicas=1
+        Topic: retail_order_events      Partition: 0    Leader: 1       Replicas: 1     Isr: 1  Elr:    LastKnownElr: 
+        Topic: retail_order_events      Partition: 1    Leader: 1       Replicas: 1     Isr: 1  Elr:    LastKnownElr: 
+        Topic: retail_order_events      Partition: 2    Leader: 1       Replicas: 1     Isr: 1  Elr:    LastKnownElr: 
+Topic: retail_coupon_events     TopicId: nW2s3w-XTH-DYZy3iMLxXQ PartitionCount: 3       ReplicationFactor: 1    Configs: min.insync.replicas=1
+        Topic: retail_coupon_events     Partition: 0    Leader: 1       Replicas: 1     Isr: 1  Elr:    LastKnownElr: 
+        Topic: retail_coupon_events     Partition: 1    Leader: 1       Replicas: 1     Isr: 1  Elr:    LastKnownElr: 
+        Topic: retail_coupon_events     Partition: 2    Leader: 1       Replicas: 1     Isr: 1  Elr:    LastKnownElr: 
+Topic: retail_discovery_events  TopicId: VIjBrMPbR02t5fr0AeQ8AQ PartitionCount: 3       ReplicationFactor: 1    Configs: min.insync.replicas=1
+        Topic: retail_discovery_events  Partition: 0    Leader: 1       Replicas: 1     Isr: 1  Elr:    LastKnownElr: 
+        Topic: retail_discovery_events  Partition: 1    Leader: 1       Replicas: 1     Isr: 1  Elr:    LastKnownElr: 
+        Topic: retail_discovery_events  Partition: 2    Leader: 1       Replicas: 1     Isr: 1  Elr:    LastKnownElr: 
+Topic: retail_admin_events      TopicId: 7yPDWtBfTsmXVwPYX8OuvA PartitionCount: 3       ReplicationFactor: 1    Configs: min.insync.replicas=1
+        Topic: retail_admin_events      Partition: 0    Leader: 1       Replicas: 1     Isr: 1  Elr:    LastKnownElr: 
+        Topic: retail_admin_events      Partition: 1    Leader: 1       Replicas: 1     Isr: 1  Elr:    LastKnownElr: 
+        Topic: retail_admin_events      Partition: 2    Leader: 1       Replicas: 1     Isr: 1  Elr:    LastKnownElr: 
+Topic: retail_return_events     TopicId: cHh7yUHpTHO37IcIExKx3Q PartitionCount: 3       ReplicationFactor: 1    Configs: min.insync.replicas=1
+        Topic: retail_return_events     Partition: 0    Leader: 1       Replicas: 1     Isr: 1  Elr:    LastKnownElr: 
+        Topic: retail_return_events     Partition: 1    Leader: 1       Replicas: 1     Isr: 1  Elr:    LastKnownElr: 
+        Topic: retail_return_events     Partition: 2    Leader: 1       Replicas: 1     Isr: 1  Elr:    LastKnownElr: 
+Topic: retail_checkout_events   TopicId: LvRybtWpTiySDyeMcCppYw PartitionCount: 3       ReplicationFactor: 1    Configs: min.insync.replicas=1
+        Topic: retail_checkout_events   Partition: 0    Leader: 1       Replicas: 1     Isr: 1  Elr:    LastKnownElr: 
+        Topic: retail_checkout_events   Partition: 1    Leader: 1       Replicas: 1     Isr: 1  Elr:    LastKnownElr: 
+        Topic: retail_checkout_events   Partition: 2    Leader: 1       Replicas: 1     Isr: 1  Elr:    LastKnownElr: 
+Topic: retail_system_events     TopicId: cbXZhtboTBShgoh-4CUtdA PartitionCount: 3       ReplicationFactor: 1    Configs: min.insync.replicas=1
+        Topic: retail_system_events     Partition: 0    Leader: 1       Replicas: 1     Isr: 1  Elr:    LastKnownElr: 
+        Topic: retail_system_events     Partition: 1    Leader: 1       Replicas: 1     Isr: 1  Elr:    LastKnownElr: 
+        Topic: retail_system_events     Partition: 2    Leader: 1       Replicas: 1     Isr: 1  Elr:    LastKnownElr: 
+Topic: retail_fraud_events      TopicId: D8vf9LBkQR61YwEiC4VwGA PartitionCount: 1       ReplicationFactor: 1    Configs: min.insync.replicas=1
+        Topic: retail_fraud_events      Partition: 0    Leader: 1       Replicas: 1     Isr: 1  Elr:    LastKnownElr: 
+Topic: retail_user_events       TopicId: qNc1e62KRYq9BsaUDqdsBQ PartitionCount: 3       ReplicationFactor: 1    Configs: min.insync.replicas=1
+        Topic: retail_user_events       Partition: 0    Leader: 1       Replicas: 1     Isr: 1  Elr:    LastKnownElr: 
+        Topic: retail_user_events       Partition: 1    Leader: 1       Replicas: 1     Isr: 1  Elr:    LastKnownElr: 
+        Topic: retail_user_events       Partition: 2    Leader: 1       Replicas: 1     Isr: 1  Elr:    LastKnownElr: 
+Topic: retail_dead_letter       TopicId: iHEdS4gDQcGXI0aT80UMrA PartitionCount: 1       ReplicationFactor: 1    Configs: min.insync.replicas=1
+        Topic: retail_dead_letter       Partition: 0    Leader: 1       Replicas: 1     Isr: 1  Elr:    LastKnownElr: 
+Topic: retail_payment_events    TopicId: IZgNHdBAREmdMd-B8LlPWw PartitionCount: 3       ReplicationFactor: 1    Configs: min.insync.replicas=1
+        Topic: retail_payment_events    Partition: 0    Leader: 1       Replicas: 1     Isr: 1  Elr:    LastKnownElr: 
+        Topic: retail_payment_events    Partition: 1    Leader: 1       Replicas: 1     Isr: 1  Elr:    LastKnownElr: 
+        Topic: retail_payment_events    Partition: 2    Leader: 1       Replicas: 1     Isr: 1  Elr:    LastKnownElr: 
+Topic: retail_review_events     TopicId: qXJ1XzdjSC6XwQioL-l1Ng PartitionCount: 3       ReplicationFactor: 1    Configs: min.insync.replicas=1
+        Topic: retail_review_events     Partition: 0    Leader: 1       Replicas: 1     Isr: 1  Elr:    LastKnownElr: 
+        Topic: retail_review_events     Partition: 1    Leader: 1       Replicas: 1     Isr: 1  Elr:    LastKnownElr: 
+        Topic: retail_review_events     Partition: 2    Leader: 1       Replicas: 1     Isr: 1  Elr:    LastKnownElr: 
+Topic: retail_fulfillment_events        TopicId: bXzpJT1EQBOGmfZWlxhM-Q PartitionCount: 3       ReplicationFactor: 1    Configs: min.insync.replicas=1
+        Topic: retail_fulfillment_events        Partition: 0    Leader: 1       Replicas: 1     Isr: 1  Elr:    LastKnownElr: 
+        Topic: retail_fulfillment_events        Partition: 1    Leader: 1       Replicas: 1     Isr: 1  Elr:    LastKnownElr: 
+        Topic: retail_fulfillment_events        Partition: 2    Leader: 1       Replicas: 1     Isr: 1  Elr:    LastKnownElr: 
+Topic: retail_cart_events       TopicId: kAAb7j1ETzOsusHF3KgpVg PartitionCount: 3       ReplicationFactor: 1    Configs: min.insync.replicas=1
+        Topic: retail_cart_events       Partition: 0    Leader: 1       Replicas: 1     Isr: 1  Elr:    LastKnownElr: 
+        Topic: retail_cart_events       Partition: 1    Leader: 1       Replicas: 1     Isr: 1  Elr:    LastKnownElr: 
+        Topic: retail_cart_events       Partition: 2    Leader: 1       Replicas: 1     Isr: 1  Elr:    LastKnownElr: 
+Topic: __consumer_offsets       TopicId: py1YRgpwRqeGyV_XFt52Iw PartitionCount: 50      ReplicationFactor: 1    Configs: compression.type=producer,min.insync.replicas=1,cleanup.policy=compact,segment.bytes=104857600
+        Topic: __consumer_offsets       Partition: 0    Leader: 1       Replicas: 1     Isr: 1  Elr:    LastKnownElr: 
+        Topic: __consumer_offsets       Partition: 1    Leader: 1       Replicas: 1     Isr: 1  Elr:    LastKnownElr: 
+        Topic: __consumer_offsets       Partition: 2    Leader: 1       Replicas: 1     Isr: 1  Elr:    LastKnownElr: 
+        Topic: __consumer_offsets       Partition: 3    Leader: 1       Replicas: 1     Isr: 1  Elr:    LastKnownElr: 
+        Topic: __consumer_offsets       Partition: 4    Leader: 1       Replicas: 1     Isr: 1  Elr:    LastKnownElr: 
+        Topic: __consumer_offsets       Partition: 5    Leader: 1       Replicas: 1     Isr: 1  Elr:    LastKnownElr: 
+        Topic: __consumer_offsets       Partition: 6    Leader: 1       Replicas: 1     Isr: 1  Elr:    LastKnownElr: 
+        Topic: __consumer_offsets       Partition: 7    Leader: 1       Replicas: 1     Isr: 1  Elr:    LastKnownElr: 
+        Topic: __consumer_offsets       Partition: 8    Leader: 1       Replicas: 1     Isr: 1  Elr:    LastKnownElr: 
+        Topic: __consumer_offsets       Partition: 9    Leader: 1       Replicas: 1     Isr: 1  Elr:    LastKnownElr: 
+        Topic: __consumer_offsets       Partition: 10   Leader: 1       Replicas: 1     Isr: 1  Elr:    LastKnownElr: 
+        Topic: __consumer_offsets       Partition: 11   Leader: 1       Replicas: 1     Isr: 1  Elr:    LastKnownElr: 
+        Topic: __consumer_offsets       Partition: 12   Leader: 1       Replicas: 1     Isr: 1  Elr:    LastKnownElr: 
+        Topic: __consumer_offsets       Partition: 13   Leader: 1       Replicas: 1     Isr: 1  Elr:    LastKnownElr: 
+        Topic: __consumer_offsets       Partition: 14   Leader: 1       Replicas: 1     Isr: 1  Elr:    LastKnownElr: 
+        Topic: __consumer_offsets       Partition: 15   Leader: 1       Replicas: 1     Isr: 1  Elr:    LastKnownElr: 
+        Topic: __consumer_offsets       Partition: 16   Leader: 1       Replicas: 1     Isr: 1  Elr:    LastKnownElr: 
+        Topic: __consumer_offsets       Partition: 17   Leader: 1       Replicas: 1     Isr: 1  Elr:    LastKnownElr: 
+        Topic: __consumer_offsets       Partition: 18   Leader: 1       Replicas: 1     Isr: 1  Elr:    LastKnownElr: 
+        Topic: __consumer_offsets       Partition: 19   Leader: 1       Replicas: 1     Isr: 1  Elr:    LastKnownElr: 
+        Topic: __consumer_offsets       Partition: 20   Leader: 1       Replicas: 1     Isr: 1  Elr:    LastKnownElr: 
+        Topic: __consumer_offsets       Partition: 21   Leader: 1       Replicas: 1     Isr: 1  Elr:    LastKnownElr: 
+        Topic: __consumer_offsets       Partition: 22   Leader: 1       Replicas: 1     Isr: 1  Elr:    LastKnownElr: 
+        Topic: __consumer_offsets       Partition: 23   Leader: 1       Replicas: 1     Isr: 1  Elr:    LastKnownElr: 
+        Topic: __consumer_offsets       Partition: 24   Leader: 1       Replicas: 1     Isr: 1  Elr:    LastKnownElr: 
+        Topic: __consumer_offsets       Partition: 25   Leader: 1       Replicas: 1     Isr: 1  Elr:    LastKnownElr: 
+        Topic: __consumer_offsets       Partition: 26   Leader: 1       Replicas: 1     Isr: 1  Elr:    LastKnownElr: 
+        Topic: __consumer_offsets       Partition: 27   Leader: 1       Replicas: 1     Isr: 1  Elr:    LastKnownElr: 
+        Topic: __consumer_offsets       Partition: 28   Leader: 1       Replicas: 1     Isr: 1  Elr:    LastKnownElr: 
+        Topic: __consumer_offsets       Partition: 29   Leader: 1       Replicas: 1     Isr: 1  Elr:    LastKnownElr: 
+        Topic: __consumer_offsets       Partition: 30   Leader: 1       Replicas: 1     Isr: 1  Elr:    LastKnownElr: 
+        Topic: __consumer_offsets       Partition: 31   Leader: 1       Replicas: 1     Isr: 1  Elr:    LastKnownElr: 
+        Topic: __consumer_offsets       Partition: 32   Leader: 1       Replicas: 1     Isr: 1  Elr:    LastKnownElr: 
+        Topic: __consumer_offsets       Partition: 33   Leader: 1       Replicas: 1     Isr: 1  Elr:    LastKnownElr: 
+        Topic: __consumer_offsets       Partition: 34   Leader: 1       Replicas: 1     Isr: 1  Elr:    LastKnownElr: 
+        Topic: __consumer_offsets       Partition: 35   Leader: 1       Replicas: 1     Isr: 1  Elr:    LastKnownElr: 
+        Topic: __consumer_offsets       Partition: 36   Leader: 1       Replicas: 1     Isr: 1  Elr:    LastKnownElr: 
+        Topic: __consumer_offsets       Partition: 37   Leader: 1       Replicas: 1     Isr: 1  Elr:    LastKnownElr: 
+        Topic: __consumer_offsets       Partition: 38   Leader: 1       Replicas: 1     Isr: 1  Elr:    LastKnownElr: 
+        Topic: __consumer_offsets       Partition: 39   Leader: 1       Replicas: 1     Isr: 1  Elr:    LastKnownElr: 
+        Topic: __consumer_offsets       Partition: 40   Leader: 1       Replicas: 1     Isr: 1  Elr:    LastKnownElr: 
+        Topic: __consumer_offsets       Partition: 41   Leader: 1       Replicas: 1     Isr: 1  Elr:    LastKnownElr: 
+        Topic: __consumer_offsets       Partition: 42   Leader: 1       Replicas: 1     Isr: 1  Elr:    LastKnownElr: 
+        Topic: __consumer_offsets       Partition: 43   Leader: 1       Replicas: 1     Isr: 1  Elr:    LastKnownElr: 
+        Topic: __consumer_offsets       Partition: 44   Leader: 1       Replicas: 1     Isr: 1  Elr:    LastKnownElr: 
+        Topic: __consumer_offsets       Partition: 45   Leader: 1       Replicas: 1     Isr: 1  Elr:    LastKnownElr: 
+        Topic: __consumer_offsets       Partition: 46   Leader: 1       Replicas: 1     Isr: 1  Elr:    LastKnownElr: 
+        Topic: __consumer_offsets       Partition: 47   Leader: 1       Replicas: 1     Isr: 1  Elr:    LastKnownElr: 
+        Topic: __consumer_offsets       Partition: 48   Leader: 1       Replicas: 1     Isr: 1  Elr:    LastKnownElr: 
+        Topic: __consumer_offsets       Partition: 49   Leader: 1       Replicas: 1     Isr: 1  Elr:    LastKnownElr: 
+
+docker exec retailhub-kafka /opt/kafka/bin/kafka-get-offsets.sh \
+  --bootstrap-server localhost:9092 \
+  --topic retail_discovery_events
+retail_discovery_events:0:108
+retail_discovery_events:1:112
+retail_discovery_events:2:95
+
+
+docker exec retailhub-kafka /opt/kafka/bin/kafka-topics.sh \
+  --bootstrap-server localhost:9092 \
+  --describe
+
+
+  $ docker inspect retailhub-kafka --format '{{json .Mounts}}'
+
+
+  docker exec retailhub-kafka \
+  /opt/kafka/bin/kafka-topics.sh \
+  --bootstrap-server localhost:9092 \
+  --list | grep '^retail_' | while read topic; do
+    docker exec retailhub-kafka \
+      /opt/kafka/bin/kafka-topics.sh \
+      --bootstrap-server localhost:9092 \
+      --delete \
+      --topic "$topic"
+done
+
+
+
+
+
+
+
+
+
+
+
+docker run -d ^
+  --name retailhub-debezium ^
+  --network kafka_default ^
+  -p 8083:8083 ^
+  -e GROUP_ID=retailhub-connect ^
+  -e BOOTSTRAP_SERVERS=kafka:29092 ^
+  -e CONFIG_STORAGE_TOPIC=retailhub_connect_configs ^
+  -e OFFSET_STORAGE_TOPIC=retailhub_connect_offsets ^
+  -e STATUS_STORAGE_TOPIC=retailhub_connect_status ^
+  -e REST_HOST_NAME=0.0.0.0 ^
+  quay.io/debezium/connect:3.6.1.Final
+
+
+
+  docker ps --filter "name=retailhub-debezium"
+
+  curl http://localhost:8083/
+
+
+
+
+docker exec -i retailhub-kafka /opt/kafka/bin/kafka-console-producer.sh \
+  --bootstrap-server localhost:9092 \
+  --topic retail_user_events <<'EOF'
+{"event_id":"EVT-CRITICAL-001","event_type":"login_failed","timestamp":"2026-09-26T16:20:00+05:30","customer_id":"TEST-CUST-CRITICAL-01","ip_address":"10.10.10.99","device_id":"DEVICE-ATTACK-01","session_id":"SESSION-CRITICAL-01","metadata":{"failed_attempts":12,"distinct_ip_count":6,"distinct_device_count":4}}
+EOF
+
+
+
+  docker exec -it retailhub-kafka   /opt/kafka/bin/kafka-console-consumer.sh 
+  --bootstrap-server localhost:9092   --topic retail_fraudguard_events   --from-beginning
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+  Perfect. **Your Kafka topics are persistent.** This output confirms it:
+
+```text
+Name:        retailhub_kafka_data
+Destination: /var/lib/kafka/data
+Mode:        rw
+```
+
+That is exactly what we wanted.
+
+### Your setup now
+
+```text
+retailhub-kafka
+      │
+      └── /var/lib/kafka/data
+                │
+                ▼
+       Docker volume
+       retailhub_kafka_data
+                │
+                ├── topics
+                ├── partitions
+                ├── offsets
+                └── Kafka metadata
+```
+
+So your **16 topics are stored in `retailhub_kafka_data`**, not in the init container.
+
+### What happens now?
+
+You can safely do:
+
+```bash
+docker stop retailhub-kafka
+```
+
+and later:
+
+```bash
+docker start retailhub-kafka
+```
+
+Your topics should remain.
+
+You can verify after starting:
+
+```bash
+docker exec retailhub-kafka kafka-topics.sh \
+  --bootstrap-server localhost:9092 \
+  --list
+```
+
+You should still see all 16 topics.
+
+### What about `docker compose up -d`?
+
+Your normal workflow can be:
+
+```bash
+docker compose up -d
+```
+
+This starts Kafka and, depending on your compose file, the init service can ensure the topics exist.
+
+If Kafka's container already exists and is merely stopped:
+
+```bash
+docker start retailhub-kafka
+```
+
+is enough.
+
+### One important distinction
+
+You have **three volumes**:
+
+```text
+38e6...      → /etc/kafka/secrets
+cbd2...      → /mnt/shared/config
+retailhub_kafka_data → /var/lib/kafka/data   ← THIS IS THE IMPORTANT ONE
+```
+
+The third one is your actual Kafka persistent data volume.
+
+**Do not run:**
+
+```bash
+docker volume rm retailhub_kafka_data
+```
+
+unless you intentionally want to wipe Kafka's persisted data/topics.
+
+So at this point, **Kafka persistence is correctly configured** and we can move on to the next RetailHub stage without rebuilding the Kafka setup.

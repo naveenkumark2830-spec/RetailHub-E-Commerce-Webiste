@@ -29,6 +29,10 @@ import AdminReviewsPage from './pages/AdminReviewsPage';
 import AdminCouponsPage from './pages/AdminCouponsPage';
 import AdminWarehousesPage from './pages/AdminWarehousesPage';
 import AdminSimulatorPage from './pages/AdminSimulatorPage';
+import AdminFraudGuardPage from './pages/AdminFraudGuardPage';
+import { CustomerSecurityVerificationPage } from './pages/CustomerSecurityVerificationPage';
+import { CustomerAccountRestrictedPage } from './pages/CustomerAccountRestrictedPage';
+import { CustomerAccountBannedPage } from './pages/CustomerAccountBannedPage';
 import { isRouteAllowed, getDefaultRouteForRole } from './utils/rbac';
 import { useSessionStore } from './store/useSessionStore';
 
@@ -86,12 +90,20 @@ export const App: React.FC = () => {
         <Route path="/profile/addresses" element={<AddressesPage />} />
         <Route path="/notifications" element={<NotificationsPage />} />
         <Route path="/help" element={<HelpSupportPage />} />
+        <Route path="/security-verification" element={<CustomerSecurityVerificationPage />} />
+        <Route path="/security" element={<CustomerSecurityVerificationPage />} />
+        <Route path="/account-restricted" element={<CustomerAccountRestrictedPage />} />
+        <Route path="/restricted" element={<CustomerAccountRestrictedPage />} />
+        <Route path="/account-banned" element={<CustomerAccountBannedPage />} />
+        <Route path="/banned" element={<CustomerAccountBannedPage />} />
 
         {/* Admin Login Route (Unprotected) */}
         <Route path="/admin/login" element={<AdminLoginPage />} />
 
         {/* Protected Admin Routes */}
-        <Route path="/admin/dashboard" element={<Navigate to="/admin/simulator" replace />} />
+        <Route path="/admin/dashboard" element={<Navigate to="/admin/fraud" replace />} />
+        <Route path="/admin/fraud/*" element={<ProtectedAdminRoute path="/admin/fraud"><AdminFraudGuardPage /></ProtectedAdminRoute>} />
+        <Route path="/admin/fraudguard/*" element={<ProtectedAdminRoute path="/admin/fraudguard"><AdminFraudGuardPage /></ProtectedAdminRoute>} />
         <Route path="/admin/products" element={<ProtectedAdminRoute path="/admin/products"><AdminProductsPage /></ProtectedAdminRoute>} />
         <Route path="/admin/operators" element={<ProtectedAdminRoute path="/admin/operators"><AdminOperatorsPage /></ProtectedAdminRoute>} />
         <Route path="/admin/categories" element={<ProtectedAdminRoute path="/admin/categories"><AdminCategoriesPage /></ProtectedAdminRoute>} />

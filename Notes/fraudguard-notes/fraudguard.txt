@@ -1,0 +1,490 @@
+                 REAL USER
+                    │
+                 React
+                    │
+                    ▼
+             Node Backend
+                    │
+                    ├──────────────► MySQL
+                    │
+                    ▼
+                  Kafka
+                    │
+                    ▼
+              FraudGuard
+             WSL / EC2
+                    │
+          ┌─────────┴─────────┐
+          │                   │
+      Detection            Audit
+          │                   │
+          ▼                   ▼
+       Incident          audit JSONL
+          │
+       Risk/AI
+          │
+       Response
+          │
+          ▼
+   FRAUD_DECISION
+          │
+          ▼
+        Kafka
+          │
+          ▼
+    Node Backend
+          │
+          ▼
+        MySQL
+          │
+     ┌────┴─────┐
+     │           │
+ Customer UI   Admin UI
+     │           │
+ OTP/status    Incidents
+ restriction   Audit
+ verification  Admin actions
+
+
+
+
+
+
+
+
+ Yes. Keep the **Admin Fraud Dashboard focused on security operations**, not general e-commerce administration.
+
+## Admin Dashboard
+
+### 1. Overview / Command Center
+
+Top cards:
+
+```text
+┌─────────────────────────────────────────────────────────────┐
+│ FRAUDGUARD COMMAND CENTER                                   │
+├────────────┬────────────┬────────────┬─────────────────────┤
+│ Active     │ Verification│ Restricted│ Admin Review        │
+│ Incidents  │ Required    │ Accounts   │ Required            │
+│    12      │     7       │     4      │      3              │
+└────────────┴────────────┴────────────┴─────────────────────┘
+```
+
+Also show:
+
+* Fraud incidents today
+* Critical incidents
+* High-risk customers
+* Temporary restrictions
+* Pending admin reviews
+* Verification failures
+* Recent FraudGuard activity
+
+---
+
+## 2. Incident Queue
+
+This is the **main page**.
+
+```text
+Incident ID       Customer       Rule                    Risk       Status
+────────────────────────────────────────────────────────────────────────
+INC-001           CUST-1001      ACCOUNT_TAKEOVER        95 CRITICAL REVIEW
+INC-002           CUST-2042      BRUTE_FORCE_LOGIN       55 HIGH    VERIFY
+INC-003           SIM-CUST-01    MULTI_IP_LOGIN_ATTACK  60 HIGH    MONITOR
+```
+
+Filters:
+
+```text
+Risk:      All | High | Very High | Critical
+Status:    All | Monitor | Verify | Restricted | Review
+Source:    All | Real | Simulator
+Rule:      All fraud rules
+Date:      Today / 7 days / custom
+```
+
+---
+
+# 3. Incident Details
+
+When admin clicks an incident:
+
+```text
+INC-001
+Account Takeover Sequence
+```
+
+### Customer
+
+```text
+Customer ID: CUST-1001
+Name: John Doe
+Source: REAL
+Account Status: RESTRICTED
+```
+
+### Risk
+
+```text
+Risk Score: 95
+Risk Level: CRITICAL
+```
+
+### Detection
+
+```text
+Rule:
+ACCOUNT_TAKEOVER_SEQUENCE
+
+Sequence:
+
+Failed Login
+     ↓
+New Device
+     ↓
+Sensitive Account Change
+     ↓
+Order
+```
+
+### Evidence
+
+```text
+IP addresses
+Device ID
+Session ID
+Event timestamps
+Failed login count
+Account changes
+Order details
+```
+
+### AI Investigation
+
+```text
+Attack Pattern:
+Account takeover sequence
+
+Finding:
+Suspicious sequence detected
+
+Confidence:
+0.95
+
+Recommendation:
+TEMPORARY_PROTECTION
+```
+
+### Response
+
+```text
+Action:
+TEMPORARY_PROTECTION
+
+Restriction:
+24 hours
+
+Admin Review:
+REQUIRED
+```
+
+---
+
+# 4. Admin Actions
+
+At the bottom:
+
+```text
+┌──────────────────────────────────────────────┐
+│ ADMIN ACTIONS                                │
+│                                              │
+│ [ Release Restriction ]                      │
+│ [ Keep Restricted ]                          │
+│ [ Deactivate Account ]                       │
+│ [ Ban Account ]                              │
+└──────────────────────────────────────────────┘
+```
+
+For destructive actions:
+
+```text
+Are you sure?
+
+Customer: CUST-1001
+Action: Deactivate Account
+
+Reason:
+[____________________________]
+
+[Cancel] [Confirm]
+```
+
+Every action gets audited.
+
+---
+
+# 5. Customer Security Profile
+
+Admin can open a customer's fraud profile:
+
+```text
+CUSTOMER SECURITY PROFILE
+
+Customer ID: CUST-1001
+Source: REAL
+Account: RESTRICTED
+
+Risk Status:
+CRITICAL
+
+Current Restriction:
+Until 25 Sep 2026, 8:30 PM
+
+Incidents:
+5
+
+Previous Actions:
+2 verifications
+1 temporary restriction
+
+Recent Fraud Events:
+...
+```
+
+For simulator:
+
+```text
+Customer ID: SIM-CUST-001
+Source: SIMULATOR
+Phone: N/A
+```
+
+So the admin immediately knows that it is demonstration data.
+
+---
+
+# 6. Audit Trail
+
+This is particularly important for your project.
+
+```text
+FRAUDGUARD AUDIT TRAIL
+
+Time       Agent             Event             Decision
+────────────────────────────────────────────────────────
+20:01:12   RuleEngine        BRUTE_FORCE       HIGH
+20:01:14   AI Investigator   ATO               PROTECT
+20:01:15   ResponseEngine    CRITICAL           RESTRICT
+20:01:16   Admin             INC-001           REVIEW
+```
+
+Clicking an audit record shows:
+
+```text
+Agent:
+fraudguard_response_engine
+
+Incident:
+INC-001
+
+Customer:
+CUST-1001
+
+Reason:
+Suspicious account takeover sequence
+
+Evidence:
+...
+
+Risk:
+95 / CRITICAL
+
+Decision:
+TEMPORARY_PROTECTION
+
+Action:
+TEMPORARY_PROTECTION
+
+Approval:
+ADMIN_REVIEW
+
+Result:
+RESTRICTION_CREATED
+```
+
+This demonstrates your **agent auditability** very well.
+
+---
+
+# 7. Fraud Rules / Detection Statistics
+
+We can also have a small page/section showing:
+
+```text
+RULE PERFORMANCE
+
+Rule                         Incidents
+──────────────────────────────────────
+BRUTE_FORCE_LOGIN                 42
+MULTI_IP_LOGIN_ATTACK             18
+PAYMENT_FAILURE_VELOCITY          11
+ACCOUNT_TAKEOVER_SEQUENCE           7
+BOT_OR_SCRAPER                      6
+DDOS                                2
+...
+```
+
+This is useful for demonstrating that your 15 deterministic rules are actually operating.
+
+---
+
+# 8. Live Fraud Activity
+
+For your demonstration, I'd add a live activity feed:
+
+```text
+LIVE FRAUD ACTIVITY
+
+20:31:04  CUST-1001
+          HIGH_VALUE_TRANSACTION
+          Score 55
+
+20:31:07  SIM-CUST-001
+          ACCOUNT_TAKEOVER_SEQUENCE
+          Score 95
+          ADMIN REVIEW
+
+20:31:10  CUST-2022
+          BRUTE_FORCE_LOGIN
+          Score 55
+          OTP REQUIRED
+```
+
+This makes the dashboard feel like an actual security operations console.
+
+---
+
+# 9. Overall UI structure
+
+I would make the admin sidebar:
+
+```text
+┌─────────────────────────┐
+│ RETAILHUB ADMIN         │
+├─────────────────────────┤
+│                         │
+│ Overview                │
+│ Fraud Incidents         │
+│ Customers               │
+│ Restrictions            │
+│ Audit Trail             │
+│ Detection Rules         │
+│ Live Activity           │
+│                         │
+└─────────────────────────┘
+```
+
+And the most important workflow is:
+
+```text
+Overview
+   ↓
+Incident Queue
+   ↓
+Incident Details
+   ↓
+Evidence + AI Investigation
+   ↓
+Admin Decision
+   ↓
+Action
+   ↓
+Audit
+```
+
+### For the actual implementation, I would prioritize only **4 screens** today:
+
+1. **Fraud Overview**
+2. **Incident Details / Review**
+3. **Customer Security Profile**
+4. **Audit Trail**
+
+The other sections can be tabs/components inside these screens rather than creating unnecessary pages.
+
+That keeps the dashboard professional and gives you everything needed for the **FraudGuard → Backend → Admin** demonstration.
+
+
+
+
+
+
+
+
+---------------------------------------------------------------------------------------------------------------------------------
+
+Remaining work
+#	Task	What we still need to build
+1	Connect producer → backend	Windows backend Kafka consumer for retail_fraudguard_events
+2	MySQL tables	Incidents, restrictions, verification/OTP, admin actions, audit data
+3	UI pages	Admin fraud dashboard, incidents, customer security, restrictions, audit
+4	OTP / verification	Generate challenge → send/verify OTP → resolve STEP_UP_AUTHENTICATION
+5	Admin control	Release/keep restriction, deactivate/ban, approve actions, audit everything
+
+But I would add 4 more finishing tasks:
+
+6. Connect website customer/account actions
+
+FraudGuard needs to actually affect the website:
+
+FraudGuard
+    ↓
+FRAUD_DECISION
+    ↓
+Website Backend
+    ↓
+MySQL
+    ↓
+Customer Security State
+    ↓
+React
+
+For example:
+
+HIGH
+→ STEP_UP_AUTHENTICATION
+→ customer sees verification
+→ OTP verified
+→ continue checkout/login
+
+and:
+
+VERY_HIGH
+→ TEMPORARY_RESTRICTION
+→ account restricted
+→ website blocks sensitive actions
+→ restriction expires automatically
+7. Admin ↔ FraudGuard action integration
+
+Admin actions shouldn't just change a UI record.
+
+For example:
+
+Admin clicks "Release Restriction"
+        ↓
+Backend validates admin
+        ↓
+MySQL updated
+        ↓
+FraudGuard restriction released
+        ↓
+Audit recorded
+
+Same for:
+
+Keep restricted
+Deactivate account
+Ban account
+Release account
+
+-----------------------------------------------------------------------------------------------------------------------------------

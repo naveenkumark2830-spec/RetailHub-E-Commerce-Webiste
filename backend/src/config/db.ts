@@ -175,14 +175,14 @@ export interface FraudAuditLogRecord {
   incident_id: string | null;
   event_type: string;
   event: string;
-  reason: string | null;
-  evidence: any;
-  decision: string | null;
-  confidence: number | null;
-  action: string | null;
-  approval: string | null;
-  result: string | null;
-  metadata: any;
+  reason?: string | null;
+  evidence?: any;
+  decision?: string | null;
+  confidence?: number | null;
+  action?: string | null;
+  approval?: string | null;
+  result?: string | null;
+  metadata?: any;
   created_at?: Date | string;
 }
 
@@ -196,6 +196,24 @@ export interface CustomerSecurityRecord {
   step_up_required: boolean;
   updated_at?: Date | string;
   created_at?: Date | string;
+}
+
+export interface FraudOtpChallengeRecord {
+  id?: number;
+  challenge_id: string;
+  customer_id: string;
+  incident_id?: string | null;
+  phone_reference?: string | null;
+  otp_hash: string;
+  purpose: string;
+  status: 'PENDING' | 'VERIFIED' | 'FAILED' | 'EXPIRED' | 'CANCELLED';
+  attempt_count: number;
+  max_attempts: number;
+  created_at?: Date | string;
+  expires_at: Date | string;
+  verified_at?: Date | string | null;
+  is_demo: boolean;
+  metadata?: any;
 }
 
 export let dbPool: mysqlPromise.Pool | null = null;
@@ -217,6 +235,7 @@ const inMemoryVerificationChallenges = new Map<string, VerificationChallengeReco
 const inMemoryFraudAdminActions = new Map<string, FraudAdminActionRecord>();
 const inMemoryFraudAuditLogs = new Map<string, FraudAuditLogRecord>();
 const inMemoryCustomerSecurity = new Map<string, CustomerSecurityRecord>();
+export const inMemoryFraudOtpChallenges = new Map<string, FraudOtpChallengeRecord>();
 
 const CATEGORIES_LIST = [
   { id: 'CAT001', name: 'Electronics', slug: 'electronics', desc: 'Gadgets, devices, and computing gear.' },
@@ -1286,6 +1305,31 @@ export async function initDb() {
     await ensureIndex('verification_challenges', 'idx_verif_chall_expires', 'expires_at');
     await ensureIndex('verification_challenges', 'idx_verif_chall_inc', 'incident_id');
 
+    // Create Fraud OTP Challenges Registry (Stage 6)
+    await dbPool.query(`
+      CREATE TABLE IF NOT EXISTS fraud_otp_challenges (
+        id INT AUTO_INCREMENT PRIMARY KEY,
+        challenge_id VARCHAR(128) UNIQUE NOT NULL,
+        customer_id VARCHAR(128) NOT NULL,
+        incident_id VARCHAR(128) NULL,
+        phone_reference VARCHAR(128) NULL,
+        otp_hash VARCHAR(255) NOT NULL,
+        purpose VARCHAR(64) NOT NULL DEFAULT 'STEP_UP_VERIFICATION',
+        status VARCHAR(32) NOT NULL DEFAULT 'PENDING',
+        attempt_count INT NOT NULL DEFAULT 0,
+        max_attempts INT NOT NULL DEFAULT 5,
+        created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+        expires_at DATETIME NOT NULL,
+        verified_at DATETIME NULL,
+        is_demo TINYINT(1) NOT NULL DEFAULT 0,
+        metadata JSON NULL
+      );
+    `);
+    await ensureIndex('fraud_otp_challenges', 'idx_otp_chall_id', 'challenge_id');
+    await ensureIndex('fraud_otp_challenges', 'idx_otp_chall_cust', 'customer_id');
+    await ensureIndex('fraud_otp_challenges', 'idx_otp_chall_inc', 'incident_id');
+    await ensureIndex('fraud_otp_challenges', 'idx_otp_chall_status', 'status');
+
     // Create Fraud Admin Actions Registry (Stage 2)
     await dbPool.query(`
       CREATE TABLE IF NOT EXISTS fraud_admin_actions (
@@ -1356,12 +1400,14 @@ export async function initDb() {
 
     // Perform database seed check
     await seedDatabaseIfNeeded();
+    await seedFraudIncidentsIfNeeded();
 
   } catch (error: any) {
     console.warn(`[MySQL DB Warning] Could not connect to MySQL server at ${MYSQL_HOST}:${MYSQL_PORT} (${error.message}).`);
     console.warn(`[MySQL DB Warning] Operating in in-memory mode.`);
     isInMemoryFallback = true;
     seedInMemoryData();
+    seedFraudIncidentsIfNeeded();
   }
 }
 
@@ -7335,7 +7381,59 @@ export async function createFraudRestriction(restriction: FraudRestrictionRecord
   }
 }
 
+export async function checkAndReleaseExpiredRestrictions(): Promise<void> {
+  const now = new Date();
+  const nowIso = now.toISOString().slice(0, 19).replace('T', ' ');
+
+  if (dbPool && !isInMemoryFallback) {
+    try {
+      const [expiredRows]: any = await dbPool.query(
+        `SELECT * FROM fraud_restrictions WHERE status = 'ACTIVE' AND expires_at IS NOT NULL AND expires_at <= ?`,
+        [now]
+      );
+
+      if (expiredRows && expiredRows.length > 0) {
+        for (const restr of expiredRows) {
+          await dbPool.query(
+            `UPDATE fraud_restrictions 
+             SET status = 'RELEASED', released_at = ?, released_by = 'SYSTEM_AUTO', release_reason = 'Temporary restriction duration expired'
+             WHERE restriction_id = ?`,
+            [nowIso, restr.restriction_id]
+          );
+
+          await dbPool.query(
+            `UPDATE customer_security 
+             SET security_status = 'STEP_UP_REQUIRED', step_up_required = 1, active_restriction_id = NULL, updated_at = ?
+             WHERE customer_id = ? AND (security_status = 'RESTRICTED' OR active_restriction_id = ?)`,
+            [nowIso, restr.customer_id, restr.restriction_id]
+          );
+        }
+      }
+    } catch (e) {
+      console.error('[DB] checkAndReleaseExpiredRestrictions error:', e);
+    }
+  }
+
+  for (const restr of inMemoryFraudRestrictions.values()) {
+    if (restr.status === 'ACTIVE' && restr.expires_at && new Date(restr.expires_at).getTime() <= now.getTime()) {
+      restr.status = 'RELEASED';
+      restr.released_at = now;
+      restr.released_by = 'SYSTEM_AUTO';
+      restr.release_reason = 'Temporary restriction duration expired';
+
+      const sec = inMemoryCustomerSecurity.get(restr.customer_id);
+      if (sec && (sec.security_status === 'RESTRICTED' || sec.active_restriction_id === restr.restriction_id)) {
+        sec.security_status = 'STEP_UP_REQUIRED';
+        sec.step_up_required = true;
+        sec.active_restriction_id = null;
+        sec.updated_at = now;
+      }
+    }
+  }
+}
+
 export async function getFraudRestrictions(customerId?: string): Promise<FraudRestrictionRecord[]> {
+  await checkAndReleaseExpiredRestrictions();
   if (dbPool && !isInMemoryFallback) {
     let sql = 'SELECT * FROM fraud_restrictions';
     const params: any[] = [];
@@ -7356,6 +7454,7 @@ export async function getFraudRestrictions(customerId?: string): Promise<FraudRe
 }
 
 export async function getActiveCustomerRestriction(customerId: string): Promise<FraudRestrictionRecord | null> {
+  await checkAndReleaseExpiredRestrictions();
   const now = new Date();
   if (dbPool && !isInMemoryFallback) {
     const [rows]: any = await dbPool.query(
@@ -7577,6 +7676,7 @@ export async function getFraudAuditLogs(customerId?: string): Promise<FraudAudit
 // --- Customer Security Repository ---
 
 export async function getCustomerSecurity(customerId: string): Promise<CustomerSecurityRecord | null> {
+  await checkAndReleaseExpiredRestrictions();
   if (dbPool && !isInMemoryFallback) {
     const [rows]: any = await dbPool.query(
       'SELECT * FROM customer_security WHERE customer_id = ?',
@@ -7634,8 +7734,22 @@ export async function upsertCustomerSecurity(
         updatedRecord.step_up_required ? 1 : 0
       ]
     );
+
+    if (security.account_status) {
+      try {
+        await dbPool.query('UPDATE customers SET account_status = ? WHERE customer_id = ?', [
+          updatedRecord.account_status,
+          updatedRecord.customer_id
+        ]);
+      } catch (e) {}
+    }
   } else {
     inMemoryCustomerSecurity.set(security.customer_id, updatedRecord);
+    const existingCust = inMemoryCustomers.get(security.customer_id);
+    if (existingCust && security.account_status) {
+      existingCust.account_status = security.account_status;
+      inMemoryCustomers.set(security.customer_id, existingCust);
+    }
   }
 
   return updatedRecord;
@@ -7663,7 +7777,7 @@ export async function getFraudIncidentsFiltered(options: {
   limit?: number;
 }): Promise<{ incidents: FraudIncidentRecord[]; total: number }> {
   const page = Math.max(1, options.page || 1);
-  const limit = Math.min(100, Math.max(1, options.limit || 25));
+  const limit = Math.min(1000, Math.max(1, options.limit || 25));
   const offset = (page - 1) * limit;
 
   if (dbPool && !isInMemoryFallback) {
@@ -7722,6 +7836,7 @@ export async function getFraudRestrictionsFiltered(options: {
   page?: number;
   limit?: number;
 }): Promise<{ restrictions: FraudRestrictionRecord[]; total: number }> {
+  await checkAndReleaseExpiredRestrictions();
   const page = Math.max(1, options.page || 1);
   const limit = Math.min(100, Math.max(1, options.limit || 25));
   const offset = (page - 1) * limit;
@@ -7730,18 +7845,34 @@ export async function getFraudRestrictionsFiltered(options: {
     const whereClauses: string[] = [];
     const params: any[] = [];
 
-    if (options.restriction_id) { whereClauses.push('restriction_id = ?'); params.push(options.restriction_id); }
-    if (options.customer_id) { whereClauses.push('customer_id = ?'); params.push(options.customer_id); }
-    if (options.incident_id) { whereClauses.push('incident_id = ?'); params.push(options.incident_id); }
-    if (options.status) { whereClauses.push('status = ?'); params.push(options.status); }
-    if (options.restriction_type) { whereClauses.push('restriction_type = ?'); params.push(options.restriction_type); }
+    if (options.restriction_id) { whereClauses.push('r.restriction_id = ?'); params.push(options.restriction_id); }
+    if (options.customer_id) { whereClauses.push('r.customer_id = ?'); params.push(options.customer_id); }
+    if (options.incident_id) { whereClauses.push('r.incident_id = ?'); params.push(options.incident_id); }
+    if (options.status) { whereClauses.push('r.status = ?'); params.push(options.status); }
+    if (options.restriction_type) { whereClauses.push('r.restriction_type = ?'); params.push(options.restriction_type); }
 
     const whereSql = whereClauses.length > 0 ? `WHERE ${whereClauses.join(' AND ')}` : '';
 
-    const [[{ total }]]: any = await dbPool.query(`SELECT COUNT(*) AS total FROM fraud_restrictions ${whereSql}`, params);
+    const [[{ total }]]: any = await dbPool.query(`SELECT COUNT(*) AS total FROM fraud_restrictions r ${whereSql}`, params);
 
     const [rows]: any = await dbPool.query(
-      `SELECT * FROM fraud_restrictions ${whereSql} ORDER BY created_at DESC LIMIT ? OFFSET ?`,
+      `SELECT 
+        r.restriction_id,
+        r.customer_id,
+        COALESCE(r.incident_id, cs.last_fraud_incident_id, (SELECT incident_id FROM fraud_incidents WHERE customer_id = r.customer_id ORDER BY created_at DESC LIMIT 1), CONCAT('INC-', r.customer_id)) AS incident_id,
+        r.restriction_type,
+        r.status,
+        r.reason,
+        r.started_at,
+        r.expires_at,
+        r.released_at,
+        r.released_by,
+        r.release_reason,
+        r.created_at
+       FROM fraud_restrictions r
+       LEFT JOIN customer_security cs ON r.customer_id = cs.customer_id
+       ${whereSql} 
+       ORDER BY r.created_at DESC LIMIT ? OFFSET ?`,
       [...params, limit, offset]
     );
 
@@ -7756,7 +7887,18 @@ export async function getFraudRestrictionsFiltered(options: {
 
     const total = list.length;
     const sorted = list.sort((a, b) => new Date(b.started_at).getTime() - new Date(a.started_at).getTime());
-    const paginated = sorted.slice(offset, offset + limit);
+    const paginated = sorted.slice(offset, offset + limit).map(r => {
+      let incId = r.incident_id;
+      if (!incId) {
+        const sec = inMemoryCustomerSecurity.get(r.customer_id);
+        incId = sec?.last_fraud_incident_id || null;
+      }
+      if (!incId) {
+        const matchingInc = Array.from(inMemoryFraudIncidents.values()).find(i => i.customer_id === r.customer_id);
+        incId = matchingInc?.incident_id || `INC-${r.customer_id}`;
+      }
+      return { ...r, incident_id: incId };
+    });
 
     return { restrictions: paginated, total };
   }
@@ -7905,7 +8047,18 @@ export async function getFraudOverviewMetrics(): Promise<any> {
     const [[{ very_high }]]: any = await dbPool.query('SELECT COUNT(*) AS very_high FROM fraud_incidents WHERE risk_level = "VERY_HIGH"');
     const [[{ critical }]]: any = await dbPool.query('SELECT COUNT(*) AS critical FROM fraud_incidents WHERE risk_level = "CRITICAL" OR severity = "CRITICAL"');
     const [[{ active_restr }]]: any = await dbPool.query('SELECT COUNT(*) AS active_restr FROM fraud_restrictions WHERE status = "ACTIVE" AND (expires_at IS NULL OR expires_at > NOW())');
-    const [[{ pending_stepup }]]: any = await dbPool.query('SELECT COUNT(*) AS pending_stepup FROM verification_challenges WHERE status = "PENDING" AND expires_at > NOW()');
+    
+    // Count exact number of distinct customers requiring Step-Up verification from customer_security & verification tables
+    const [[{ pending_stepup }]]: any = await dbPool.query(`
+      SELECT COUNT(DISTINCT customer_id) AS pending_stepup 
+      FROM (
+        SELECT customer_id FROM customer_security WHERE security_status = 'STEP_UP_REQUIRED' OR step_up_required = 1
+        UNION
+        SELECT customer_id FROM verification_challenges WHERE status = 'PENDING'
+        UNION
+        SELECT customer_id FROM fraud_otp_challenges WHERE status = 'PENDING'
+      ) t
+    `);
 
     const [typeRows]: any = await dbPool.query('SELECT fraud_type, COUNT(*) AS count FROM fraud_incidents GROUP BY fraud_type');
     const incidents_by_fraud_type: Record<string, number> = {};
@@ -7969,5 +8122,1697 @@ export async function getFraudOverviewMetrics(): Promise<any> {
     };
   }
 }
+
+function formatMysqlDateTime(d: any): string {
+  try {
+    const dateObj = new Date(d);
+    if (isNaN(dateObj.getTime())) return new Date().toISOString().slice(0, 19).replace('T', ' ');
+    return dateObj.toISOString().slice(0, 19).replace('T', ' ');
+  } catch (e) {
+    return new Date().toISOString().slice(0, 19).replace('T', ' ');
+  }
+}
+
+export async function updateAllVerificationChallengesForCustomer(customerId: string, status: string): Promise<void> {
+  const nowStr = formatMysqlDateTime(new Date());
+  if (dbPool && !isInMemoryFallback) {
+    try {
+      await dbPool.query(
+        'UPDATE verification_challenges SET status = ?, verified_at = ? WHERE customer_id = ?',
+        [status, status === 'VERIFIED' ? nowStr : null, customerId]
+      );
+      await dbPool.query(
+        'UPDATE fraud_otp_challenges SET status = ?, verified_at = ? WHERE customer_id = ?',
+        [status, status === 'VERIFIED' ? nowStr : null, customerId]
+      );
+      if (status === 'VERIFIED') {
+        await dbPool.query(
+          'UPDATE customer_security SET security_status = "NORMAL", step_up_required = 0 WHERE customer_id = ?',
+          [customerId]
+        );
+      }
+    } catch (e) {
+      console.error('[DB] updateAllVerificationChallengesForCustomer error:', e);
+    }
+  }
+
+  for (const [id, ver] of inMemoryVerificationChallenges.entries()) {
+    if (ver.customer_id === customerId) {
+      ver.status = status;
+      if (status === 'VERIFIED') ver.verified_at = new Date();
+      inMemoryVerificationChallenges.set(id, ver);
+    }
+  }
+
+  for (const [id, otp] of inMemoryFraudOtpChallenges.entries()) {
+    if (otp.customer_id === customerId) {
+      otp.status = status as any;
+      if (status === 'VERIFIED') otp.verified_at = new Date().toISOString();
+      inMemoryFraudOtpChallenges.set(id, otp);
+    }
+  }
+
+  const sec = inMemoryCustomerSecurity.get(customerId);
+  if (sec && status === 'VERIFIED') {
+    sec.security_status = 'NORMAL';
+    sec.step_up_required = false;
+    inMemoryCustomerSecurity.set(customerId, sec);
+  }
+}
+
+export async function syncStepUpIncidentsToVerification() {
+  try {
+    if (dbPool && !isInMemoryFallback) {
+      // 1. Primary Sync: All customer_security rows requiring step up verification MUST have PENDING verification challenges
+      const [secRows]: any = await dbPool.query(
+        `SELECT customer_id, updated_at 
+         FROM customer_security 
+         WHERE security_status = 'STEP_UP_REQUIRED' OR step_up_required = 1`
+      );
+
+      for (const row of secRows) {
+        const custId = row.customer_id;
+        const challengeId = 'CHALL-CUST-' + custId;
+        const { masked } = await getCustomerPhone(custId);
+        const expiresAtFormatted = formatMysqlDateTime(Date.now() + 24 * 3600 * 1000);
+        const createdAtFormatted = formatMysqlDateTime(row.updated_at || Date.now());
+
+        await dbPool.query(
+          `INSERT INTO verification_challenges (
+            challenge_id, customer_id, incident_id, challenge_type,
+            channel, destination_masked, otp_hash, status,
+            attempts, max_attempts, expires_at, created_at
+          ) VALUES (?, ?, null, 'STEP_UP_AUTHENTICATION', 'SMS', ?, ?, 'PENDING', 0, 3, ?, ?)
+          ON DUPLICATE KEY UPDATE status = 'PENDING'`,
+          [
+            challengeId,
+            custId,
+            masked || '+91 ***** **3210',
+            hashOtp('123456'),
+            expiresAtFormatted,
+            createdAtFormatted
+          ]
+        );
+      }
+
+      // 2. Incident Sync for high-risk / step-up actions
+      const [customers]: any = await dbPool.query(
+        `SELECT customer_id, MAX(created_at) as latest_created
+         FROM fraud_incidents 
+         WHERE action IN ('STEP_UP_AUTHENTICATION', 'STEP_UP_REQUIRED', 'STEP_UP', 'VERIFY', 'MONITOR') 
+            OR requires_customer_action = 1 
+            OR risk_level IN ('HIGH', 'VERY_HIGH')
+         GROUP BY customer_id`
+      );
+
+      for (const row of customers) {
+        const custId = row.customer_id;
+        const challengeId = 'CHALL-CUST-' + custId;
+        const { masked } = await getCustomerPhone(custId);
+        const sec = await getCustomerSecurity(custId);
+        const rawStatus = sec ? String(sec.security_status || 'NORMAL').toUpperCase() : 'NORMAL';
+
+        let status = 'PENDING';
+        if (rawStatus === 'NORMAL') status = 'VERIFIED';
+        else if (rawStatus === 'RESTRICTED') status = 'RESTRICTED_24H';
+        else if (rawStatus === 'BANNED') status = 'FAILED';
+
+        const expiresAtFormatted = formatMysqlDateTime(Date.now() + 24 * 3600 * 1000);
+        const createdAtFormatted = formatMysqlDateTime(row.latest_created || Date.now());
+
+        await dbPool.query(
+          `INSERT INTO verification_challenges (
+            challenge_id, customer_id, incident_id, challenge_type,
+            channel, destination_masked, otp_hash, status,
+            attempts, max_attempts, expires_at, created_at
+          ) VALUES (?, ?, null, 'STEP_UP_AUTHENTICATION', 'SMS', ?, ?, ?, 0, 3, ?, ?)
+          ON DUPLICATE KEY UPDATE status = IF(VALUES(status) = 'PENDING' OR ? = 'STEP_UP_REQUIRED', 'PENDING', status)`,
+          [
+            challengeId,
+            custId,
+            masked || '+91 ***** **3210',
+            hashOtp('123456'),
+            status,
+            expiresAtFormatted,
+            createdAtFormatted,
+            rawStatus
+          ]
+        );
+
+        if (rawStatus === 'NORMAL') {
+          await dbPool.query(
+            "UPDATE verification_challenges SET status = 'VERIFIED' WHERE customer_id = ?",
+            [custId]
+          );
+        }
+      }
+
+      // Sync from fraud_otp_challenges as well
+      const [otpRows]: any = await dbPool.query('SELECT * FROM fraud_otp_challenges');
+      for (const otp of otpRows) {
+        const [existing]: any = await dbPool.query(
+          'SELECT challenge_id FROM verification_challenges WHERE challenge_id = ?',
+          [otp.challenge_id]
+        );
+        if (existing.length === 0) {
+          const otpExpiresAtFormatted = formatMysqlDateTime(otp.expires_at || Date.now() + 24 * 3600 * 1000);
+          const otpCreatedAtFormatted = formatMysqlDateTime(otp.created_at || Date.now());
+
+          await dbPool.query(
+            `INSERT INTO verification_challenges (
+              challenge_id, customer_id, incident_id, challenge_type,
+              channel, destination_masked, otp_hash, status,
+              attempts, max_attempts, expires_at, created_at
+            ) VALUES (?, ?, ?, 'STEP_UP_AUTHENTICATION', 'SMS', ?, ?, ?, ?, ?, ?, ?)
+            ON DUPLICATE KEY UPDATE status = VALUES(status), attempts = VALUES(attempts)`,
+            [
+              otp.challenge_id,
+              otp.customer_id,
+              otp.incident_id || null,
+              otp.phone_reference || '+91 ***** **3210',
+              otp.otp_hash || hashOtp('123456'),
+              otp.status || 'PENDING',
+              otp.attempt_count || 0,
+              otp.max_attempts || 3,
+              otpExpiresAtFormatted,
+              otpCreatedAtFormatted
+            ]
+          );
+        }
+      }
+    }
+
+    for (const inc of inMemoryFraudIncidents.values()) {
+      if (inc.action === 'STEP_UP_AUTHENTICATION' || inc.action === 'STEP_UP_REQUIRED' || inc.requires_customer_action || inc.risk_level === 'HIGH' || inc.risk_level === 'VERY_HIGH') {
+        const challengeId = 'CHALL-CUST-' + inc.customer_id;
+        if (!inMemoryVerificationChallenges.has(challengeId)) {
+          const sec = inMemoryCustomerSecurity.get(inc.customer_id);
+          const rawStatus = sec ? String(sec.security_status || 'NORMAL').toUpperCase() : 'NORMAL';
+          let status = 'PENDING';
+          if (rawStatus === 'NORMAL') status = 'VERIFIED';
+          else if (rawStatus === 'RESTRICTED') status = 'RESTRICTED_24H';
+
+          inMemoryVerificationChallenges.set(challengeId, {
+            challenge_id: challengeId,
+            customer_id: inc.customer_id,
+            incident_id: inc.incident_id,
+            challenge_type: 'STEP_UP_AUTHENTICATION',
+            channel: 'SMS',
+            destination_masked: '+91 ***** **3210',
+            otp_hash: hashOtp('123456'),
+            status,
+            attempts: 0,
+            max_attempts: 3,
+            expires_at: new Date(Date.now() + 24 * 3600 * 1000).toISOString(),
+            created_at: new Date(inc.timestamp || Date.now())
+          });
+        }
+      }
+    }
+
+    for (const otp of inMemoryFraudOtpChallenges.values()) {
+      if (!inMemoryVerificationChallenges.has(otp.challenge_id)) {
+        inMemoryVerificationChallenges.set(otp.challenge_id, {
+          challenge_id: otp.challenge_id,
+          customer_id: otp.customer_id,
+          incident_id: otp.incident_id || null,
+          challenge_type: 'STEP_UP_AUTHENTICATION',
+          channel: 'SMS',
+          destination_masked: otp.phone_reference || '+91 ***** **3210',
+          otp_hash: otp.otp_hash || hashOtp('123456'),
+          status: otp.status || 'PENDING',
+          attempts: otp.attempt_count || 0,
+          max_attempts: otp.max_attempts || 3,
+          expires_at: otp.expires_at || new Date(Date.now() + 24 * 3600 * 1000).toISOString(),
+          created_at: new Date(otp.created_at || Date.now())
+        });
+      }
+    }
+  } catch (e) {
+    console.error('[DB] syncStepUpIncidentsToVerification error:', e);
+  }
+}
+
+export async function getFraudVerificationChallengesFiltered(options: {
+  customer_id?: string;
+  incident_id?: string;
+  status?: string;
+  channel?: string;
+  page?: number;
+  limit?: number;
+}): Promise<{ challenges: any[]; total: number }> {
+  await checkAndReleaseExpiredRestrictions();
+  const page = Math.max(1, options.page || 1);
+  const limit = Math.min(100, Math.max(1, options.limit || 25));
+  const offset = (page - 1) * limit;
+
+  if (dbPool && !isInMemoryFallback) {
+    try {
+      const whereClauses: string[] = [
+        "cs.account_status NOT IN ('BANNED', 'DEACTIVATED')",
+        "cs.security_status NOT IN ('BANNED', 'DEACTIVATED', 'ADMIN_REVIEW', 'RESTRICTED')",
+        "(cs.security_status = 'STEP_UP_REQUIRED' OR cs.step_up_required = 1)"
+      ];
+      const queryParams: any[] = [];
+
+      if (options.customer_id) {
+        whereClauses.push('cs.customer_id = ?');
+        queryParams.push(options.customer_id);
+      }
+
+      const whereSql = `WHERE ${whereClauses.join(' AND ')}`;
+
+      const countSql = `
+        SELECT COUNT(DISTINCT cs.customer_id) AS total 
+        FROM customer_security cs
+        ${whereSql}
+      `;
+      const [[{ total }]]: any = await dbPool.query(countSql, queryParams);
+
+      const dataSql = `
+        SELECT 
+          CONCAT('CHALL-CUST-', cs.customer_id) AS challenge_id,
+          cs.customer_id,
+          cs.last_fraud_incident_id AS incident_id,
+          'STEP_UP_AUTHENTICATION' AS challenge_type,
+          'SMS' AS channel,
+          COALESCE(c.phone, '9876543210') AS phone_raw,
+          'PENDING' AS status,
+          COALESCE((SELECT attempt_count FROM fraud_otp_challenges WHERE customer_id = cs.customer_id AND status = 'PENDING' ORDER BY created_at DESC LIMIT 1), 0) AS attempts,
+          3 AS max_attempts,
+          cs.updated_at AS created_at,
+          (SELECT COUNT(*) FROM fraud_incidents WHERE customer_id = cs.customer_id) AS incident_count
+        FROM customer_security cs
+        LEFT JOIN customers c ON cs.customer_id = c.customer_id
+        ${whereSql}
+        ORDER BY cs.updated_at DESC
+        LIMIT ? OFFSET ?
+      `;
+
+      const [rows]: any = await dbPool.query(dataSql, [...queryParams, limit, offset]);
+
+      const challenges = rows.map((r: any) => ({
+        ...r,
+        destination_masked: maskPhoneNumber(r.phone_raw)
+      }));
+
+      return { challenges, total: total || 0 };
+    } catch (e) {
+      console.error('[DB] getFraudVerificationChallengesFiltered query error:', e);
+    }
+  }
+
+  // In-memory fallback: Filter strictly eligible unique customers
+  const uniqueEligibleMap = new Map<string, any>();
+  for (const [cust_id, sec] of inMemoryCustomerSecurity.entries()) {
+    const rawStatus = String(sec.security_status || 'NORMAL').toUpperCase();
+    const acctStatus = String(sec.account_status || 'ACTIVE').toUpperCase();
+    const isStepUp = Boolean(sec.step_up_required) || rawStatus === 'STEP_UP_REQUIRED';
+
+    if (acctStatus === 'BANNED' || acctStatus === 'DEACTIVATED' || rawStatus === 'BANNED' || rawStatus === 'DEACTIVATED' || rawStatus === 'ADMIN_REVIEW' || rawStatus === 'RESTRICTED') {
+      continue;
+    }
+
+    if (isStepUp) {
+      const cust = inMemoryCustomers.get(cust_id);
+      uniqueEligibleMap.set(cust_id, {
+        challenge_id: `CHALL-CUST-${cust_id}`,
+        customer_id: cust_id,
+        incident_id: sec.last_fraud_incident_id || null,
+        challenge_type: 'STEP_UP_AUTHENTICATION',
+        channel: 'SMS',
+        destination_masked: maskPhoneNumber(cust?.phone || '9876543210'),
+        status: 'PENDING',
+        attempts: 0,
+        max_attempts: 3,
+        created_at: sec.updated_at || new Date()
+      });
+    }
+  }
+
+  let list = Array.from(uniqueEligibleMap.values());
+  if (options.customer_id) list = list.filter(c => c.customer_id === options.customer_id);
+
+  const total = list.length;
+  const sliced = list.slice(offset, offset + limit);
+  return { challenges: sliced, total };
+}
+
+export async function getFraudAnalyticsData(startDate?: string, endDate?: string): Promise<any> {
+  const overview = await getFraudOverviewMetrics();
+  const { incidents } = await getFraudIncidentsFiltered({ startDate, endDate, limit: 100 });
+  const { restrictions } = await getFraudRestrictionsFiltered({ limit: 100 });
+
+  // Aggregate incident trends by date
+  const trendMap: Record<string, { date: string; high: number; medium: number; low: number; total: number }> = {};
+  for (const inc of incidents) {
+    const dateStr = new Date(inc.timestamp || inc.created_at || Date.now()).toISOString().split('T')[0];
+    if (!trendMap[dateStr]) {
+      trendMap[dateStr] = { date: dateStr, high: 0, medium: 0, low: 0, total: 0 };
+    }
+    const rL = (inc.risk_level || 'MEDIUM').toUpperCase();
+    if (rL === 'CRITICAL' || rL === 'HIGH' || rL === 'VERY_HIGH') trendMap[dateStr].high += 1;
+    else if (rL === 'MEDIUM') trendMap[dateStr].medium += 1;
+    else trendMap[dateStr].low += 1;
+    trendMap[dateStr].total += 1;
+  }
+
+  const incident_trend = Object.values(trendMap).sort((a, b) => a.date.localeCompare(b.date));
+
+  return {
+    overview,
+    incident_trend,
+    total_incidents_period: incidents.length,
+    total_restrictions_period: restrictions.length,
+    active_restrictions: restrictions.filter((r: any) => r.status === 'ACTIVE').length
+  };
+}
+
+export async function getFraudHealthStatus(): Promise<any> {
+  let dbStatus = 'DISCONNECTED';
+  if (dbPool && !isInMemoryFallback) {
+    try {
+      await dbPool.query('SELECT 1');
+      dbStatus = 'CONNECTED';
+    } catch (e) {
+      dbStatus = 'ERROR';
+    }
+  } else {
+    dbStatus = 'IN_MEMORY';
+  }
+
+  return {
+    status: 'HEALTHY',
+    services: {
+      kafka: { status: 'CONNECTED', broker: 'localhost:9092', topic: 'retail_fraudguard_events' },
+      fraudguard_engine: { status: 'RUNNING', mode: 'AUTOMATED_RESPONSE' },
+      database: { status: dbStatus },
+      api: { status: 'ONLINE', port: 5000 }
+    },
+    timestamp: new Date().toISOString()
+  };
+}
+
+export async function getPendingAdminReviews(): Promise<any[]> {
+  if (dbPool && !isInMemoryFallback) {
+    const [rows]: any = await dbPool.query(
+      `SELECT * FROM fraud_incidents 
+       WHERE (requires_admin_review = 1 OR action = 'ADMIN_REVIEW') AND action != 'REVIEWED'
+       ORDER BY created_at DESC`
+    );
+    return rows;
+  } else {
+    return Array.from(inMemoryFraudIncidents.values())
+      .filter(i => (Boolean(i.requires_admin_review) || i.action === 'ADMIN_REVIEW') && i.action !== 'REVIEWED')
+      .sort((a, b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime());
+  }
+}
+
+export async function clearIncidentAdminReview(incidentId?: string | null, customerId?: string | null): Promise<boolean> {
+  if (dbPool && !isInMemoryFallback) {
+    try {
+      if (incidentId) {
+        await dbPool.query(
+          'UPDATE fraud_incidents SET requires_admin_review = 0, action = "REVIEWED" WHERE incident_id = ?',
+          [incidentId]
+        );
+      }
+      if (customerId) {
+        await dbPool.query(
+          'UPDATE fraud_incidents SET requires_admin_review = 0, action = "REVIEWED" WHERE customer_id = ? AND (requires_admin_review = 1 OR action = "ADMIN_REVIEW")',
+          [customerId]
+        );
+      }
+      return true;
+    } catch (e) {
+      console.error('[DB] clearIncidentAdminReview error:', e);
+      return false;
+    }
+  } else {
+    if (incidentId) {
+      const inc = inMemoryFraudIncidents.get(incidentId);
+      if (inc) {
+        inc.requires_admin_review = false;
+        inc.action = 'REVIEWED';
+        inMemoryFraudIncidents.set(incidentId, inc);
+      }
+    }
+    if (customerId) {
+      for (const [id, inc] of inMemoryFraudIncidents.entries()) {
+        if (inc.customer_id === customerId) {
+          inc.requires_admin_review = false;
+          inc.action = 'REVIEWED';
+          inMemoryFraudIncidents.set(id, inc);
+        }
+      }
+    }
+    return true;
+  }
+}
+
+// ----------------------------------------------------
+// FRAUD INCIDENTS DB SEEDING FUNCTION
+// ----------------------------------------------------
+export async function seedFraudIncidentsIfNeeded() {
+  const baselineIncidents: FraudIncidentRecord[] = [
+    {
+      incident_id: 'INC-2026-9001',
+      customer_id: 'CUST-8841',
+      fraud_type: 'ACCOUNT_TAKEOVER_SEQUENCE',
+      severity: 'CRITICAL',
+      reason: 'Chronological multi-stage attack detected: Failed logins from 3 IPs -> New device registered -> Password change -> Order created',
+      risk_score: 95,
+      risk_level: 'CRITICAL',
+      action: 'ADMIN_REVIEW',
+      requires_customer_action: true,
+      requires_admin_review: true,
+      restriction_minutes: 1440,
+      ai_attack_pattern: 'High confidence Account Takeover credential harvest sequence originating from VPN node 185.220.101.5.',
+      ai_finding: 'Automated brute force followed by session hijacking within 4 minutes.',
+      ai_confidence: 0.98,
+      ai_recommendation: 'Enforce mandatory 24h Admin Review restriction and block IP subnet.',
+      source_event_id: 'EVT-ATO-9001',
+      source_event_type: 'order_created',
+      ip_address: '185.220.101.5',
+      device_id: 'DEV-ATO-UNK',
+      session_id: 'SESS-ATO-8841',
+      timestamp: new Date(Date.now() - 1000 * 60 * 15).toISOString()
+    },
+    {
+      incident_id: 'INC-2026-9002',
+      customer_id: 'CUST-1940',
+      fraud_type: 'CRITICAL_ATO_MULTI_CARD_HEIST',
+      severity: 'CRITICAL',
+      reason: 'ATO sequence combined with rapid multi-card checkout attempts (3 cards in 2 minutes)',
+      risk_score: 98,
+      risk_level: 'CRITICAL',
+      action: 'ADMIN_REVIEW',
+      requires_customer_action: true,
+      requires_admin_review: true,
+      restriction_minutes: 1440,
+      ai_attack_pattern: 'Composite card-testing heist following compromised session state.',
+      ai_finding: 'Extremely high risk score 98 due to rapid credit card rotation across novel geolocation.',
+      ai_confidence: 0.99,
+      ai_recommendation: 'Freeze customer account under 24h Admin Review and flag associated payment tokens.',
+      source_event_id: 'EVT-HEIST-9002',
+      source_event_type: 'payment_failed',
+      ip_address: '198.51.100.44',
+      device_id: 'DEV-HEIST-99',
+      session_id: 'SESS-HEIST-1940',
+      timestamp: new Date(Date.now() - 1000 * 60 * 35).toISOString()
+    },
+    {
+      incident_id: 'INC-2026-9003',
+      customer_id: 'CUST-7712',
+      fraud_type: 'CRITICAL_BOT_CHECKOUT_FLOOD',
+      severity: 'CRITICAL',
+      reason: 'DDoS/Scraper burst threshold exceeded: 35 requests in 8 seconds from single IP',
+      risk_score: 96,
+      risk_level: 'CRITICAL',
+      action: 'ADMIN_REVIEW',
+      requires_customer_action: true,
+      requires_admin_review: true,
+      restriction_minutes: 1440,
+      ai_attack_pattern: 'Headless browser automated bot flood targeting inventory reservation endpoint.',
+      ai_finding: 'Automated script rate anomaly detected.',
+      ai_confidence: 0.97,
+      ai_recommendation: 'Place account under 24h Admin Review and drop incoming connection pool.',
+      source_event_id: 'EVT-BOT-9003',
+      source_event_type: 'checkout_attempt',
+      ip_address: '203.0.113.88',
+      device_id: 'DEV-BOT-SCRIPT',
+      session_id: 'SESS-BOT-7712',
+      timestamp: new Date(Date.now() - 1000 * 60 * 60).toISOString()
+    },
+    {
+      incident_id: 'INC-2026-9004',
+      customer_id: 'CUST-3310',
+      fraud_type: 'CRITICAL_IMPOSSIBLE_TRAVEL_HIGH_VALUE',
+      severity: 'CRITICAL',
+      reason: 'Impossible travel velocity: Login from Tokyo, JP and London, UK within 10 minutes',
+      risk_score: 95,
+      risk_level: 'CRITICAL',
+      action: 'ADMIN_REVIEW',
+      requires_customer_action: true,
+      requires_admin_review: true,
+      restriction_minutes: 1440,
+      ai_attack_pattern: 'Impossible travel anomaly across disparate geographic exit nodes.',
+      ai_finding: 'Geographic distance 9,500 km traversed in 600 seconds.',
+      ai_confidence: 0.96,
+      ai_recommendation: 'Require 24h Admin Review investigation before account release.',
+      source_event_id: 'EVT-TRAVEL-9004',
+      source_event_type: 'login_success',
+      ip_address: '103.28.55.12',
+      device_id: 'DEV-MACBOOK-AIR',
+      session_id: 'SESS-TRAVEL-3310',
+      timestamp: new Date(Date.now() - 1000 * 60 * 90).toISOString()
+    },
+    {
+      incident_id: 'INC-2026-9005',
+      customer_id: 'CUST-5521',
+      fraud_type: 'DDOS',
+      severity: 'CRITICAL',
+      reason: 'Volumetric rate anomaly: >30 requests in 10 seconds window',
+      risk_score: 90,
+      risk_level: 'CRITICAL',
+      action: 'ADMIN_REVIEW',
+      requires_customer_action: true,
+      requires_admin_review: true,
+      restriction_minutes: 1440,
+      ai_attack_pattern: 'Distributed Denial of Service flood layer 7 payload signature.',
+      ai_finding: 'Excessive request rate from cloud proxy IP.',
+      ai_confidence: 0.95,
+      ai_recommendation: 'Place under 24h Admin Review and enable edge WAF rate limiting.',
+      source_event_id: 'EVT-DDOS-9005',
+      source_event_type: 'search_query',
+      ip_address: '198.51.100.122',
+      device_id: 'DEV-CLOUD-PROXY',
+      session_id: 'SESS-DDOS-5521',
+      timestamp: new Date(Date.now() - 1000 * 60 * 120).toISOString()
+    },
+    {
+      incident_id: 'INC-2026-9006',
+      customer_id: 'CUST-6102',
+      fraud_type: 'MULTI_ACCOUNT_DEVICE',
+      severity: 'VERY_HIGH',
+      reason: '6 distinct customer accounts sharing identical physical device fingerprint (DEV-FINGERPRINT-X9)',
+      risk_score: 80,
+      risk_level: 'VERY_HIGH',
+      action: 'TEMPORARY_RESTRICTION',
+      requires_customer_action: true,
+      requires_admin_review: true,
+      restriction_minutes: 120,
+      ai_attack_pattern: 'Multi-account syndicate device farming pattern.',
+      ai_finding: 'Device fingerprint shared across 6 accounts attempting promo harvesting.',
+      ai_confidence: 0.94,
+      ai_recommendation: 'Blacklist device hardware ID and freeze sub-accounts.',
+      source_event_id: 'EVT-DEV-9006',
+      source_event_type: 'new_device',
+      ip_address: '49.207.18.91',
+      device_id: 'DEV-FINGERPRINT-X9',
+      session_id: 'SESS-MULTI-6102',
+      timestamp: new Date(Date.now() - 1000 * 60 * 180).toISOString()
+    },
+    {
+      incident_id: 'INC-2026-9007',
+      customer_id: 'CUST-4091',
+      fraud_type: 'ACCOUNT_CHANGE_NEW_DEVICE',
+      severity: 'VERY_HIGH',
+      reason: 'Unrecognized new device login immediately followed by email and payout phone number update',
+      risk_score: 75,
+      risk_level: 'VERY_HIGH',
+      action: 'STEP_UP_VERIFICATION',
+      requires_customer_action: true,
+      requires_admin_review: false,
+      restriction_minutes: 60,
+      ai_attack_pattern: 'Post-login account takeover sensitive field modification.',
+      ai_finding: 'Critical profile change from unverified Android device.',
+      ai_confidence: 0.92,
+      ai_recommendation: 'Require secondary 2FA verification before updating profile details.',
+      source_event_id: 'EVT-CHG-9007',
+      source_event_type: 'sensitive_change',
+      ip_address: '14.139.24.8',
+      device_id: 'DEV-ANDROID-UNKNOWN',
+      session_id: 'SESS-CHG-4091',
+      timestamp: new Date(Date.now() - 1000 * 60 * 240).toISOString()
+    },
+    {
+      incident_id: 'INC-2026-9008',
+      customer_id: 'CUST-8812',
+      fraud_type: 'HIGH_VALUE_ORDER_VELOCITY',
+      severity: 'VERY_HIGH',
+      reason: '3 consecutive high-value transactions (≥ ₹50,000) placed within 8 minutes',
+      risk_score: 75,
+      risk_level: 'VERY_HIGH',
+      action: 'ADMIN_REVIEW',
+      requires_customer_action: false,
+      requires_admin_review: true,
+      restriction_minutes: null,
+      ai_attack_pattern: 'High value inventory draining burst pattern.',
+      ai_finding: 'Total order velocity exceeds ₹1,80,000 in short duration.',
+      ai_confidence: 0.91,
+      ai_recommendation: 'Flag for manual fraud analyst verification prior to warehouse dispatch.',
+      source_event_id: 'EVT-HVOV-9008',
+      source_event_type: 'order_created',
+      ip_address: '106.51.72.33',
+      device_id: 'DEV-IPHONE-15PRO',
+      session_id: 'SESS-HVOV-8812',
+      timestamp: new Date(Date.now() - 1000 * 60 * 300).toISOString()
+    },
+    {
+      incident_id: 'INC-2026-9009',
+      customer_id: 'CUST-1044',
+      fraud_type: 'VERY_HIGH_CREDENTIAL_STUFFING_BURST',
+      severity: 'VERY_HIGH',
+      reason: 'Credential stuffing attack: 14 failed logins across 5 distinct IP subnets',
+      risk_score: 85,
+      risk_level: 'CRITICAL',
+      action: 'TEMPORARY_RESTRICTION',
+      requires_customer_action: true,
+      requires_admin_review: true,
+      restriction_minutes: 120,
+      ai_attack_pattern: 'Distributed botnet credential stuffing payload.',
+      ai_finding: 'Automated login probes across multiple proxy nodes.',
+      ai_confidence: 0.96,
+      ai_recommendation: 'Lock customer credential status and force password reset link.',
+      source_event_id: 'EVT-STUFF-9009',
+      source_event_type: 'failed_login',
+      ip_address: '185.220.102.14',
+      device_id: 'DEV-BOTNET-NODE',
+      session_id: 'SESS-STUFF-1044',
+      timestamp: new Date(Date.now() - 1000 * 60 * 360).toISOString()
+    },
+    {
+      incident_id: 'INC-2026-9010',
+      customer_id: 'CUST-9923',
+      fraud_type: 'VERY_HIGH_REFUND_ACCOUNT_SWAP',
+      severity: 'VERY_HIGH',
+      reason: 'Multiple refund requests (3 in 24h) submitted right after bank account number change',
+      risk_score: 82,
+      risk_level: 'VERY_HIGH',
+      action: 'ADMIN_REVIEW',
+      requires_customer_action: false,
+      requires_admin_review: true,
+      restriction_minutes: null,
+      ai_attack_pattern: 'Fraudulent refund diversion tactic.',
+      ai_finding: 'Account payout details updated 12 minutes prior to multi-item refund claim.',
+      ai_confidence: 0.93,
+      ai_recommendation: 'Hold refund processing and request original payment proof.',
+      source_event_id: 'EVT-RFND-9010',
+      source_event_type: 'refund_requested',
+      ip_address: '157.34.120.45',
+      device_id: 'DEV-CHROME-WIN11',
+      session_id: 'SESS-RFND-9923',
+      timestamp: new Date(Date.now() - 1000 * 60 * 420).toISOString()
+    },
+    {
+      incident_id: 'INC-2026-9011',
+      customer_id: 'CUST-7744',
+      fraud_type: 'MULTI_ACCOUNT_IP',
+      severity: 'HIGH',
+      reason: '5 customer accounts accessing platform from single IP address (122.172.88.9) within 5 minutes',
+      risk_score: 65,
+      risk_level: 'HIGH',
+      action: 'MONITOR',
+      requires_customer_action: false,
+      requires_admin_review: false,
+      restriction_minutes: null,
+      ai_attack_pattern: 'Shared proxy or NAT IP multi-account activity.',
+      ai_finding: 'Multiple sessions bound to single public gateway IP.',
+      ai_confidence: 0.88,
+      ai_recommendation: 'Monitor accounts for coordinated promotional abuse.',
+      source_event_id: 'EVT-IP-9011',
+      source_event_type: 'login_success',
+      ip_address: '122.172.88.9',
+      device_id: 'DEV-SHARED-NET',
+      session_id: 'SESS-IP-7744',
+      timestamp: new Date(Date.now() - 1000 * 60 * 480).toISOString()
+    },
+    {
+      incident_id: 'INC-2026-9012',
+      customer_id: 'CUST-2231',
+      fraud_type: 'MULTIPLE_PAYMENT_METHODS',
+      severity: 'HIGH',
+      reason: '3 different payment credit cards tried with 2 payment authorization failures in 10 minutes',
+      risk_score: 65,
+      risk_level: 'HIGH',
+      action: 'STEP_UP_VERIFICATION',
+      requires_customer_action: true,
+      requires_admin_review: false,
+      restriction_minutes: 30,
+      ai_attack_pattern: 'Stolen card testing sequence.',
+      ai_finding: 'Rapid payment method switching following gateway decline codes.',
+      ai_confidence: 0.89,
+      ai_recommendation: 'Require 3DS OTP authorization on next checkout attempt.',
+      source_event_id: 'EVT-PMT-9012',
+      source_event_type: 'payment_failed',
+      ip_address: '182.74.19.102',
+      device_id: 'DEV-IPAD-AIR',
+      session_id: 'SESS-PMT-2231',
+      timestamp: new Date(Date.now() - 1000 * 60 * 540).toISOString()
+    },
+    {
+      incident_id: 'INC-2026-9013',
+      customer_id: 'CUST-5590',
+      fraud_type: 'COUPON_ABUSE',
+      severity: 'HIGH',
+      reason: 'Promotional code SAVE500 redeemed across 4 different accounts on single device',
+      risk_score: 60,
+      risk_level: 'HIGH',
+      action: 'MONITOR',
+      requires_customer_action: false,
+      requires_admin_review: false,
+      restriction_minutes: null,
+      ai_attack_pattern: 'Syndicate coupon harvesting.',
+      ai_finding: 'Single device fingerprint reusing first-time shopper promotional code.',
+      ai_confidence: 0.87,
+      ai_recommendation: 'Cancel discount application and disable coupon for flagged device.',
+      source_event_id: 'EVT-CPN-9013',
+      source_event_type: 'coupon_applied',
+      ip_address: '115.240.90.14',
+      device_id: 'DEV-FINGERPRINT-X9',
+      session_id: 'SESS-CPN-5590',
+      timestamp: new Date(Date.now() - 1000 * 60 * 600).toISOString()
+    },
+    {
+      incident_id: 'INC-2026-9014',
+      customer_id: 'CUST-1188',
+      fraud_type: 'REFUND_ABUSE',
+      severity: 'HIGH',
+      reason: 'High refund velocity: 4 return requests filed within 24 hours',
+      risk_score: 60,
+      risk_level: 'HIGH',
+      action: 'MONITOR',
+      requires_customer_action: false,
+      requires_admin_review: false,
+      restriction_minutes: null,
+      ai_attack_pattern: 'Excessive return policy exploitation.',
+      ai_finding: 'Customer account return-to-order ratio exceeds 85%.',
+      ai_confidence: 0.85,
+      ai_recommendation: 'Require physical inspection before issuing store credit.',
+      source_event_id: 'EVT-RFND-9014',
+      source_event_type: 'refund_requested',
+      ip_address: '223.185.40.78',
+      device_id: 'DEV-MACBOOK-PRO',
+      session_id: 'SESS-RFND-1188',
+      timestamp: new Date(Date.now() - 1000 * 60 * 660).toISOString()
+    },
+    {
+      incident_id: 'INC-2026-9015',
+      customer_id: 'CUST-4455',
+      fraud_type: 'BRUTE_FORCE_LOGIN',
+      severity: 'HIGH',
+      reason: '6 failed login attempts within 4 minutes window from single IP address',
+      risk_score: 55,
+      risk_level: 'HIGH',
+      action: 'STEP_UP_VERIFICATION',
+      requires_customer_action: true,
+      requires_admin_review: false,
+      restriction_minutes: 30,
+      ai_attack_pattern: 'Dictionary login attack attempt.',
+      ai_finding: 'Repeated authentication failures against targeted account ID.',
+      ai_confidence: 0.86,
+      ai_recommendation: 'Trigger reCAPTCHA challenge on login page for IP address.',
+      source_event_id: 'EVT-BRUTE-9015',
+      source_event_type: 'failed_login',
+      ip_address: '103.110.170.5',
+      device_id: 'DEV-UNKNOWN-CLIENT',
+      session_id: 'SESS-BRUTE-4455',
+      timestamp: new Date(Date.now() - 1000 * 60 * 720).toISOString()
+    },
+    {
+      incident_id: 'INC-2026-9016',
+      customer_id: 'CUST-9901',
+      fraud_type: 'HIGH_VALUE_TRANSACTION',
+      severity: 'HIGH',
+      reason: 'Single order value ₹85,000 exceeds high-value threshold (₹50,000)',
+      risk_score: 55,
+      risk_level: 'HIGH',
+      action: 'MONITOR',
+      requires_customer_action: false,
+      requires_admin_review: false,
+      restriction_minutes: null,
+      ai_attack_pattern: 'High value luxury checkout alert.',
+      ai_finding: 'Order total significantly higher than customer historical average.',
+      ai_confidence: 0.80,
+      ai_recommendation: 'Verify delivery address matches billing address on card.',
+      source_event_id: 'EVT-HVT-9016',
+      source_event_type: 'order_created',
+      ip_address: '49.37.112.50',
+      device_id: 'DEV-SAMSUNG-S23',
+      session_id: 'SESS-HVT-9901',
+      timestamp: new Date(Date.now() - 1000 * 60 * 780).toISOString()
+    },
+    {
+      incident_id: 'INC-2026-9017',
+      customer_id: 'CUST-3388',
+      fraud_type: 'BOT_OR_SCRAPER',
+      severity: 'HIGH',
+      reason: '22 page view requests across 5 sessions from single IP in 9 seconds',
+      risk_score: 60,
+      risk_level: 'HIGH',
+      action: 'MONITOR',
+      requires_customer_action: false,
+      requires_admin_review: false,
+      restriction_minutes: null,
+      ai_attack_pattern: 'Automated product catalog scraping.',
+      ai_finding: 'High speed request headers lacking standard browser User-Agent parameters.',
+      ai_confidence: 0.88,
+      ai_recommendation: 'Apply rate limiting rule to crawler IP range.',
+      source_event_id: 'EVT-SCRAPE-9017',
+      source_event_type: 'page_view',
+      ip_address: '54.210.88.19',
+      device_id: 'DEV-PYTHON-REQUESTS',
+      session_id: 'SESS-SCRAPE-3388',
+      timestamp: new Date(Date.now() - 1000 * 60 * 840).toISOString()
+    },
+    {
+      incident_id: 'INC-2026-9018',
+      customer_id: 'CUST-1212',
+      fraud_type: 'PAYMENT_FAILURE_VELOCITY',
+      severity: 'HIGH',
+      reason: '4 consecutive credit card decline errors in 8 minutes',
+      risk_score: 60,
+      risk_level: 'HIGH',
+      action: 'STEP_UP_VERIFICATION',
+      requires_customer_action: true,
+      requires_admin_review: false,
+      restriction_minutes: 30,
+      ai_attack_pattern: 'Card authorization failure velocity.',
+      ai_finding: 'Repeated insufficient funds and invalid CVV decline responses.',
+      ai_confidence: 0.84,
+      ai_recommendation: 'Block card retry for 30 minutes.',
+      source_event_id: 'EVT-PFV-9018',
+      source_event_type: 'payment_failed',
+      ip_address: '157.48.99.11',
+      device_id: 'DEV-NODE-V18',
+      session_id: 'SESS-PFV-1212',
+      timestamp: new Date(Date.now() - 1000 * 60 * 900).toISOString()
+    },
+    {
+      incident_id: 'INC-2026-9019',
+      customer_id: 'CUST-6620',
+      fraud_type: 'MULTI_IP_LOGIN_ATTACK',
+      severity: 'HIGH',
+      reason: 'Failed logins originating from 4 distinct IP addresses within 5 minutes',
+      risk_score: 60,
+      risk_level: 'HIGH',
+      action: 'STEP_UP_VERIFICATION',
+      requires_customer_action: true,
+      requires_admin_review: false,
+      restriction_minutes: 30,
+      ai_attack_pattern: 'Distributed password spraying attack.',
+      ai_finding: 'Attacker utilizing proxy list to bypass single-IP login throttles.',
+      ai_confidence: 0.89,
+      ai_recommendation: 'Lock customer account and require email link confirmation.',
+      source_event_id: 'EVT-MIP-9019',
+      source_event_type: 'failed_login',
+      ip_address: '185.220.101.99',
+      device_id: 'DEV-PROXY-SWARM',
+      session_id: 'SESS-MIP-6620',
+      timestamp: new Date(Date.now() - 1000 * 60 * 960).toISOString()
+    },
+    {
+      incident_id: 'INC-2026-9020',
+      customer_id: 'CUST-7800',
+      fraud_type: 'CHECKOUT_VELOCITY',
+      severity: 'HIGH',
+      reason: '6 checkout orders initiated within 4 minutes',
+      risk_score: 55,
+      risk_level: 'HIGH',
+      action: 'MONITOR',
+      requires_customer_action: false,
+      requires_admin_review: false,
+      restriction_minutes: null,
+      ai_attack_pattern: 'High frequency order placement.',
+      ai_finding: 'Automated script filling cart and checking out rapidly.',
+      ai_confidence: 0.82,
+      ai_recommendation: 'Throttle checkout API endpoint for session.',
+      source_event_id: 'EVT-CHK-9020',
+      source_event_type: 'order_created',
+      ip_address: '103.21.124.77',
+      device_id: 'DEV-WIN-CHROME',
+      session_id: 'SESS-CHK-7800',
+      timestamp: new Date(Date.now() - 1000 * 60 * 1020).toISOString()
+    },
+    {
+      incident_id: 'INC-2026-9021',
+      customer_id: 'CUST-4501',
+      fraud_type: 'CHECKOUT_VELOCITY',
+      severity: 'MEDIUM',
+      reason: '3 order checkout attempts in 5 minutes window',
+      risk_score: 40,
+      risk_level: 'MEDIUM',
+      action: 'MONITOR',
+      requires_customer_action: false,
+      requires_admin_review: false,
+      restriction_minutes: null,
+      ai_attack_pattern: 'Mild checkout velocity anomaly.',
+      ai_finding: 'Customer creating multiple small split orders.',
+      ai_confidence: 0.75,
+      ai_recommendation: 'Log session telemetry.',
+      source_event_id: 'EVT-CHK-9021',
+      source_event_type: 'order_created',
+      ip_address: '117.218.45.12',
+      device_id: 'DEV-ONEPLUS-11',
+      session_id: 'SESS-CHK-4501',
+      timestamp: new Date(Date.now() - 1000 * 60 * 1080).toISOString()
+    },
+    {
+      incident_id: 'INC-2026-9022',
+      customer_id: 'CUST-8833',
+      fraud_type: 'SUSPICIOUS_IP_RANGE',
+      severity: 'MEDIUM',
+      reason: 'Access detected from known high-risk hosting data center IP block',
+      risk_score: 35,
+      risk_level: 'MEDIUM',
+      action: 'MONITOR',
+      requires_customer_action: false,
+      requires_admin_review: false,
+      restriction_minutes: null,
+      ai_attack_pattern: 'Data center hosting IP range proxy connection.',
+      ai_finding: 'IP address belongs to AWS EC2 public pool rather than residential ISP.',
+      ai_confidence: 0.78,
+      ai_recommendation: 'Flag session for risk score adjustment if financial transaction occurs.',
+      source_event_id: 'EVT-IP-9022',
+      source_event_type: 'login_success',
+      ip_address: '52.91.104.201',
+      device_id: 'DEV-LINUX-HEADLESS',
+      session_id: 'SESS-IP-8833',
+      timestamp: new Date(Date.now() - 1000 * 60 * 1140).toISOString()
+    },
+    {
+      incident_id: 'INC-2026-9023',
+      customer_id: 'CUST-9012',
+      fraud_type: 'NEW_DEVICE_LOGIN',
+      severity: 'LOW',
+      reason: 'Login registered from previously unseen Safari on iOS device',
+      risk_score: 20,
+      risk_level: 'LOW',
+      action: 'MONITOR',
+      requires_customer_action: false,
+      requires_admin_review: false,
+      restriction_minutes: null,
+      ai_attack_pattern: 'Standard new device authorization.',
+      ai_finding: 'User login from new mobile handset with valid 2FA token.',
+      ai_confidence: 0.60,
+      ai_recommendation: 'Send optional email notification for new login device.',
+      source_event_id: 'EVT-DEV-9023',
+      source_event_type: 'new_device',
+      ip_address: '49.36.200.18',
+      device_id: 'DEV-IPHONE-14',
+      session_id: 'SESS-DEV-9012',
+      timestamp: new Date(Date.now() - 1000 * 60 * 1200).toISOString()
+    },
+    {
+      incident_id: 'INC-2026-9024',
+      customer_id: 'CUST-3040',
+      fraud_type: 'NEW_DEVICE_LOGIN',
+      severity: 'LOW',
+      reason: 'Normal login event from new Edge browser on Windows 11',
+      risk_score: 15,
+      risk_level: 'LOW',
+      action: 'MONITOR',
+      requires_customer_action: false,
+      requires_admin_review: false,
+      restriction_minutes: null,
+      ai_attack_pattern: 'Routine user authentication.',
+      ai_finding: 'No risk indicators detected.',
+      ai_confidence: 0.50,
+      ai_recommendation: 'No action required.',
+      source_event_id: 'EVT-DEV-9024',
+      source_event_type: 'login_success',
+      ip_address: '122.169.50.88',
+      device_id: 'DEV-WIN11-EDGE',
+      session_id: 'SESS-DEV-3040',
+      timestamp: new Date(Date.now() - 1000 * 60 * 1260).toISOString()
+    },
+    {
+      incident_id: 'INC-2026-9025',
+      customer_id: 'CUST-1802',
+      fraud_type: 'STEP_UP_VERIFICATION_PASS',
+      severity: 'LOW',
+      reason: 'Customer successfully verified OTP challenge following suspicious login flag',
+      risk_score: 10,
+      risk_level: 'LOW',
+      action: 'MONITOR',
+      requires_customer_action: false,
+      requires_admin_review: false,
+      restriction_minutes: null,
+      ai_attack_pattern: 'Successful security verification resolution.',
+      ai_finding: 'Step-up challenge satisfied within 45 seconds.',
+      ai_confidence: 0.95,
+      ai_recommendation: 'Restore full account access privileges.',
+      source_event_id: 'EVT-VERIF-9025',
+      source_event_type: 'verification_passed',
+      ip_address: '106.208.12.99',
+      device_id: 'DEV-ANDROID-PIXEL',
+      session_id: 'SESS-VERIF-1802',
+      timestamp: new Date(Date.now() - 1000 * 60 * 1320).toISOString()
+    }
+  ];
+
+  // Populate in-memory map & enforce CRITICAL -> ADMIN_REVIEW
+  baselineIncidents.forEach(inc => {
+    if (inc.risk_level === 'CRITICAL' || inc.severity === 'CRITICAL' || inc.risk_score >= 85 || inc.incident_id.includes('CRITIC')) {
+      inc.action = 'ADMIN_REVIEW';
+      inc.requires_admin_review = true;
+    }
+    inMemoryFraudIncidents.set(inc.incident_id, inc);
+  });
+
+  if (dbPool && !isInMemoryFallback) {
+    try {
+      // Enforce CRITICAL events must be ADMIN_REVIEW only for unreviewed incidents
+      await dbPool.query(
+        `UPDATE fraud_incidents 
+         SET action = 'ADMIN_REVIEW', requires_admin_review = 1 
+         WHERE (risk_level = 'CRITICAL' OR severity = 'CRITICAL' OR risk_score >= 85 OR incident_id LIKE 'INC-CRITIC%')
+           AND action NOT IN ('REVIEWED', 'BANNED', 'DEACTIVATED', 'RESOLVED', 'CLEAR', 'APPROVE_REVIEW', 'BAN_ACCOUNT', 'DEACTIVATE_ACCOUNT')
+           AND (requires_admin_review IS NULL OR requires_admin_review = 1)
+           AND incident_id NOT IN (SELECT DISTINCT incident_id FROM fraud_admin_actions WHERE incident_id IS NOT NULL)
+           AND customer_id NOT IN (SELECT customer_id FROM customer_security WHERE security_status IN ('BANNED', 'DEACTIVATED') OR account_status IN ('BANNED', 'DEACTIVATED'))`
+      );
+
+      const [critIncidents]: any = await dbPool.query(
+        `SELECT DISTINCT customer_id FROM fraud_incidents 
+         WHERE (action = 'ADMIN_REVIEW' OR requires_admin_review = 1 OR risk_level = 'CRITICAL' OR severity = 'CRITICAL')
+           AND customer_id NOT IN (SELECT customer_id FROM customer_security WHERE security_status IN ('BANNED', 'DEACTIVATED') OR account_status IN ('BANNED', 'DEACTIVATED'))`
+      );
+
+      for (const row of critIncidents) {
+        const custId = row.customer_id;
+        await dbPool.query(
+          `INSERT INTO customer_security (customer_id, account_status, security_status, step_up_required)
+           VALUES (?, 'ACTIVE', 'ADMIN_REVIEW', 0)
+           ON DUPLICATE KEY UPDATE security_status = IF(security_status IN ('BANNED', 'DEACTIVATED'), security_status, 'ADMIN_REVIEW')`,
+          [custId]
+        );
+
+        const restrId = 'RESTR-AR-' + custId;
+        const [existingRestr]: any = await dbPool.query(
+          `SELECT restriction_id FROM fraud_restrictions WHERE customer_id = ? AND status = 'ACTIVE'`,
+          [custId]
+        );
+
+        if (existingRestr.length === 0) {
+          const now = new Date();
+          const expiresAt = new Date(now.getTime() + 24 * 3600 * 1000);
+          await dbPool.query(
+            `INSERT IGNORE INTO fraud_restrictions (
+              restriction_id, customer_id, restriction_type, status, reason, started_at, expires_at
+            ) VALUES (?, ?, 'ADMIN_REVIEW_LOCK', 'ACTIVE', 'Account temporarily restricted for 24 hours pending mandatory Admin Review', ?, ?)`,
+            [restrId, custId, formatMysqlDateTime(now), formatMysqlDateTime(expiresAt)]
+          );
+        }
+      }
+
+      const [rows]: any = await dbPool.query('SELECT COUNT(*) as count FROM fraud_incidents');
+      if (rows && rows[0] && rows[0].count > 0) {
+        return;
+      }
+      console.log('[MySQL DB] Seeding baseline fraud incidents...');
+      for (const inc of baselineIncidents) {
+        await insertFraudIncident(inc);
+      }
+      console.log(`[MySQL DB] Successfully seeded ${baselineIncidents.length} baseline fraud incidents.`);
+    } catch (e) {
+      console.error('[MySQL DB] Error seeding fraud incidents:', e);
+    }
+  }
+}
+
+// ----------------------------------------------------
+// STAGE 6: OTP & CUSTOMER SECURITY HELPER FUNCTIONS
+// ----------------------------------------------------
+
+export function maskPhoneNumber(phone: string): string {
+  if (!phone) return '+91 ***** **000';
+  const clean = phone.replace(/\D/g, '');
+  if (clean.length >= 10) {
+    const last4 = clean.slice(-4);
+    return `+91 ***** *${last4}`;
+  }
+  return `******${clean.slice(-3)}`;
+}
+
+export async function getCustomerPhone(customerId: string): Promise<{ phone: string | null; masked: string; isReal: boolean }> {
+  if (dbPool && !isInMemoryFallback) {
+    try {
+      const [rows]: any = await dbPool.query('SELECT phone FROM customers WHERE customer_id = ? OR email = ? LIMIT 1', [customerId, customerId]);
+      if (rows && rows.length > 0 && rows[0].phone) {
+        const phone = rows[0].phone;
+        return { phone, masked: maskPhoneNumber(phone), isReal: true };
+      }
+    } catch (e) {}
+  } else {
+    const cust = inMemoryCustomers.get(customerId);
+    if (cust && cust.phone) {
+      return { phone: cust.phone, masked: maskPhoneNumber(cust.phone), isReal: true };
+    }
+  }
+  const fallbackPhone = '9876543210';
+  return { phone: fallbackPhone, masked: maskPhoneNumber(fallbackPhone), isReal: false };
+}
+
+export async function createFraudOtpChallenge(challenge: FraudOtpChallengeRecord): Promise<void> {
+  const isDemo = challenge.is_demo ? 1 : 0;
+  const metadataJson = challenge.metadata ? JSON.stringify(challenge.metadata) : null;
+  const expiresAt = new Date(challenge.expires_at).toISOString().slice(0, 19).replace('T', ' ');
+
+  // Store in in-memory map
+  inMemoryFraudOtpChallenges.set(challenge.challenge_id, {
+    ...challenge,
+    is_demo: Boolean(challenge.is_demo)
+  });
+
+  if (dbPool && !isInMemoryFallback) {
+    try {
+      await dbPool.query(
+        `INSERT INTO fraud_otp_challenges (
+          challenge_id, customer_id, incident_id, phone_reference, otp_hash, purpose,
+          status, attempt_count, max_attempts, expires_at, is_demo, metadata
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        ON DUPLICATE KEY UPDATE
+          otp_hash = VALUES(otp_hash),
+          status = VALUES(status),
+          attempt_count = VALUES(attempt_count),
+          expires_at = VALUES(expires_at),
+          is_demo = VALUES(is_demo),
+          metadata = VALUES(metadata)`,
+        [
+          challenge.challenge_id,
+          challenge.customer_id,
+          challenge.incident_id || null,
+          challenge.phone_reference || null,
+          challenge.otp_hash,
+          challenge.purpose || 'STEP_UP_VERIFICATION',
+          challenge.status || 'PENDING',
+          challenge.attempt_count || 0,
+          challenge.max_attempts || 5,
+          expiresAt,
+          isDemo,
+          metadataJson
+        ]
+      );
+    } catch (e) {
+      console.error('[DB] createFraudOtpChallenge error:', e);
+    }
+  }
+}
+
+function safeParseJson(val: any): any {
+  if (typeof val === 'object' && val !== null) return val;
+  if (typeof val === 'string') {
+    try {
+      return JSON.parse(val);
+    } catch (e) {}
+  }
+  return null;
+}
+
+export async function getFraudOtpChallengeById(challengeId: string): Promise<FraudOtpChallengeRecord | null> {
+  if (dbPool && !isInMemoryFallback) {
+    try {
+      const [rows]: any = await dbPool.query('SELECT * FROM fraud_otp_challenges WHERE challenge_id = ? LIMIT 1', [challengeId]);
+      if (rows && rows.length > 0) {
+        const r = rows[0];
+        return {
+          ...r,
+          is_demo: Boolean(r.is_demo),
+          metadata: safeParseJson(r.metadata)
+        };
+      }
+    } catch (e) {
+      console.error('[DB] getFraudOtpChallengeById error:', e);
+    }
+  }
+  const mem = inMemoryFraudOtpChallenges.get(challengeId);
+  return mem ? { ...mem } : null;
+}
+
+export async function getActivePendingChallengeForCustomer(customerId: string, incidentId?: string | null): Promise<FraudOtpChallengeRecord | null> {
+  const now = new Date();
+  if (dbPool && !isInMemoryFallback) {
+    try {
+      let query = 'SELECT * FROM fraud_otp_challenges WHERE customer_id = ? AND status = "PENDING" AND expires_at > ?';
+      const params: any[] = [customerId, now.toISOString().slice(0, 19).replace('T', ' ')];
+      if (incidentId) {
+        query += ' AND incident_id = ?';
+        params.push(incidentId);
+      }
+      query += ' ORDER BY created_at DESC LIMIT 1';
+
+      const [rows]: any = await dbPool.query(query, params);
+      if (rows && rows.length > 0) {
+        const r = rows[0];
+        return {
+          ...r,
+          is_demo: Boolean(r.is_demo),
+          metadata: safeParseJson(r.metadata)
+        };
+      }
+    } catch (e) {}
+  }
+
+  const list = Array.from(inMemoryFraudOtpChallenges.values()).filter(c => {
+    if (c.customer_id !== customerId || c.status !== 'PENDING') return false;
+    if (new Date(c.expires_at).getTime() <= now.getTime()) return false;
+    if (incidentId && c.incident_id !== incidentId) return false;
+    return true;
+  });
+
+  return list.length > 0 ? list[0] : null;
+}
+
+export async function updateFraudOtpChallenge(challengeId: string, updates: Partial<FraudOtpChallengeRecord>): Promise<boolean> {
+  const existing = await getFraudOtpChallengeById(challengeId);
+  if (!existing) return false;
+
+  const merged = { ...existing, ...updates };
+  inMemoryFraudOtpChallenges.set(challengeId, merged);
+
+  if (dbPool && !isInMemoryFallback) {
+    try {
+      const setClauses: string[] = [];
+      const params: any[] = [];
+
+      if (updates.status !== undefined) { setClauses.push('status = ?'); params.push(updates.status); }
+      if (updates.attempt_count !== undefined) { setClauses.push('attempt_count = ?'); params.push(updates.attempt_count); }
+      if (updates.verified_at !== undefined) {
+        setClauses.push('verified_at = ?');
+        params.push(updates.verified_at ? new Date(updates.verified_at).toISOString().slice(0, 19).replace('T', ' ') : null);
+      }
+      if (updates.metadata !== undefined) { setClauses.push('metadata = ?'); params.push(JSON.stringify(updates.metadata)); }
+
+      if (setClauses.length > 0) {
+        params.push(challengeId);
+        await dbPool.query(`UPDATE fraud_otp_challenges SET ${setClauses.join(', ')} WHERE challenge_id = ?`, params);
+      }
+      return true;
+    } catch (e) {
+      console.error('[DB] updateFraudOtpChallenge error:', e);
+      return false;
+    }
+  }
+  return true;
+}
+
+export async function getFraudOtpChallengesFiltered(options: {
+  customer_id?: string;
+  status?: string;
+  page?: number;
+  limit?: number;
+}): Promise<{ challenges: FraudOtpChallengeRecord[]; total: number }> {
+  const page = options.page || 1;
+  const limit = options.limit || 50;
+  const offset = (page - 1) * limit;
+
+  if (dbPool && !isInMemoryFallback) {
+    try {
+      let query = 'SELECT * FROM fraud_otp_challenges WHERE 1=1';
+      const params: any[] = [];
+      if (options.customer_id) { query += ' AND customer_id = ?'; params.push(options.customer_id); }
+      if (options.status) { query += ' AND status = ?'; params.push(options.status); }
+      query += ' ORDER BY created_at DESC LIMIT ? OFFSET ?';
+      params.push(limit, offset);
+
+      const [rows]: any = await dbPool.query(query, params);
+      const [countRows]: any = await dbPool.query('SELECT COUNT(*) as total FROM fraud_otp_challenges');
+      const challenges = rows.map((r: any) => ({
+        ...r,
+        is_demo: Boolean(r.is_demo),
+        metadata: safeParseJson(r.metadata)
+      }));
+      return { challenges, total: countRows[0]?.total || challenges.length };
+    } catch (e) {
+      console.error('[DB] getFraudOtpChallengesFiltered error:', e);
+    }
+  }
+
+  let list = Array.from(inMemoryFraudOtpChallenges.values());
+  if (options.customer_id) list = list.filter(c => c.customer_id === options.customer_id);
+  if (options.status) list = list.filter(c => c.status === options.status);
+  list.sort((a, b) => new Date(b.created_at || 0).getTime() - new Date(a.created_at || 0).getTime());
+
+  const total = list.length;
+  const sliced = list.slice(offset, offset + limit);
+  return { challenges: sliced, total };
+}
+
+export async function getCustomerSecurityCustomerFacing(customerId: string): Promise<any> {
+  const secState = await getCustomerSecurity(customerId);
+  const { masked, isReal } = await getCustomerPhone(customerId);
+
+  if (!secState) {
+    return {
+      customer_id: customerId,
+      status: 'NORMAL',
+      step_up_required: false,
+      can_verify: false,
+      restriction_active: false,
+      expires_at: null,
+      message: 'Your account security status is normal.',
+      phone_masked: masked,
+      is_demo_customer: !isReal
+    };
+  }
+
+  const rawStatus = String(secState.security_status || 'NORMAL').toUpperCase();
+  const accountStatus = String(secState.account_status || 'ACTIVE').toUpperCase();
+  const isStepUp = Boolean(secState.step_up_required) || rawStatus === 'STEP_UP_REQUIRED';
+
+  let status = rawStatus;
+  if (accountStatus === 'BANNED') status = 'BANNED';
+  else if (accountStatus === 'DEACTIVATED') status = 'DEACTIVATED';
+  else if (isStepUp && status === 'NORMAL') status = 'STEP_UP_REQUIRED';
+
+  let restrictionActive = false;
+  let expiresAt: string | null = null;
+  let canVerify = false;
+  let message = 'Your account security status is normal.';
+
+  let startedAt: string | null = null;
+  let restrictionType: string | null = null;
+  let restrictionReason: string | null = null;
+
+  if (status === 'BANNED') {
+    restrictionActive = true;
+    message = 'Your account has been permanently restricted due to security policy violations.';
+  } else if (status === 'DEACTIVATED') {
+    restrictionActive = true;
+    message = 'Your account has been deactivated for security reasons. Please contact customer support.';
+  } else if (status === 'RESTRICTED') {
+    restrictionActive = true;
+    message = 'Suspicious activity was detected on your account.';
+    const restr = secState.active_restriction_id 
+      ? await getFraudRestrictionById(secState.active_restriction_id)
+      : await getActiveCustomerRestriction(customerId);
+    if (restr) {
+      if (restr.started_at) startedAt = new Date(restr.started_at).toISOString();
+      if (restr.expires_at) expiresAt = new Date(restr.expires_at).toISOString();
+      restrictionType = restr.restriction_type || 'TEMPORARY_RESTRICTION';
+      restrictionReason = restr.reason || 'Suspicious activity was detected on your account.';
+    }
+  } else if (status === 'ADMIN_REVIEW') {
+    restrictionActive = true;
+    message = 'Your account is currently undergoing security review by an administrator.';
+  } else if (status === 'PROTECTED') {
+    restrictionActive = true;
+    message = 'Temporary security protection is active on your account.';
+  } else if (status === 'STEP_UP_REQUIRED' || isStepUp) {
+    canVerify = true;
+    message = 'Additional verification is required to protect your account. Please complete phone verification.';
+  }
+
+  const activeChallenge = await getActivePendingChallengeForCustomer(customerId);
+  const pendingChallengeData = activeChallenge ? {
+    challenge_id: activeChallenge.challenge_id,
+    expires_at: activeChallenge.expires_at,
+    attempts_left: Math.max(0, activeChallenge.max_attempts - activeChallenge.attempt_count),
+    channel: 'sms'
+  } : null;
+
+  return {
+    customer_id: customerId,
+    status,
+    security_status: status,
+    step_up_required: isStepUp,
+    can_verify: canVerify,
+    restriction_active: restrictionActive,
+    started_at: startedAt,
+    expires_at: expiresAt,
+    restriction_type: restrictionType,
+    restriction_reason: restrictionReason,
+    message,
+    phone_masked: masked,
+    is_demo_customer: !isReal,
+    pending_challenge: pendingChallengeData
+  };
+}
+
+export async function getBannedAccounts(options?: {
+  search?: string;
+  page?: number;
+  limit?: number;
+}): Promise<{ bannedAccounts: any[]; total: number }> {
+  const page = Math.max(1, options?.page || 1);
+  const limit = Math.min(100, Math.max(1, options?.limit || 25));
+  const offset = (page - 1) * limit;
+
+  if (dbPool && !isInMemoryFallback) {
+    try {
+      let searchWhere = '';
+      const params: any[] = [];
+
+      if (options?.search) {
+        searchWhere = "WHERE (b.customer_id LIKE ? OR c.email LIKE ? OR c.first_name LIKE ? OR c.last_name LIKE ? OR c.phone LIKE ?)";
+        const s = `%${options.search}%`;
+        params.push(s, s, s, s, s);
+      }
+
+      const countSql = `
+        SELECT COUNT(DISTINCT b.customer_id) AS total 
+        FROM (
+          SELECT customer_id FROM customer_security WHERE security_status = 'BANNED' OR account_status = 'BANNED'
+          UNION
+          SELECT customer_id FROM customers WHERE account_status = 'BANNED'
+          UNION
+          SELECT customer_id FROM fraud_admin_actions WHERE action IN ('BAN_ACCOUNT', 'BAN', 'PERMANENT_BAN')
+        ) b
+        LEFT JOIN customers c ON b.customer_id = c.customer_id
+        ${searchWhere}
+      `;
+      const [[{ total }]]: any = await dbPool.query(countSql, params);
+
+      const querySql = `
+        SELECT 
+          b.customer_id,
+          COALESCE(c.first_name, 'Customer') AS first_name,
+          COALESCE(c.last_name, b.customer_id) AS last_name,
+          COALESCE(c.email, CONCAT(LOWER(b.customer_id), '@example.com')) AS email,
+          COALESCE(c.phone, '9876543210') AS phone,
+          'BANNED' AS account_status,
+          'BANNED' AS security_status,
+          COALESCE(cs.last_fraud_incident_id, (SELECT incident_id FROM fraud_incidents WHERE customer_id = b.customer_id ORDER BY created_at DESC LIMIT 1)) AS last_fraud_incident_id,
+          COALESCE(act.created_at, cs.updated_at, c.updated_at, NOW()) AS banned_at,
+          COALESCE(act.reason, 'Permanent account ban issued due to critical fraud policy violation.') AS ban_reason,
+          COALESCE(act.admin_id, 'ADMIN_FRAUDGUARD') AS banned_by
+        FROM (
+          SELECT customer_id FROM customer_security WHERE security_status = 'BANNED' OR account_status = 'BANNED'
+          UNION
+          SELECT customer_id FROM customers WHERE account_status = 'BANNED'
+          UNION
+          SELECT customer_id FROM fraud_admin_actions WHERE action IN ('BAN_ACCOUNT', 'BAN', 'PERMANENT_BAN')
+        ) b
+        LEFT JOIN customer_security cs ON b.customer_id = cs.customer_id
+        LEFT JOIN customers c ON b.customer_id = c.customer_id
+        LEFT JOIN (
+          SELECT customer_id, reason, admin_id, created_at
+          FROM fraud_admin_actions
+          WHERE action IN ('BAN_ACCOUNT', 'BAN', 'PERMANENT_BAN')
+          ORDER BY created_at DESC
+        ) act ON b.customer_id = act.customer_id
+        ${searchWhere}
+        ORDER BY banned_at DESC
+        LIMIT ? OFFSET ?
+      `;
+
+      const [rows]: any = await dbPool.query(querySql, [...params, limit, offset]);
+      const bannedAccounts = rows.map((r: any) => ({
+        ...r,
+        phone_masked: maskPhoneNumber(r.phone),
+        ban_reason: r.ban_reason || 'Permanent account ban issued due to critical fraud policy violation.',
+        banned_by: r.banned_by || 'ADMIN_FRAUDGUARD'
+      }));
+
+      return { bannedAccounts, total: total || 0 };
+    } catch (e) {
+      console.error('[DB] getBannedAccounts error:', e);
+    }
+  }
+
+  // In-memory fallback: Aggregate from all 3 in-memory stores
+  const bannedMap = new Map<string, any>();
+
+  for (const [cust_id, sec] of inMemoryCustomerSecurity.entries()) {
+    if (sec.account_status === 'BANNED' || sec.security_status === 'BANNED') {
+      const cust = inMemoryCustomers.get(cust_id);
+      bannedMap.set(cust_id, {
+        customer_id: cust_id,
+        first_name: cust?.first_name || 'Customer',
+        last_name: cust?.last_name || cust_id,
+        email: cust?.email || `${cust_id.toLowerCase()}@example.com`,
+        phone: cust?.phone || '9876543210',
+        phone_masked: maskPhoneNumber(cust?.phone || '9876543210'),
+        account_status: 'BANNED',
+        security_status: 'BANNED',
+        banned_at: sec.updated_at || new Date(),
+        ban_reason: 'Permanent account ban issued due to critical fraud policy violation.',
+        banned_by: 'ADMIN_FRAUDGUARD'
+      });
+    }
+  }
+
+  for (const [cust_id, cust] of inMemoryCustomers.entries()) {
+    if (cust.account_status === 'BANNED' && !bannedMap.has(cust_id)) {
+      bannedMap.set(cust_id, {
+        customer_id: cust_id,
+        first_name: cust.first_name || 'Customer',
+        last_name: cust.last_name || cust_id,
+        email: cust.email || `${cust_id.toLowerCase()}@example.com`,
+        phone: cust.phone || '9876543210',
+        phone_masked: maskPhoneNumber(cust.phone || '9876543210'),
+        account_status: 'BANNED',
+        security_status: 'BANNED',
+        banned_at: cust.updated_at || new Date(),
+        ban_reason: 'Permanent account ban issued due to critical fraud policy violation.',
+        banned_by: 'ADMIN_FRAUDGUARD'
+      });
+    }
+  }
+
+  for (const act of inMemoryFraudAdminActions.values()) {
+    if ((act.action === 'BAN_ACCOUNT' || act.action === 'BAN' || act.action === 'PERMANENT_BAN') && act.customer_id) {
+      const cust_id = act.customer_id;
+      const cust = inMemoryCustomers.get(cust_id);
+      const existing = bannedMap.get(cust_id) || {};
+      bannedMap.set(cust_id, {
+        customer_id: cust_id,
+        first_name: cust?.first_name || existing.first_name || 'Customer',
+        last_name: cust?.last_name || existing.last_name || cust_id,
+        email: cust?.email || existing.email || `${cust_id.toLowerCase()}@example.com`,
+        phone: cust?.phone || existing.phone || '9876543210',
+        phone_masked: maskPhoneNumber(cust?.phone || existing.phone || '9876543210'),
+        account_status: 'BANNED',
+        security_status: 'BANNED',
+        banned_at: act.created_at || existing.banned_at || new Date(),
+        ban_reason: act.reason || existing.ban_reason || 'Permanent account ban issued due to critical fraud policy violation.',
+        banned_by: act.admin_id || existing.banned_by || 'ADMIN_FRAUDGUARD'
+      });
+    }
+  }
+
+  let list = Array.from(bannedMap.values());
+
+  if (options?.search) {
+    const s = options.search.toLowerCase();
+    list = list.filter(a =>
+      a.customer_id.toLowerCase().includes(s) ||
+      a.email.toLowerCase().includes(s) ||
+      a.first_name.toLowerCase().includes(s) ||
+      a.last_name.toLowerCase().includes(s) ||
+      a.phone.includes(s)
+    );
+  }
+
+  const total = list.length;
+  const sliced = list.slice(offset, offset + limit);
+  return { bannedAccounts: sliced, total };
+}
+
+export async function isEmailOrPhoneBanned(email: string, phone?: string): Promise<boolean> {
+  if (dbPool && !isInMemoryFallback) {
+    try {
+      const params = [email];
+      let sql = `SELECT c.customer_id FROM customers c 
+                 LEFT JOIN customer_security cs ON c.customer_id = cs.customer_id 
+                 WHERE (c.email = ?`;
+      if (phone) {
+        sql += ` OR c.phone = ?`;
+        params.push(phone);
+      }
+      sql += `) AND (c.account_status IN ('BANNED', 'DEACTIVATED') OR cs.security_status IN ('BANNED', 'DEACTIVATED'))`;
+
+      const [rows]: any = await dbPool.query(sql, params);
+      return rows.length > 0;
+    } catch (e) {
+      console.error('[DB] isEmailOrPhoneBanned error:', e);
+    }
+  }
+
+  // In-memory check
+  for (const cust of inMemoryCustomers.values()) {
+    if (cust.email === email || (phone && cust.phone === phone)) {
+      const sec = inMemoryCustomerSecurity.get(cust.customer_id);
+      if (cust.account_status === 'BANNED' || cust.account_status === 'DEACTIVATED' || sec?.security_status === 'BANNED' || sec?.security_status === 'DEACTIVATED') {
+        return true;
+      }
+    }
+  }
+  return false;
+}
+
+export async function revokeCustomerBan(customerId: string, reason?: string, adminId?: string): Promise<void> {
+  const admin_id = adminId || 'admin-001';
+  const banReason = reason || 'Admin revoked permanent account ban';
+
+  await upsertCustomerSecurity({
+    customer_id: customerId,
+    account_status: 'ACTIVE',
+    security_status: 'NORMAL',
+    active_restriction_id: null,
+    step_up_required: false,
+    updated_at: new Date()
+  });
+
+  if (dbPool && !isInMemoryFallback) {
+    try {
+      await dbPool.query('UPDATE customers SET account_status = "ACTIVE" WHERE customer_id = ?', [customerId]);
+      await dbPool.query(
+        'UPDATE customer_security SET account_status = "ACTIVE", security_status = "NORMAL", active_restriction_id = NULL, step_up_required = 0 WHERE customer_id = ?',
+        [customerId]
+      );
+      await dbPool.query(
+        'UPDATE fraud_restrictions SET status = "RELEASED", released_at = NOW(), released_by = ?, release_reason = ? WHERE customer_id = ? AND status = "ACTIVE"',
+        [admin_id, banReason, customerId]
+      );
+    } catch (e) {
+      console.error('[DB] revokeCustomerBan error:', e);
+    }
+  } else {
+    const cust = inMemoryCustomers.get(customerId);
+    if (cust) {
+      cust.account_status = 'ACTIVE';
+      inMemoryCustomers.set(customerId, cust);
+    }
+    for (const restr of inMemoryFraudRestrictions.values()) {
+      if (restr.customer_id === customerId && restr.status === 'ACTIVE') {
+        restr.status = 'RELEASED';
+        restr.released_at = new Date().toISOString();
+        restr.released_by = admin_id;
+        restr.release_reason = banReason;
+      }
+    }
+  }
+}
+
+export async function releaseFraudRestrictionAdmin(restrictionId?: string, customerId?: string, reason?: string, adminId?: string): Promise<void> {
+  const admin_id = adminId || 'admin-001';
+  const releaseReason = reason || 'Admin released account restriction';
+
+  if (dbPool && !isInMemoryFallback) {
+    try {
+      if (restrictionId) {
+        await dbPool.query(
+          'UPDATE fraud_restrictions SET status = "RELEASED", released_at = NOW(), released_by = ?, release_reason = ? WHERE restriction_id = ?',
+          [admin_id, releaseReason, restrictionId]
+        );
+      }
+      if (customerId) {
+        await dbPool.query(
+          'UPDATE fraud_restrictions SET status = "RELEASED", released_at = NOW(), released_by = ?, release_reason = ? WHERE customer_id = ? AND status = "ACTIVE"',
+          [admin_id, releaseReason, customerId]
+        );
+      }
+    } catch (e) {
+      console.error('[DB] releaseFraudRestrictionAdmin error:', e);
+    }
+  } else {
+    for (const restr of inMemoryFraudRestrictions.values()) {
+      if ((restrictionId && restr.restriction_id === restrictionId) || (customerId && restr.customer_id === customerId && restr.status === 'ACTIVE')) {
+        restr.status = 'RELEASED';
+        restr.released_at = new Date().toISOString();
+        restr.released_by = admin_id;
+        restr.release_reason = releaseReason;
+      }
+    }
+  }
+
+  if (customerId) {
+    await upsertCustomerSecurity({
+      customer_id: customerId,
+      account_status: 'ACTIVE',
+      security_status: 'NORMAL',
+      active_restriction_id: null,
+      step_up_required: false,
+      updated_at: new Date()
+    });
+  }
+}
+
+
+
+
 
 

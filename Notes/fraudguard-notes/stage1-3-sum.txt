@@ -1,0 +1,164 @@
+Yes — **your understanding is correct, with one important distinction: Stage 3 currently only persists the Kafka FraudGuard decision into `fraud_incidents`.**
+
+The current flow is:
+
+```text
+New website/event
+      ↓
+Kafka input topic
+      ↓
+FraudGuard Spark Consumer
+      ↓
+Fraud rules + risk scoring + AI investigation
+      ↓
+Final FraudGuard decision
+      ↓
+retail_fraudguard_events
+      ↓
+Website Backend Kafka Consumer
+      ↓
+fraud_incidents
+```
+
+### What happens right now
+
+Suppose you generate:
+
+```json
+{
+  "event_type": "login_failed",
+  "customer_id": "CUST-001"
+}
+```
+
+FraudGuard might determine:
+
+```text
+BRUTE_FORCE_LOGIN
+Risk = HIGH
+Score = 55
+Action = STEP_UP_AUTHENTICATION
+```
+
+It publishes something like:
+
+```text
+retail_fraudguard_events
+        ↓
+FRAUD_DECISION
+        ↓
+Website Backend
+```
+
+The backend currently takes that decision and **stores the decision itself in `fraud_incidents`**.
+
+That's why when you sent your event, you saw a new row in:
+
+```text
+fraud_incidents
+```
+
+### What about the other tables?
+
+They are currently **foundation tables**, not automatically populated by every FraudGuard decision.
+
+For example:
+
+| Table                     | Should it receive every fraud event? | When should it be populated?                     |
+| ------------------------- | ------------------------------------ | ------------------------------------------------ |
+| `fraud_incidents`         | **Yes**                              | Every finalized FraudGuard incident              |
+| `fraud_restrictions`      | No                                   | When a temporary restriction is actually created |
+| `verification_challenges` | No                                   | When `STEP_UP_AUTHENTICATION` requires OTP       |
+| `fraud_admin_actions`     | No                                   | When an admin performs an action                 |
+| `fraud_audit_log`         | No                                   | When security/admin/system actions are recorded  |
+| `customer_security`       | No                                   | When customer security state is created/updated  |
+
+This matches what we intentionally designed in Stages 1–3.
+
+For example:
+
+```text
+HIGH + STEP_UP_AUTHENTICATION
+        ↓
+fraud_incidents          ← YES
+        ↓
+Later Stage 7
+        ↓
+OTP challenge created
+        ↓
+verification_challenges ← YES
+        ↓
+Audit
+        ↓
+fraud_audit_log          ← YES
+```
+
+For a restriction:
+
+```text
+VERY_HIGH
+    ↓
+TEMPORARY_RESTRICTION
+    ↓
+fraud_incidents
+    ↓
+restriction engine
+    ↓
+fraud_restrictions
+    ↓
+customer_security
+    ↓
+fraud_audit_log
+```
+
+For an admin action:
+
+```text
+Admin releases restriction
+        ↓
+fraud_restrictions
+        ↓
+customer_security
+        ↓
+fraud_admin_actions
+        ↓
+fraud_audit_log
+```
+
+### So the important distinction
+
+**We do NOT want every FraudGuard Kafka message blindly inserted into all six tables.**
+
+That would be wrong.
+
+Instead:
+
+```text
+                    FraudGuard Decision
+                           │
+                           ▼
+                    fraud_incidents
+                           │
+             ┌─────────────┼──────────────┐
+             │             │              │
+          STEP-UP      RESTRICTION     ADMIN REVIEW
+             │             │              │
+             ▼             ▼              ▼
+       verification   fraud_restrictions  admin action
+       _challenges          │              │
+             │              ▼              │
+             │       customer_security      │
+             │              │              │
+             └──────────────┴──────────────┘
+                            │
+                            ▼
+                     fraud_audit_log
+```
+
+**That branching logic is what we build in the upcoming stages.**
+
+So your observation that *"I sent an event and it only went to the incident table"* is **expected at this point**. We have not yet implemented the workflows that create restrictions, OTP challenges, customer security transitions, or admin actions.
+
+And that's exactly why **Stage 4 onward is necessary**.
+
+One small correction before we continue: **Stage 4 should be the Admin Dashboard UI only after we decide the backend workflows are ready.** Since the dashboard will need to display active restrictions, OTP status, customer security state, etc., we may want to implement the security-state/action APIs before making the UI. We can keep the stages, but build them in dependency order rather than making a UI that is initially just static/read-only.

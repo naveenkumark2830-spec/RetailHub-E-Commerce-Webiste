@@ -20,7 +20,9 @@ services:
 
       #KAFKA_ADVERTISED_LISTENERS: INTERNAL://kafka:29092,EXTERNAL://localhost:9092
 
-      KAFKA_ADVERTISED_LISTENERS: INTERNAL://kafka:29092,EXTERNAL://host.docker.internal:9092
+      #KAFKA_ADVERTISED_LISTENERS: INTERNAL://kafka:29092,EXTERNAL://host.docker.internal:9092
+
+      #KAFKA_ADVERTISED_LISTENERS: INTERNAL://kafka:29092,EXTERNAL://10.0.139.252:9092
 
       KAFKA_LISTENER_SECURITY_PROTOCOL_MAP: INTERNAL:PLAINTEXT,EXTERNAL:PLAINTEXT,CONTROLLER:PLAINTEXT
 
@@ -223,6 +225,7 @@ services:
       --topic retail_fraudguard_events
       --partitions 3
       --replication-factor 1;
+      
 
       echo '================================================';
       echo '   ALL RETAILHUB TOPICS VERIFIED';

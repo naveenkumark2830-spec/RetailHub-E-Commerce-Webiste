@@ -1,0 +1,194 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1848.7519999999997 1863.913" width="1848.7519999999997" height="1863.913" style="--bg:#FFFFFF;--fg:#3B3B3B;--line:#3B3B3B;--accent:#005FB8;--muted:#3B3B3BCC;--surface:#F8F8F8;--border:#3B3B3B;background:var(--bg)">
+<style>
+  @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&amp;display=swap');
+  text { font-family: 'Inter', system-ui, sans-serif; }
+  svg {
+    /* Derived from --bg and --fg (overridable via --line, --accent, etc.) */
+    --_text:          var(--fg);
+    --_text-sec:      var(--muted, color-mix(in srgb, var(--fg) 60%, var(--bg)));
+    --_text-muted:    var(--muted, color-mix(in srgb, var(--fg) 40%, var(--bg)));
+    --_text-faint:    color-mix(in srgb, var(--fg) 25%, var(--bg));
+    --_line:          var(--line, color-mix(in srgb, var(--fg) 50%, var(--bg)));
+    --_arrow:         var(--accent, color-mix(in srgb, var(--fg) 85%, var(--bg)));
+    --_node-fill:     var(--surface, color-mix(in srgb, var(--fg) 3%, var(--bg)));
+    --_node-stroke:   var(--border, color-mix(in srgb, var(--fg) 20%, var(--bg)));
+    --_group-fill:    var(--bg);
+    --_group-hdr:     color-mix(in srgb, var(--fg) 5%, var(--bg));
+    --_inner-stroke:  color-mix(in srgb, var(--fg) 12%, var(--bg));
+    --_key-badge:     color-mix(in srgb, var(--fg) 10%, var(--bg));
+  }
+</style>
+<defs>
+  <marker id="arrowhead" markerWidth="8" markerHeight="5" refX="7" refY="2.5" orient="auto">
+    <polygon points="0 0, 8 2.5, 0 5" fill="var(--_arrow)" stroke="var(--_arrow)" stroke-width="0.75" stroke-linejoin="round" />
+  </marker>
+  <marker id="arrowhead-start" markerWidth="8" markerHeight="5" refX="1" refY="2.5" orient="auto-start-reverse">
+    <polygon points="8 0, 0 2.5, 8 5" fill="var(--_arrow)" stroke="var(--_arrow)" stroke-width="0.75" stroke-linejoin="round" />
+  </marker>
+</defs>
+<g class="subgraph" data-id="Detection" data-label="1. Detection &amp; Immediate Enforcement">
+  <rect x="470.84825" y="40" width="603.3199999999998" height="554.344" rx="0" ry="0" fill="var(--_group-fill)" stroke="var(--_node-stroke)" stroke-width="1" />
+  <rect x="470.84825" y="40" width="603.3199999999998" height="28" rx="0" ry="0" fill="var(--_group-hdr)" stroke="var(--_node-stroke)" stroke-width="1" />
+  <text x="482.84825" y="54" font-size="12" font-weight="600" fill="var(--_text-sec)" dy="4.199999999999999">1. Detection &amp; Immediate Enforcement</text>
+</g>
+<g class="subgraph" data-id="RestrictedFlow" data-label="2. Restricted Customer Flow">
+  <rect x="40" y="654.344" width="569.9749999999999" height="475.96999999999997" rx="0" ry="0" fill="var(--_group-fill)" stroke="var(--_node-stroke)" stroke-width="1" />
+  <rect x="40" y="654.344" width="569.9749999999999" height="28" rx="0" ry="0" fill="var(--_group-hdr)" stroke="var(--_node-stroke)" stroke-width="1" />
+  <text x="52" y="668.344" font-size="12" font-weight="600" fill="var(--_text-sec)" dy="4.199999999999999">2. Restricted Customer Flow</text>
+</g>
+<g class="subgraph" data-id="VerificationFlow" data-label="3. Customer Security Verification Center">
+  <rect x="177.04774999999995" y="1190.314" width="556.637" height="633.5989999999999" rx="0" ry="0" fill="var(--_group-fill)" stroke="var(--_node-stroke)" stroke-width="1" />
+  <rect x="177.04774999999995" y="1190.314" width="556.637" height="28" rx="0" ry="0" fill="var(--_group-hdr)" stroke="var(--_node-stroke)" stroke-width="1" />
+  <text x="189.04774999999995" y="1204.314" font-size="12" font-weight="600" fill="var(--_text-sec)" dy="4.199999999999999">3. Customer Security Verification Center</text>
+</g>
+<g class="subgraph" data-id="AdminActions" data-label="4. Separate Admin Review Actions">
+  <rect x="637.9749999999999" y="733.7030000000001" width="1170.7769999999998" height="402.611" rx="0" ry="0" fill="var(--_group-fill)" stroke="var(--_node-stroke)" stroke-width="1" />
+  <rect x="637.9749999999999" y="733.7030000000001" width="1170.7769999999998" height="28" rx="0" ry="0" fill="var(--_group-hdr)" stroke="var(--_node-stroke)" stroke-width="1" />
+  <text x="649.9749999999999" y="747.7030000000001" font-size="12" font-weight="600" fill="var(--_text-sec)" dy="4.199999999999999">4. Separate Admin Review Actions</text>
+</g>
+<polyline class="edge" data-from="DirectRestrict" data-to="ActiveRestrCheck" data-style="solid" data-arrow-start="false" data-arrow-end="true" points="618.60275,582.5690000000001 618.60275,636.344 312.94624999999996,636.344 312.94624999999996,698.344" fill="none" stroke="var(--_line)" stroke-width="1" marker-end="url(#arrowhead)" />
+<polyline class="edge" data-from="ExpiryAutoRelease" data-to="VerifCenter" data-style="solid" data-arrow-start="false" data-arrow-end="true" points="454.43999999999994,1117.314 454.43999999999994,1234.314" fill="none" stroke="var(--_line)" stroke-width="1" marker-end="url(#arrowhead)" />
+<polyline class="edge" data-from="AdminReviewState" data-to="AdminChoice" data-style="solid" data-arrow-start="false" data-arrow-end="true" points="918.2627499999999,565.6690000000001 918.2627499999999,715.7030000000001 1223.91925,715.7030000000001 1223.91925,777.7030000000003" fill="none" stroke="var(--_line)" stroke-width="1" marker-end="url(#arrowhead)" />
+<polyline class="edge" data-from="RawEvent" data-to="FraudGuardCheck" data-style="solid" data-arrow-start="false" data-arrow-end="true" points="768.4327499999999,120.9 768.4327499999999,168.9" fill="none" stroke="var(--_line)" stroke-width="1" marker-end="url(#arrowhead)" />
+<polyline class="edge" data-from="FraudGuardCheck" data-to="DirectRestrict" data-style="solid" data-arrow-start="false" data-arrow-end="true" data-label="Automated Rule Match" points="728.5420833333333,368.3533333333333 728.5420833333333,420.24399999999997 618.60275,420.24399999999997 618.60275,528.769" fill="none" stroke="var(--_line)" stroke-width="1" marker-end="url(#arrowhead)" />
+<polyline class="edge" data-from="FraudGuardCheck" data-to="AdminReviewState" data-style="solid" data-arrow-start="false" data-arrow-end="true" data-label="Human Investigation Required" points="808.3234166666666,368.35333333333324 808.3234166666666,420.24399999999997 918.2627499999999,420.24399999999997 918.2627499999999,528.769" fill="none" stroke="var(--_line)" stroke-width="1" marker-end="url(#arrowhead)" />
+<polyline class="edge" data-from="ActiveRestrCheck" data-to="BlockOTP" data-style="solid" data-arrow-start="false" data-arrow-end="true" data-label="YES (Active)" points="274.78458333333333,889.1523333333334 274.78458333333333,939.3140000000001 171.4525,939.3140000000001 171.4525,1046.614" fill="none" stroke="var(--_line)" stroke-width="1" marker-end="url(#arrowhead)" />
+<polyline class="edge" data-from="ActiveRestrCheck" data-to="ExpiryAutoRelease" data-style="solid" data-arrow-start="false" data-arrow-end="true" data-label="NO (Expired)" points="351.1079166666666,889.1523333333334 351.1079166666666,939.3140000000001 454.43999999999994,939.3140000000001 454.43999999999994,1046.614" fill="none" stroke="var(--_line)" stroke-width="1" marker-end="url(#arrowhead)" />
+<polyline class="edge" data-from="VerifCenter" data-to="SendOTP" data-style="solid" data-arrow-start="false" data-arrow-end="true" points="454.43999999999994,1271.2140000000002 454.43999999999994,1319.2140000000002" fill="none" stroke="var(--_line)" stroke-width="1" marker-end="url(#arrowhead)" />
+<polyline class="edge" data-from="SendOTP" data-to="EnterOTP" data-style="solid" data-arrow-start="false" data-arrow-end="true" points="454.43999999999994,1373.0140000000001 454.43999999999994,1421.0140000000001" fill="none" stroke="var(--_line)" stroke-width="1" marker-end="url(#arrowhead)" />
+<polyline class="edge" data-from="EnterOTP" data-to="OTPVerify" data-style="solid" data-arrow-start="false" data-arrow-end="true" points="454.43999999999994,1457.9140000000002 454.43999999999994,1505.9140000000002" fill="none" stroke="var(--_line)" stroke-width="1" marker-end="url(#arrowhead)" />
+<polyline class="edge" data-from="OTPVerify" data-to="RestoreState" data-style="solid" data-arrow-start="false" data-arrow-end="true" data-label="YES" points="432.45683333333324,1615.8298333333335 432.45683333333324,1649.813 316.28074999999995,1649.813 316.2807499999999,1754.113" fill="none" stroke="var(--_line)" stroke-width="1" marker-end="url(#arrowhead)" />
+<polyline class="edge" data-from="OTPVerify" data-to="RetryLock" data-style="solid" data-arrow-start="false" data-arrow-end="true" data-label="NO" points="476.4231666666666,1615.8298333333335 476.4231666666666,1649.813 592.5992499999999,1649.813 592.5992499999999,1754.113" fill="none" stroke="var(--_line)" stroke-width="1" marker-end="url(#arrowhead)" />
+<polyline class="edge" data-from="AdminChoice" data-to="BannedState" data-style="solid" data-arrow-start="false" data-arrow-end="true" data-label="BAN ACCOUNT" points="1208.3581499999998,917.7529000000002 1208.3581499999998,957.3140000000001 1073.904,957.3140000000001 1073.904,1046.614" fill="none" stroke="var(--_line)" stroke-width="1" marker-end="url(#arrowhead)" />
+<polyline class="edge" data-from="AdminChoice" data-to="ExtendState" data-style="solid" data-arrow-start="false" data-arrow-end="true" data-label="EXTEND RESTRICTION" points="1239.4803499999998,917.7529 1239.4803499999998,957.3140000000001 1373.9344999999998,957.3140000000001 1373.9344999999998,1046.614" fill="none" stroke="var(--_line)" stroke-width="1" marker-end="url(#arrowhead)" />
+<polyline class="edge" data-from="AdminChoice" data-to="DeactState" data-style="solid" data-arrow-start="false" data-arrow-end="true" data-label="DEACTIVATE ACCOUNT" points="1177.2359499999998,886.6307000000002 1177.2359499999998,945.3140000000001 780.5424999999999,945.3140000000001 780.5424999999999,1046.614" fill="none" stroke="var(--_line)" stroke-width="1" marker-end="url(#arrowhead)" />
+<polyline class="edge" data-from="AdminChoice" data-to="ClearState" data-style="solid" data-arrow-start="false" data-arrow-end="true" data-label="CLEAR FRAUD" points="1270.6025499999998,886.6307 1270.6025499999998,945.3140000000001 1663.9615,945.3140000000001 1663.9615,1046.614" fill="none" stroke="var(--_line)" stroke-width="1" marker-end="url(#arrowhead)" />
+<g class="edge-label" data-from="FraudGuardCheck" data-to="DirectRestrict" data-label="Automated Rule Match">
+  <rect x="558.1027499999999" y="451.24399999999997" width="120.41200000000002" height="30.3" rx="2" ry="2" fill="var(--bg)" stroke="var(--_inner-stroke)" stroke-width="1" />
+  <text x="618.3087499999999" y="466.39399999999995" text-anchor="middle" font-size="11" font-weight="400" fill="var(--_text-sec)" dy="3.8499999999999996">Automated Rule Match</text>
+</g>
+<g class="edge-label" data-from="FraudGuardCheck" data-to="AdminReviewState" data-label="Human Investigation Required">
+  <rect x="839.76275" y="451.24399999999997" width="156.64600000000004" height="30.3" rx="2" ry="2" fill="var(--bg)" stroke="var(--_inner-stroke)" stroke-width="1" />
+  <text x="918.08575" y="466.39399999999995" text-anchor="middle" font-size="11" font-weight="400" fill="var(--_text-sec)" dy="3.8499999999999996">Human Investigation Required</text>
+</g>
+<g class="edge-label" data-from="ActiveRestrCheck" data-to="BlockOTP" data-label="YES (Active)">
+  <rect x="132.9525" y="970.314" width="76.456" height="30.3" rx="2" ry="2" fill="var(--bg)" stroke="var(--_inner-stroke)" stroke-width="1" />
+  <text x="171.1805" y="985.4639999999999" text-anchor="middle" font-size="11" font-weight="400" fill="var(--_text-sec)" dy="3.8499999999999996">YES (Active)</text>
+</g>
+<g class="edge-label" data-from="ActiveRestrCheck" data-to="ExpiryAutoRelease" data-label="NO (Expired)">
+  <rect x="415.43999999999994" y="970.314" width="77.644" height="30.3" rx="2" ry="2" fill="var(--bg)" stroke="var(--_inner-stroke)" stroke-width="1" />
+  <text x="454.26199999999994" y="985.4639999999999" text-anchor="middle" font-size="11" font-weight="400" fill="var(--_text-sec)" dy="3.8499999999999996">NO (Expired)</text>
+</g>
+<g class="edge-label" data-from="OTPVerify" data-to="RestoreState" data-label="YES">
+  <rect x="296.28074999999995" y="1680.813" width="39.03399999999999" height="30.3" rx="2" ry="2" fill="var(--bg)" stroke="var(--_inner-stroke)" stroke-width="1" />
+  <text x="315.79774999999995" y="1695.9630000000002" text-anchor="middle" font-size="11" font-weight="400" fill="var(--_text-sec)" dy="3.8499999999999996">YES</text>
+</g>
+<g class="edge-label" data-from="OTPVerify" data-to="RetryLock" data-label="NO">
+  <rect x="576.5992499999999" y="1680.813" width="31.906" height="30.3" rx="2" ry="2" fill="var(--bg)" stroke="var(--_inner-stroke)" stroke-width="1" />
+  <text x="592.5522499999998" y="1695.9630000000002" text-anchor="middle" font-size="11" font-weight="400" fill="var(--_text-sec)" dy="3.8499999999999996">NO</text>
+</g>
+<g class="edge-label" data-from="AdminChoice" data-to="BannedState" data-label="BAN ACCOUNT">
+  <rect x="1028.4039999999998" y="976.3140000000001" width="90.71199999999999" height="30.3" rx="2" ry="2" fill="var(--bg)" stroke="var(--_inner-stroke)" stroke-width="1" />
+  <text x="1073.7599999999998" y="991.464" text-anchor="middle" font-size="11" font-weight="400" fill="var(--_text-sec)" dy="3.8499999999999996">BAN ACCOUNT</text>
+</g>
+<g class="edge-label" data-from="AdminChoice" data-to="ExtendState" data-label="EXTEND RESTRICTION">
+  <rect x="1307.9345" y="976.3140000000001" width="131.10399999999998" height="30.3" rx="2" ry="2" fill="var(--bg)" stroke="var(--_inner-stroke)" stroke-width="1" />
+  <text x="1373.4865" y="991.464" text-anchor="middle" font-size="11" font-weight="400" fill="var(--_text-sec)" dy="3.8499999999999996">EXTEND RESTRICTION</text>
+</g>
+<g class="edge-label" data-from="AdminChoice" data-to="DeactState" data-label="DEACTIVATE ACCOUNT">
+  <rect x="712.5424999999999" y="976.3140000000001" width="135.856" height="30.3" rx="2" ry="2" fill="var(--bg)" stroke="var(--_inner-stroke)" stroke-width="1" />
+  <text x="780.4704999999999" y="991.464" text-anchor="middle" font-size="11" font-weight="400" fill="var(--_text-sec)" dy="3.8499999999999996">DEACTIVATE ACCOUNT</text>
+</g>
+<g class="edge-label" data-from="AdminChoice" data-to="ClearState" data-label="CLEAR FRAUD">
+  <rect x="1618.4614999999997" y="976.3140000000001" width="90.71199999999999" height="30.3" rx="2" ry="2" fill="var(--bg)" stroke="var(--_inner-stroke)" stroke-width="1" />
+  <text x="1663.8174999999997" y="991.464" text-anchor="middle" font-size="11" font-weight="400" fill="var(--_text-sec)" dy="3.8499999999999996">CLEAR FRAUD</text>
+</g>
+<g class="node" data-id="RawEvent" data-label="Raw Fraud Detection" data-shape="rectangle">
+  <rect x="686.6957499999999" y="84" width="163.474" height="36.900000000000006" rx="0" ry="0" fill="var(--_node-fill)" stroke="var(--_node-stroke)" stroke-width="0.75" />
+  <text x="768.4327499999998" y="102.45" text-anchor="middle" font-size="13" font-weight="500" fill="var(--_text)" dy="4.55">Raw Fraud Detection</text>
+</g>
+<g class="node" data-id="FraudGuardCheck" data-label="FraudGuard Rule Triggered?" data-shape="diamond">
+  <polygon points="768.4327499999999,168.90000000000003 888.10475,288.572 768.4327499999999,408.24399999999997 648.7607499999999,288.572" fill="var(--_node-fill)" stroke="var(--_node-stroke)" stroke-width="0.75" />
+  <text x="768.4327499999999" y="288.572" text-anchor="middle" font-size="13" font-weight="500" fill="var(--_text)" dy="4.55">FraudGuard Rule Triggered?</text>
+</g>
+<g class="node" data-id="DirectRestrict" data-label="RESTRICTED (Active Immediately)
+&lt;i&gt;No 2nd Admin Approval Step Required&lt;/i&gt;" data-shape="rectangle">
+  <rect x="486.84825" y="528.769" width="263.5089999999999" height="53.800000000000004" rx="0" ry="0" fill="var(--_node-fill)" stroke="var(--_node-stroke)" stroke-width="0.75" />
+  <text x="618.60275" y="555.669" text-anchor="middle" font-size="13" font-weight="500" fill="var(--_text)"><tspan x="618.60275" dy="-3.9000000000000012">RESTRICTED (Active Immediately)</tspan><tspan x="618.60275" dy="16.900000000000002"><tspan font-style="italic">No 2nd Admin Approval Step Required</tspan></tspan></text>
+</g>
+<g class="node" data-id="AdminReviewState" data-label="ADMIN_REVIEW (24h Default Restriction)" data-shape="rectangle">
+  <rect x="778.3572499999999" y="528.769" width="279.8109999999999" height="36.900000000000006" rx="0" ry="0" fill="var(--_node-fill)" stroke="var(--_node-stroke)" stroke-width="0.75" />
+  <text x="918.2627499999999" y="547.219" text-anchor="middle" font-size="13" font-weight="500" fill="var(--_text)" dy="4.55">ADMIN_REVIEW (24h Default Restriction)</text>
+</g>
+<g class="node" data-id="ActiveRestrCheck" data-label="Restriction Duration Active?
+(expires_at &gt; NOW())" data-shape="diamond">
+  <polygon points="312.94624999999996,698.344 427.43125,812.8290000000001 312.94624999999996,927.3140000000001 198.46124999999998,812.8290000000001" fill="var(--_node-fill)" stroke="var(--_node-stroke)" stroke-width="0.75" />
+  <text x="312.94624999999996" y="812.8290000000001" text-anchor="middle" font-size="13" font-weight="500" fill="var(--_text)"><tspan x="312.94624999999996" dy="-3.9000000000000012">Restriction Duration Active?</tspan><tspan x="312.94624999999996" dy="16.900000000000002">(expires_at &gt; NOW())</tspan></text>
+</g>
+<g class="node" data-id="BlockOTP" data-label="OTP Verification Locked
+Shopping &amp; Login Restricted
+Show Expiry Countdown Banner" data-shape="rectangle">
+  <rect x="56" y="1046.614" width="230.90499999999997" height="70.7" rx="0" ry="0" fill="var(--_node-fill)" stroke="var(--_node-stroke)" stroke-width="0.75" />
+  <text x="171.4525" y="1081.964" text-anchor="middle" font-size="13" font-weight="500" fill="var(--_text)"><tspan x="171.4525" dy="-12.350000000000001">OTP Verification Locked</tspan><tspan x="171.4525" dy="16.900000000000002">Shopping &amp; Login Restricted</tspan><tspan x="171.4525" dy="16.900000000000002">Show Expiry Countdown Banner</tspan></text>
+</g>
+<g class="node" data-id="ExpiryAutoRelease" data-label="Auto-Release Engine
+Restriction status -&gt; RELEASED
+Security status -&gt; STEP_UP_REQUIRED" data-shape="rectangle">
+  <rect x="314.905" y="1046.614" width="279.06999999999994" height="70.7" rx="0" ry="0" fill="var(--_node-fill)" stroke="var(--_node-stroke)" stroke-width="0.75" />
+  <text x="454.43999999999994" y="1081.964" text-anchor="middle" font-size="13" font-weight="500" fill="var(--_text)"><tspan x="454.43999999999994" dy="-12.350000000000001">Auto-Release Engine</tspan><tspan x="454.43999999999994" dy="16.900000000000002">Restriction status -&gt; RELEASED</tspan><tspan x="454.43999999999994" dy="16.900000000000002">Security status -&gt; STEP_UP_REQUIRED</tspan></text>
+</g>
+<g class="node" data-id="VerifCenter" data-label="Customer Security Verification Page (/security-verification)" data-shape="rectangle">
+  <rect x="262.294" y="1234.314" width="384.29199999999986" height="36.900000000000006" rx="0" ry="0" fill="var(--_node-fill)" stroke="var(--_node-stroke)" stroke-width="0.75" />
+  <text x="454.43999999999994" y="1252.7640000000001" text-anchor="middle" font-size="13" font-weight="500" fill="var(--_text)" dy="4.55">Customer Security Verification Page (/security-verification)</text>
+</g>
+<g class="node" data-id="SendOTP" data-label="Send OTP
+(Real/Configured Provider)" data-shape="rectangle">
+  <rect x="354.1779999999999" y="1319.2140000000002" width="200.524" height="53.800000000000004" rx="0" ry="0" fill="var(--_node-fill)" stroke="var(--_node-stroke)" stroke-width="0.75" />
+  <text x="454.4399999999999" y="1346.1140000000003" text-anchor="middle" font-size="13" font-weight="500" fill="var(--_text)"><tspan x="454.4399999999999" dy="-3.9000000000000012">Send OTP</tspan><tspan x="454.4399999999999" dy="16.900000000000002">(Real/Configured Provider)</tspan></text>
+</g>
+<g class="node" data-id="EnterOTP" data-label="Customer Enters 6-Digit OTP" data-shape="rectangle">
+  <rect x="350.47299999999996" y="1421.0140000000001" width="207.93399999999994" height="36.900000000000006" rx="0" ry="0" fill="var(--_node-fill)" stroke="var(--_node-stroke)" stroke-width="0.75" />
+  <text x="454.43999999999994" y="1439.4640000000002" text-anchor="middle" font-size="13" font-weight="500" fill="var(--_text)" dy="4.55">Customer Enters 6-Digit OTP</text>
+</g>
+<g class="node" data-id="OTPVerify" data-label="OTP Valid?" data-shape="diamond">
+  <polygon points="454.4399999999999,1505.9140000000002 520.3894999999999,1571.8635000000002 454.4399999999999,1637.813 388.4904999999999,1571.8635000000002" fill="var(--_node-fill)" stroke="var(--_node-stroke)" stroke-width="0.75" />
+  <text x="454.4399999999999" y="1571.8635000000002" text-anchor="middle" font-size="13" font-weight="500" fill="var(--_text)" dy="4.55">OTP Valid?</text>
+</g>
+<g class="node" data-id="RestoreState" data-label="Security State -&gt; ACTIVE/NORMAL
+Full Shopping Access Restored" data-shape="rectangle">
+  <rect x="193.04774999999995" y="1754.113" width="246.46599999999995" height="53.800000000000004" rx="0" ry="0" fill="var(--_node-fill)" stroke="var(--_node-stroke)" stroke-width="0.75" />
+  <text x="316.2807499999999" y="1781.0130000000001" text-anchor="middle" font-size="13" font-weight="500" fill="var(--_text)"><tspan x="316.2807499999999" dy="-3.9000000000000012">Security State -&gt; ACTIVE/NORMAL</tspan><tspan x="316.2807499999999" dy="16.900000000000002">Full Shopping Access Restored</tspan></text>
+</g>
+<g class="node" data-id="RetryLock" data-label="Increment Attempts
+Lockout on Max Attempts Exceeded" data-shape="rectangle">
+  <rect x="467.51374999999996" y="1754.113" width="250.17099999999994" height="53.800000000000004" rx="0" ry="0" fill="var(--_node-fill)" stroke="var(--_node-stroke)" stroke-width="0.75" />
+  <text x="592.59925" y="1781.0130000000001" text-anchor="middle" font-size="13" font-weight="500" fill="var(--_text)"><tspan x="592.59925" dy="-3.9000000000000012">Increment Attempts</tspan><tspan x="592.59925" dy="16.900000000000002">Lockout on Max Attempts Exceeded</tspan></text>
+</g>
+<g class="node" data-id="AdminChoice" data-label="Admin Decision" data-shape="diamond">
+  <polygon points="1223.9192499999997,777.7030000000002 1301.7247499999996,855.5085000000001 1223.9192499999997,933.3140000000001 1146.1137499999998,855.5085000000001" fill="var(--_node-fill)" stroke="var(--_node-stroke)" stroke-width="0.75" />
+  <text x="1223.9192499999997" y="855.5085000000001" text-anchor="middle" font-size="13" font-weight="500" fill="var(--_text)" dy="4.55">Admin Decision</text>
+</g>
+<g class="node" data-id="BannedState" data-label="BANNED
+Persist in Banned Accounts DB
+Permanent Login Denial (403 Forbidden)" data-shape="rectangle">
+  <rect x="935.1099999999999" y="1046.614" width="277.58799999999997" height="70.7" rx="0" ry="0" fill="var(--_node-fill)" stroke="var(--_node-stroke)" stroke-width="0.75" />
+  <text x="1073.904" y="1081.964" text-anchor="middle" font-size="13" font-weight="500" fill="var(--_text)"><tspan x="1073.904" dy="-12.350000000000001">BANNED</tspan><tspan x="1073.904" dy="16.900000000000002">Persist in Banned Accounts DB</tspan><tspan x="1073.904" dy="16.900000000000002">Permanent Login Denial (403 Forbidden)</tspan></text>
+</g>
+<g class="node" data-id="ExtendState" data-label="RESTRICTED (Extended Duration)
+Update Authoritative Expiry Timestamp" data-shape="rectangle">
+  <rect x="1240.6979999999999" y="1046.614" width="266.47299999999996" height="53.800000000000004" rx="0" ry="0" fill="var(--_node-fill)" stroke="var(--_node-stroke)" stroke-width="0.75" />
+  <text x="1373.9344999999998" y="1073.5140000000001" text-anchor="middle" font-size="13" font-weight="500" fill="var(--_text)"><tspan x="1373.9344999999998" dy="-3.9000000000000012">RESTRICTED (Extended Duration)</tspan><tspan x="1373.9344999999998" dy="16.900000000000002">Update Authoritative Expiry Timestamp</tspan></text>
+</g>
+<g class="node" data-id="DeactState" data-label="DEACTIVATED
+Account Deactivated, Login Blocked
+Audit Trail Retained" data-shape="rectangle">
+  <rect x="653.9749999999999" y="1046.614" width="253.13499999999993" height="70.7" rx="0" ry="0" fill="var(--_node-fill)" stroke="var(--_node-stroke)" stroke-width="0.75" />
+  <text x="780.5424999999999" y="1081.964" text-anchor="middle" font-size="13" font-weight="500" fill="var(--_text)"><tspan x="780.5424999999999" dy="-12.350000000000001">DEACTIVATED</tspan><tspan x="780.5424999999999" dy="16.900000000000002">Account Deactivated, Login Blocked</tspan><tspan x="780.5424999999999" dy="16.900000000000002">Audit Trail Retained</tspan></text>
+</g>
+<g class="node" data-id="ClearState" data-label="ACTIVE/NORMAL
+Clear Fraud Flag &amp; Active Restriction
+Preserve Historical Audit Logs" data-shape="rectangle">
+  <rect x="1535.1709999999998" y="1046.614" width="257.5809999999999" height="70.7" rx="0" ry="0" fill="var(--_node-fill)" stroke="var(--_node-stroke)" stroke-width="0.75" />
+  <text x="1663.9615" y="1081.964" text-anchor="middle" font-size="13" font-weight="500" fill="var(--_text)"><tspan x="1663.9615" dy="-12.350000000000001">ACTIVE/NORMAL</tspan><tspan x="1663.9615" dy="16.900000000000002">Clear Fraud Flag &amp; Active Restriction</tspan><tspan x="1663.9615" dy="16.900000000000002">Preserve Historical Audit Logs</tspan></text>
+</g>
+</svg>
